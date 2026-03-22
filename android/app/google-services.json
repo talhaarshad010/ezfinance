@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "698639438639",
+    "project_id": "ezfinance-5a811",
+    "storage_bucket": "ezfinance-5a811.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:698639438639:android:59b04329957ad1cf7e47da",
+        "android_client_info": {
+          "package_name": "com.ezfinance"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBCl7HpdE_N8wggnkNgHCu0XO2tkhRPsnI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
