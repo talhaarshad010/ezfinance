@@ -60,15 +60,11 @@ export async function signOut(): Promise<void> {
     const user = auth().currentUser;
     if (user) {
       const sid = await DeviceInfo.getUniqueId();
-      console.log(`[AuthService] Cleaning up 2FA verification for UID: ${user.uid}, Device: ${sid}`);
-      // Atomically remove device verification BEFORE signing out of Firebase
       await removeDeviceVerification(user.uid, sid);
     }
 
-    console.log('[AuthService] Performing Firebase signOut');
     await auth().signOut();
     await GoogleSignin.signOut();
-    console.log('[AuthService] Sign out complete');
   } catch (error) {
     console.error('[AuthService] Sign out error:', error);
     // Even if cleanup fails, ensure we try to sign out
@@ -273,7 +269,6 @@ export async function verifyOTP(uid: string, submittedCode: string): Promise<boo
 /** Record that the current device has verified 2FA for this user */
 export async function recordDeviceVerification(uid: string, deviceId: string): Promise<void> {
   try {
-    console.log(`[AuthService] Recording 2FA verification for UID: ${uid}, Device: ${deviceId}`);
     await database()
       .ref(`/users/${uid}/verifiedDevices/${deviceId}`)
       .set({
@@ -290,9 +285,7 @@ export async function checkDeviceVerification(uid: string, deviceId: string): Pr
     const snapshot = await database()
       .ref(`/users/${uid}/verifiedDevices/${deviceId}`)
       .once('value');
-    const exists = snapshot.exists();
-    console.log(`[AuthService] Checking 2FA verification for UID: ${uid}, Device: ${deviceId}. Found: ${exists}`);
-    return exists;
+    return snapshot.exists();
   } catch (error) {
     console.error('[AuthService] Check Device Verification Error:', error);
     return false;
@@ -302,11 +295,9 @@ export async function checkDeviceVerification(uid: string, deviceId: string): Pr
 /** Remove verification for a specific device (e.g., on logout) */
 export async function removeDeviceVerification(uid: string, deviceId: string): Promise<void> {
   try {
-    console.log(`[AuthService] Removing 2FA verification for UID: ${uid}, Device: ${deviceId}`);
     await database()
       .ref(`/users/${uid}/verifiedDevices/${deviceId}`)
       .remove();
-    console.log(`[AuthService] Successfully removed verification for Device: ${deviceId}`);
   } catch (error) {
     console.error('[AuthService] Remove Device Verification Error:', error);
   }

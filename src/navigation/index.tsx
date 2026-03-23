@@ -193,7 +193,6 @@ export const AppNavigator = () => {
 
   React.useEffect(() => {
     const logoutListener = DeviceEventEmitter.addListener('LOGOUT', async () => {
-      console.log('[index.tsx] LOGOUT event received, calling signOut');
       await signOut();
     });
     return () => logoutListener.remove();
