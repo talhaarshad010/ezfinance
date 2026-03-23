@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import {View, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Modal} from 'react-native';
+import {View, StyleSheet, ScrollView, TextInput, TouchableOpacity, Modal} from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import {Typography, Card, Button, CalendarPicker} from '../../../components';
+import { useToast } from '../../../context/ToastContext';
 
 const AddExpenseScreen = () => {
   const [activeModal, setActiveModal] = useState<'category' | 'payment' | 'date' | null>(null);
+  const { showToast } = useToast();
   const [category, setCategory] = useState('Dining & Drinks');
   const [payment, setPayment] = useState('Credit Card (Visa)');
   const [date, setDate] = useState<Date>(new Date());
@@ -71,7 +73,7 @@ const AddExpenseScreen = () => {
 
       <TouchableOpacity 
         style={styles.saveBtn}
-        onPress={() => Alert.alert('Success', 'Expense saved successfully (demo mode).')}
+        onPress={() => showToast('Expense saved successfully (demo mode).', 'success', 'Success')}
       >
         <Typography variant="body" weight="700" color="#FFF">Save Expense</Typography>
       </TouchableOpacity>

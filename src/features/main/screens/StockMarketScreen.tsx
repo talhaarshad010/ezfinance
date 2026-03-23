@@ -1,13 +1,15 @@
 import React, { useEffect } from 'react';
-import {View, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert} from 'react-native';
+import {View, StyleSheet, ScrollView, TouchableOpacity, TextInput} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, withDelay } from 'react-native-reanimated';
 import {Typography, Card} from '../../../components';
 import {colors} from '../../../theme/colors';
 import Feather from 'react-native-vector-icons/Feather';
+import { useToast } from '../../../context/ToastContext';
 
 const StockMarketScreen = () => {
   const navigation = useNavigation<any>();
+  const { showToast } = useToast();
   const barAnimHeights = [
     useSharedValue(0),
     useSharedValue(0),
@@ -83,7 +85,7 @@ const StockMarketScreen = () => {
         <Typography variant="caption" color="#999">All stocks active</Typography>
         <TouchableOpacity 
             style={styles.tradeBtn}
-            onPress={() => Alert.alert('Trading Platform', 'Opening the execution terminal.')}
+            onPress={() => showToast('Opening the execution terminal.', 'info', 'Trading Platform')}
         >
           <Typography variant="body" weight="700">Trade Now</Typography>
         </TouchableOpacity>
@@ -115,7 +117,7 @@ const StockMarketScreen = () => {
           </Typography>
           <TouchableOpacity 
             style={{marginTop: 12}}
-            onPress={() => Alert.alert('AI Advisor', 'Analyzing specific market opportunities for your portfolio.')}
+            onPress={() => showToast('Analyzing specific market opportunities for your portfolio.', 'info', 'AI Advisor')}
           >
             <Typography variant="body" weight="700" color="#333">Ask AI Advisor →</Typography>
           </TouchableOpacity>

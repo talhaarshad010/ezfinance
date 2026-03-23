@@ -7,22 +7,60 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
   Image,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
 import { Typography, Input, Button, Card, Logo } from '../../../components';
 import { colors } from '../../../theme/colors';
+import { signIn, signInWithGoogle } from '../../../services/authService';
+import { useToast } from '../../../context/ToastContext';
 
-const LoginScreen = ({ onLogin }: { onLogin: () => void }) => {
+const LoginScreen = () => {
   const navigation = useNavigation<any>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const { showToast } = useToast();
 
-  const handleLogin = () => {
-    // Placeholder login logic - just trigger onLogin to enter the app
-    onLogin();
+  const handleLogin = async () => {
+    if (!email || !password) {
+      showToast('Please enter both email and password', 'error');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await signIn(email, password);
+      showToast('Login successful!', 'success');
+      // Navigation is handled by the auth state listener in AppNavigator
+    } catch (error: any) {
+      let errorMessage = 'An error occurred during login.';
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        errorMessage = 'Incorrect email or password.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address.';
+      } else if (error.code === 'auth/user-disabled') {
+        errorMessage = 'This account has been disabled.';
+      }
+      showToast(errorMessage, 'error');
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithGoogle();
+      showToast('Signed in with Google!', 'success');
+    } catch (error: any) {
+      if (error.code !== 'ASYNC_OP_IN_PROGRESS') {
+        showToast('Google Sign-In failed.', 'error');
+      }
+    }
+  };
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -104,9 +142,28 @@ const LoginScreen = ({ onLogin }: { onLogin: () => void }) => {
                 title="Login"
                 onPress={handleLogin}
                 style={styles.loginButton}
+                isLoading={isLoading}
               />
             </View>
           </Card>
+
+          {/* Social Login */}
+          <View style={styles.socialSection}>
+            <Typography variant="caption" weight="700" color="#AAA" style={styles.socialTitle}>
+              OR CONTINUE WITH
+            </Typography>
+            <TouchableOpacity style={styles.googleBtn} onPress={handleGoogleSignIn}>
+              <Image 
+                source={require('../../../assets/images/Logo-google-icon-PNG.png')} 
+                style={styles.googleIcon} 
+                resizeMode="contain"
+              />
+              <Typography variant="body" weight="700" style={{ marginLeft: 12 }}>
+                Continue with Google
+              </Typography>
+            </TouchableOpacity>
+          </View>
+
 
           {/* Footer */}
           <View style={styles.footer}>
@@ -231,6 +288,36 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     color: '#000',
   },
+  socialSection: {
+    marginTop: 32,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  socialTitle: {
+    letterSpacing: 2,
+    marginBottom: 20,
+  },
+  googleBtn: {
+    width: '100%',
+    backgroundColor: '#FFF',
+    height: 56,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#EEE',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 1,
+  },
+  googleIcon: {
+    width: 24,
+    height: 24,
+  },
 });
+
 
 export default LoginScreen;

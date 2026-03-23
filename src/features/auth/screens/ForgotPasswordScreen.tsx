@@ -12,14 +12,37 @@ import { useNavigation } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
 import { Typography, Input, Button, Card, Logo } from '../../../components';
 import { colors } from '../../../theme/colors';
+import { forgotPassword } from '../../../services/authService';
+import { useToast } from '../../../context/ToastContext';
 
 const ForgotPasswordScreen = () => {
   const navigation = useNavigation<any>();
   const [email, setEmail] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const { showToast } = useToast();
 
-  const handleReset = () => {
-    // Placeholder reset logic
-    navigation.navigate('Login');
+  const handleReset = async () => {
+    if (!email) {
+      showToast('Please enter your email address', 'error');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await forgotPassword(email);
+      showToast('Password reset email sent!', 'success');
+      navigation.navigate('Login');
+    } catch (error: any) {
+      let errorMessage = 'An error occurred. Please try again.';
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = 'No user found with this email.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address.';
+      }
+      showToast(errorMessage, 'error');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -62,6 +85,7 @@ const ForgotPasswordScreen = () => {
                 title="Send Reset Link"
                 onPress={handleReset}
                 style={styles.resetButton}
+                isLoading={isLoading}
               />
             </View>
           </Card>

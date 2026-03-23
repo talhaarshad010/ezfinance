@@ -1,10 +1,12 @@
 import React from 'react';
-import {View, StyleSheet, ScrollView, TouchableOpacity, Alert, SafeAreaView} from 'react-native';
+import {View, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView} from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import {Typography, Card} from '../../../components';
 import {colors} from '../../../theme/colors';
+import { useToast } from '../../../context/ToastContext';
 
 const BudgetPlannerScreen = () => {
+  const { showToast } = useToast();
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
@@ -22,7 +24,7 @@ const BudgetPlannerScreen = () => {
 
           <TouchableOpacity 
             style={styles.newCategoryBtn}
-            onPress={() => Alert.alert('New Category', 'Add a new budget category.')}
+            onPress={() => showToast('Add a new budget category.', 'info', 'New Category')}
           >
             <Feather name="plus-circle" size={20} color="#FFF" />
             <Typography variant="body" weight="700" color="#FFF" style={{marginLeft: 10}}>New Category</Typography>
@@ -89,7 +91,7 @@ const BudgetPlannerScreen = () => {
 
            <TouchableOpacity 
             style={styles.viewProgressBtn}
-            onPress={() => Alert.alert('Goal', 'Opening vacation fund details.')}
+            onPress={() => showToast('Opening vacation fund details.', 'info', 'Goal')}
            >
               <Typography variant="body" weight="700">View Progress</Typography>
            </TouchableOpacity>
@@ -108,10 +110,10 @@ const BudgetPlannerScreen = () => {
               We noticed your Shopping expenditure is 15% higher than usual. Switching to a weekly cap could save you approximately $340 by next month. Would you like to set an automated alert?
             </Typography>
             <View style={styles.insightActions}>
-              <TouchableOpacity onPress={() => Alert.alert('Alert', 'Smart Alert enabled.')}>
+              <TouchableOpacity onPress={() => showToast('Smart Alert enabled.', 'success', 'Alert')}>
                 <Typography variant="body" weight="700">Enable Smart Alert</Typography>
               </TouchableOpacity>
-              <TouchableOpacity style={{marginLeft: 24}} onPress={() => Alert.alert('Dismissed')}>
+              <TouchableOpacity style={{marginLeft: 24}} onPress={() => showToast('Insight dismissed.', 'info', 'Dismissed')}>
                 <Typography variant="body" color="#AAA">Dismiss</Typography>
               </TouchableOpacity>
             </View>
@@ -124,36 +126,39 @@ const BudgetPlannerScreen = () => {
   );
 };
 
-const BudgetCategory = ({icon, name, spent, limit, usage, color, overBudget}: any) => (
-  <Card style={styles.categoryCard}>
-    <View style={styles.rowBetween}>
-      <View style={styles.categoryIconBox}>
-        <Feather name={icon} size={20} color={overBudget ? colors.accent.errorText : "#000"} />
+const BudgetCategory = ({icon, name, spent, limit, usage, color, overBudget}: any) => {
+  const { showToast } = useToast();
+  return (
+    <Card style={styles.categoryCard}>
+      <View style={styles.rowBetween}>
+        <View style={styles.categoryIconBox}>
+          <Feather name={icon} size={20} color={overBudget ? colors.accent.errorText : "#000"} />
+        </View>
+        <TouchableOpacity onPress={() => showToast('Manage this category settings.', 'info', 'Options')}>
+          <Feather name="more-vertical" size={24} color="#CCC" />
+        </TouchableOpacity>
       </View>
-      <TouchableOpacity>
-        <Feather name="more-vertical" size={24} color="#CCC" />
-      </TouchableOpacity>
-    </View>
-    <Typography variant="body" weight="700" style={{marginTop: 20, fontSize: 18}}>{name}</Typography>
-    <View style={{flexDirection: 'row', alignItems: 'flex-end', marginTop: 4}}>
-      <Typography variant="h2" weight="700">${spent} / </Typography>
-      <Typography variant="h3" weight="700" color="#666">${limit}</Typography>
-    </View>
+      <Typography variant="body" weight="700" style={{marginTop: 20, fontSize: 18}}>{name}</Typography>
+      <View style={{flexDirection: 'row', alignItems: 'flex-end', marginTop: 4}}>
+        <Typography variant="h2" weight="700">${spent} / </Typography>
+        <Typography variant="h3" weight="700" color="#666">${limit}</Typography>
+      </View>
 
-    <View style={styles.progressBarSmall}>
-      <View style={[styles.progressFillSmall, {width: overBudget ? '100%' : usage, backgroundColor: color}]} />
-    </View>
+      <View style={styles.progressBarSmall}>
+        <View style={[styles.progressFillSmall, {width: overBudget ? '100%' : usage, backgroundColor: color}]} />
+      </View>
 
-    <Typography 
-      variant="caption" 
-      weight="700" 
-      color={overBudget ? colors.accent.errorText : "#AAA"} 
-      style={{marginTop: 12, letterSpacing: 1}}
-    >
-      {overBudget ? '115% - OVER BUDGET' : `${usage} UTILIZED`}
-    </Typography>
-  </Card>
-);
+      <Typography 
+        variant="caption" 
+        weight="700" 
+        color={overBudget ? colors.accent.errorText : "#AAA"} 
+        style={{marginTop: 12, letterSpacing: 1}}
+      >
+        {overBudget ? '115% - OVER BUDGET' : `${usage} UTILIZED`}
+      </Typography>
+    </Card>
+  );
+};
 
 const styles = StyleSheet.create({
   container: {

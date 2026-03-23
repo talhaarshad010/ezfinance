@@ -40,6 +40,27 @@ local.properties
 node_modules/
 npm-debug.log
 yarn-error.log
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Firebase
+#
+android/app/google-services.json
+ios/ezfinance/GoogleService-Info.plist
+
+# Assistant / Internal
+#
+.antigravity*
+.gemini*
+
+# Keys
+#
+*.pem
+*.key
+*.pub
 
 # fastlane
 #

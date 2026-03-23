@@ -18,21 +18,24 @@ const ONBOARDING_DATA = [
   {
     id: 1,
     title: 'Financial Clarity',
-    description: 'Experience financial clarity through organic minimalism and professional-grade analytics.',
+    description:
+      'Experience financial clarity through organic minimalism and professional-grade analytics.',
     icon: 'target',
     accent: '#000',
   },
   {
     id: 2,
     title: 'Smart Portfolio',
-    description: 'Track your investments across stocks and crypto with AI-powered trend analysis.',
+    description:
+      'Track your investments across stocks and crypto with AI-powered trend analysis.',
     icon: 'trending-up',
     accent: '#0047AB',
   },
   {
     id: 3,
     title: 'AI Insights',
-    description: 'Get predictive insights and portfolio balancing strategies tailored to your goals.',
+    description:
+      'Get predictive insights and portfolio balancing strategies tailored to your goals.',
     icon: 'zap',
     accent: '#000',
   },
@@ -59,7 +62,7 @@ const OnboardingScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F9F9F9" />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.logoRow}>
@@ -79,15 +82,39 @@ const OnboardingScreen = () => {
       <View style={styles.content}>
         <View style={styles.illustrationContainer}>
           {/* Mock Illustration / Graphic */}
-          <View style={[styles.illustrationCircle, { backgroundColor: currentStep.accent + '10' }]}>
-            <Feather name={currentStep.icon} size={80} color={currentStep.accent} />
+          <View
+            style={[
+              styles.illustrationCircle,
+              { backgroundColor: currentStep.accent + '10' },
+            ]}
+          >
+            <Feather
+              name={currentStep.icon}
+              size={80}
+              color={currentStep.accent}
+            />
           </View>
-          
+
           {/* Decorative elements representing "Data" */}
           <View style={styles.decorativeBars}>
-            <View style={[styles.bar, { width: 100, backgroundColor: currentStep.accent }]} />
-            <View style={[styles.bar, { width: 150, backgroundColor: '#EEE', marginTop: 8 }]} />
-            <View style={[styles.bar, { width: 80, backgroundColor: '#EEE', marginTop: 8 }]} />
+            <View
+              style={[
+                styles.bar,
+                { width: 100, backgroundColor: currentStep.accent },
+              ]}
+            />
+            <View
+              style={[
+                styles.bar,
+                { width: 150, backgroundColor: '#EEE', marginTop: 8 },
+              ]}
+            />
+            <View
+              style={[
+                styles.bar,
+                { width: 80, backgroundColor: '#EEE', marginTop: 8 },
+              ]}
+            />
           </View>
         </View>
 
@@ -103,10 +130,15 @@ const OnboardingScreen = () => {
 
       {/* Footer */}
       <View style={styles.footer}>
-        <PaginationDots total={ONBOARDING_DATA.length} activeIndex={activeIndex} />
-        
-        <Button 
-          title={activeIndex === ONBOARDING_DATA.length - 1 ? "Get Started" : "Next"} 
+        <PaginationDots
+          total={ONBOARDING_DATA.length}
+          activeIndex={activeIndex}
+        />
+
+        <Button
+          title={
+            activeIndex === ONBOARDING_DATA.length - 1 ? 'Get Started' : 'Next'
+          }
           onPress={handleNext}
           style={styles.nextButton}
         />

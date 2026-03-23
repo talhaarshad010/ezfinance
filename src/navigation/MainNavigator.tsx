@@ -1,8 +1,8 @@
-import {View, TouchableOpacity, Alert} from 'react-native';
-import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
+import { View, TouchableOpacity } from 'react-native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Feather from 'react-native-vector-icons/Feather';
-import {Typography} from '../components';
-import {colors} from '../theme/colors';
+import { Typography } from '../components';
+import { colors } from '../theme/colors';
 
 const Tab = createBottomTabNavigator();
 
@@ -11,15 +11,19 @@ import ExpensesScreen from '../features/main/screens/ExpensesScreen';
 import InvestmentsScreen from '../features/main/screens/InvestmentsScreen';
 import AIAdvisorScreen from '../features/main/screens/AIAdvisorScreen';
 import ProfileScreen from '../features/main/screens/ProfileScreen';
+import { useToast } from '../context/ToastContext';
+import { HeaderProfile } from '../components/HeaderProfile';
 
 export const MainNavigator = () => {
+  const { showToast } = useToast();
+
   return (
     <Tab.Navigator
-      screenOptions={({route, navigation}) => ({
+      screenOptions={({ route, navigation }) => ({
         headerShown: true,
         headerLeft: () => (
-          <TouchableOpacity 
-            style={{marginLeft: 20}} 
+          <TouchableOpacity
+            style={{ marginLeft: 20 }}
             onPress={() => (navigation as any).openDrawer()}
           >
             <Feather name="menu" size={24} color="#000" />
@@ -32,15 +36,20 @@ export const MainNavigator = () => {
         },
         headerTitleAlign: 'center',
         headerRight: () => (
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 20 }}>
-            <TouchableOpacity style={{ marginRight: 16 }} onPress={() => Alert.alert('Search', 'Market search coming soon.')}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              marginRight: 20,
+            }}
+          >
+            <TouchableOpacity
+              style={{ marginRight: 16 }}
+              onPress={() => navigation.navigate('Search')}
+            >
               <Feather name="search" size={20} color="#000" />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => navigation.navigate('Profile' as never)}>
-               <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#FFD700', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-                  <Typography variant="caption" weight="700" style={{ fontSize: 10 }}>AS</Typography>
-               </View>
-            </TouchableOpacity>
+            <HeaderProfile />
           </View>
         ),
         headerStyle: {
@@ -52,31 +61,32 @@ export const MainNavigator = () => {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.text.muted,
         tabBarStyle: {
-            height: 90,
-            paddingBottom: 30,
-            paddingTop: 10,
-            borderTopWidth: 0,
-            backgroundColor: '#FFFFFF',
-            elevation: 0,
-            shadowOpacity: 0,
+          height: 90,
+          paddingBottom: 30,
+          paddingTop: 10,
+          borderTopWidth: 0,
+          backgroundColor: '#FFFFFF',
+          elevation: 0,
+          shadowOpacity: 0,
         },
-        tabBarIcon: ({color, size}) => {
+        tabBarIcon: ({ color, size }) => {
           let iconName: string = 'home';
-            if (route.name === 'Home') {
-              iconName = 'home';
-            } else if (route.name === 'Expenses') {
-              iconName = 'credit-card';
-            } else if (route.name === 'Investments') {
-              iconName = 'trending-up';
-            } else if (route.name === 'AI Advisor') {
-              iconName = 'cpu';
-            } else if (route.name === 'Profile') {
-              iconName = 'user';
-            }
+          if (route.name === 'Home') {
+            iconName = 'home';
+          } else if (route.name === 'Expenses') {
+            iconName = 'credit-card';
+          } else if (route.name === 'Investments') {
+            iconName = 'trending-up';
+          } else if (route.name === 'AI Advisor') {
+            iconName = 'cpu';
+          } else if (route.name === 'Profile') {
+            iconName = 'user';
+          }
 
-            return <Feather name={iconName} size={size} color={color} />;
-          },
-        })}>
+          return <Feather name={iconName} size={size} color={color} />;
+        },
+      })}
+    >
       <Tab.Screen name="Home" component={DashboardScreen} />
       <Tab.Screen name="Expenses" component={ExpensesScreen} />
       <Tab.Screen name="Investments" component={InvestmentsScreen} />

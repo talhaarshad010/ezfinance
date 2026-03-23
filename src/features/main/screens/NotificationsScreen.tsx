@@ -3,17 +3,44 @@ import {View, StyleSheet, ScrollView, TouchableOpacity} from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import {Typography, Card} from '../../../components';
 import {colors} from '../../../theme/colors';
+import {useAppSelector} from '../../../store/hooks';
+import {Image} from 'react-native';
+import {useNavigation} from '@react-navigation/native';
 
 const NotificationsScreen = () => {
+  const profile = useAppSelector(state => state.user.profile);
+  const navigation = useNavigation<any>();
+
+  const getInitials = () => {
+    if (!profile?.name) return '?';
+    return profile.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
+
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
       
-      {/* Header Info is passed by Navigator, just subtitle here */}
-      <View style={styles.intro}>
-        <Typography variant="h1" weight="700" style={{fontSize: 28}}>Notifications</Typography>
-        <Typography variant="body" color="#666" style={{marginTop: 8}}>
-          Stay updated with your financial ecosystem.
-        </Typography>
+      <View style={styles.header}>
+        <View style={{ flex: 1 }}>
+          <Typography variant="h1" weight="700" style={{fontSize: 28}}>Notifications</Typography>
+          <Typography variant="body" color="#666" style={{marginTop: 4}}>
+            Stay updated with your finances.
+          </Typography>
+        </View>
+        <TouchableOpacity 
+          style={styles.avatarContainer}
+          onPress={() => navigation.navigate('EditProfile')}
+        >
+          {profile?.photoURL ? (
+            <Image source={{ uri: profile.photoURL }} style={styles.avatar} />
+          ) : (
+            <View style={styles.avatarMock}>
+              <Typography variant="body" weight="700" color="#FFF">
+                {getInitials()}
+              </Typography>
+            </View>
+          )}
+          <View style={styles.activeDot} />
+        </TouchableOpacity>
       </View>
 
       {/* Alert 1 */}
@@ -102,8 +129,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 16,
   },
-  intro: {
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 32,
+    marginTop: 8,
+  },
+  avatarContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    position: 'relative',
+    marginLeft: 16,
+  },
+  avatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+  avatarMock: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  activeDot: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#4CAF50',
+    borderWidth: 2,
+    borderColor: '#F8F9FB',
   },
   alertCard: {
     padding: 24,

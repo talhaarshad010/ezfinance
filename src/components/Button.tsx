@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import Typography from './Typography';
 import {colors} from '../theme/colors';
+import Loader from './Loader';
 
 type ButtonVariant = 'primary' | 'secondary' | 'social';
 
@@ -18,6 +19,7 @@ interface ButtonProps {
   style?: ViewStyle;
   icon?: React.ReactNode;
   disabled?: boolean;
+  isLoading?: boolean;
 }
 
 const Button: React.FC<ButtonProps> = ({
@@ -27,6 +29,7 @@ const Button: React.FC<ButtonProps> = ({
   style,
   icon,
   disabled,
+  isLoading,
 }) => {
   const isPrimary = variant === 'primary';
   const isSocial = variant === 'social';
@@ -34,25 +37,29 @@ const Button: React.FC<ButtonProps> = ({
   return (
     <TouchableOpacity
       onPress={onPress}
-      disabled={disabled}
+      disabled={disabled || isLoading}
       activeOpacity={0.8}
       style={[
         styles.base,
         isPrimary ? styles.primary : styles.secondary,
         isSocial && styles.social,
-        disabled && styles.disabled,
+        (disabled || isLoading) && styles.disabled,
         style,
       ]}>
-      <View style={styles.content}>
-        <Typography
-          variant="body"
-          weight="600"
-          color={isPrimary ? colors.text.white : colors.text.primary}
-          style={styles.text}>
-          {title}
-        </Typography>
-        {icon && <View style={styles.iconContainer}>{icon}</View>}
-      </View>
+      {isLoading ? (
+        <Loader color={isPrimary ? colors.text.white : colors.primary} size={24} />
+      ) : (
+        <View style={styles.content}>
+          <Typography
+            variant="body"
+            weight="600"
+            color={isPrimary ? colors.text.white : colors.text.primary}
+            style={styles.text}>
+            {title}
+          </Typography>
+          {icon && <View style={styles.iconContainer}>{icon}</View>}
+        </View>
+      )}
     </TouchableOpacity>
   );
 };

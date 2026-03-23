@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import {View, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert} from 'react-native';
+import {View, StyleSheet, ScrollView, TouchableOpacity, TextInput} from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import {Typography} from '../../../components';
 import {colors} from '../../../theme/colors';
+import { useToast } from '../../../context/ToastContext';
 
 const AIAdvisorScreen = () => {
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const { showToast } = useToast();
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -79,19 +81,19 @@ const AIAdvisorScreen = () => {
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
              <TouchableOpacity 
                 style={styles.chip}
-                onPress={() => Alert.alert('Action', 'Executing based on AI recommendation.')}
+                onPress={() => showToast('Executing based on AI recommendation.', 'success', 'Action')}
              >
                 <Typography variant="caption" weight="700">Execute this split</Typography>
              </TouchableOpacity>
              <TouchableOpacity 
                 style={styles.chip}
-                onPress={() => Alert.alert('Risk Analysis', 'Generating detailed risk profile report.')}
+                onPress={() => showToast('Generating detailed risk profile report.', 'info', 'Risk Analysis')}
              >
                 <Typography variant="caption" weight="700">Show risk analysis</Typography>
              </TouchableOpacity>
              <TouchableOpacity 
                 style={styles.chip}
-                onPress={() => Alert.alert('Alternatives', 'Searching for comparable allocation strategies.')}
+                onPress={() => showToast('Searching for comparable allocation strategies.', 'info', 'Alternatives')}
              >
                 <Typography variant="caption" weight="700">Other options?</Typography>
              </TouchableOpacity>
@@ -106,15 +108,15 @@ const AIAdvisorScreen = () => {
       <View style={styles.inputContainer}>
         {showAttachMenu && (
           <View style={styles.attachMenu}>
-             <TouchableOpacity style={styles.attachOption} onPress={() => [Alert.alert('Upload', 'Image upload opening.'), setShowAttachMenu(false)]}>
+             <TouchableOpacity style={styles.attachOption} onPress={() => [showToast('Image upload opening.', 'info', 'Upload'), setShowAttachMenu(false)]}>
                <Feather name="image" size={18} color="#000" />
                <Typography variant="caption" weight="700" style={{marginLeft: 12}}>Image</Typography>
              </TouchableOpacity>
-             <TouchableOpacity style={styles.attachOption} onPress={() => [Alert.alert('Upload', 'Video upload opening.'), setShowAttachMenu(false)]}>
+             <TouchableOpacity style={styles.attachOption} onPress={() => [showToast('Video upload opening.', 'info', 'Upload'), setShowAttachMenu(false)]}>
                <Feather name="video" size={18} color="#000" />
                <Typography variant="caption" weight="700" style={{marginLeft: 12}}>Video</Typography>
              </TouchableOpacity>
-             <TouchableOpacity style={styles.attachOption} onPress={() => [Alert.alert('Upload', 'Document upload opening.'), setShowAttachMenu(false)]}>
+             <TouchableOpacity style={styles.attachOption} onPress={() => [showToast('Document upload opening.', 'info', 'Upload'), setShowAttachMenu(false)]}>
                <Feather name="file-text" size={18} color="#000" />
                <Typography variant="caption" weight="700" style={{marginLeft: 12}}>Document</Typography>
              </TouchableOpacity>
@@ -134,7 +136,7 @@ const AIAdvisorScreen = () => {
         />
         <TouchableOpacity 
             style={styles.sendBtn}
-            onPress={() => Alert.alert('AI Response', 'Sending your message to EZAI...')}
+            onPress={() => showToast('Sending your message to EZAI...', 'info', 'AI Response')}
         >
           <Feather name="arrow-up" size={20} color="#FFF" />
         </TouchableOpacity>

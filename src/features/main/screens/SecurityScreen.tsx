@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,17 +6,131 @@ import {
   ScrollView,
   Switch,
   TouchableOpacity,
+  ActivityIndicator,
+  Image,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { Typography } from '../../../components';
+import { useNavigation } from '@react-navigation/native';
+import { useToast } from '../../../context/ToastContext';
+import { isTwoFactorEnabled, setTwoFactorEnabled } from '../../../services/authService';
+import { isBiometricEnabled, setBiometricEnabled, isBiometricAvailable } from '../../../services/biometricService';
+import { getActiveSessions, terminateSession, UserSession } from '../../../services/sessionService';
+import auth from '@react-native-firebase/auth';
+import { useAppDispatch, useAppSelector } from '../../../store/hooks';
+import { setTwoFactor, setBiometrics as setReduxBiometrics } from '../../../store/slices/settingsSlice';
 
 const SecurityScreen = () => {
-  const [biometrics, setBiometrics] = useState(true);
-  const [twoFactor, setTwoFactor] = useState(false);
+  const navigation = useNavigation<any>();
+  const { showToast } = useToast();
+  const dispatch = useAppDispatch();
+  const profile = useAppSelector(state => state.user.profile);
+
+  
+  const twoFactor = useAppSelector(state => state.settings.twoFactorEnabled);
+  const biometrics = useAppSelector(state => state.settings.biometricsEnabled);
+  
+  const [isLoading2FA, setIsLoading2FA] = useState(false);
+  const [isLoadingBio, setIsLoadingBio] = useState(false);
+  const [sessions, setSessions] = useState<UserSession[]>([]);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+
+  useEffect(() => {
+    loadSessions();
+  }, []);
+
+  const loadSessions = async () => {
+    const user = auth().currentUser;
+    if (user) {
+      setIsLoadingSessions(true);
+      const data = await getActiveSessions(user.uid);
+      setSessions(data);
+      setIsLoadingSessions(false);
+    }
+  };
+
+  const handleToggle2FA = async (enabled: boolean) => {
+    setIsLoading2FA(true);
+    try {
+      await setTwoFactorEnabled(enabled);
+      dispatch(setTwoFactor(enabled));
+      showToast(
+        enabled ? 'Two-Factor Authentication enabled!' : 'Two-Factor Authentication disabled.',
+        enabled ? 'success' : 'info',
+      );
+    } catch (error) {
+      showToast('Failed to update 2FA setting.', 'error');
+    } finally {
+      setIsLoading2FA(false);
+    }
+  };
+
+  const handleToggleBiometrics = async (enabled: boolean) => {
+    if (enabled) {
+      const { available, error } = await isBiometricAvailable();
+      if (!available) {
+        showToast(error || 'Biometrics not available on this device.', 'error');
+        return;
+      }
+    }
+
+    setIsLoadingBio(true);
+    try {
+      await setBiometricEnabled(enabled);
+      dispatch(setReduxBiometrics(enabled));
+      showToast(
+        enabled ? 'Biometric Login enabled!' : 'Biometric Login disabled.',
+        enabled ? 'success' : 'info',
+      );
+    } catch (error) {
+      showToast('Failed to update biometric setting.', 'error');
+    } finally {
+      setIsLoadingBio(false);
+    }
+  };
+
+  const handleRemoveDevice = async (sessionId: string) => {
+    const user = auth().currentUser;
+    if (!user) return;
+
+    try {
+      await terminateSession(user.uid, sessionId);
+      showToast('Device removed and logged out.', 'success');
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+    } catch (error) {
+      showToast('Failed to remove device.', 'error');
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.avatarContainer}
+            onPress={() => navigation.navigate('EditProfile')}
+          >
+            {profile?.photoURL ? (
+              <Image source={{ uri: profile.photoURL }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarMock}>
+                <Typography variant="h2" weight="700" color="#FFF">
+                  {profile?.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'}
+                </Typography>
+              </View>
+            )}
+            <View style={styles.editBadge}>
+              <Feather name="settings" size={10} color="#FFF" />
+            </View>
+          </TouchableOpacity>
+          <View style={{ marginLeft: 16 }}>
+            <Typography variant="h2" weight="700">Account Security</Typography>
+            <Typography variant="caption" color="#666" style={{ marginTop: 2 }}>
+              Manage your protection & sessions
+            </Typography>
+          </View>
+        </View>
+
         <View style={styles.section}>
           <Typography
             variant="caption"
@@ -27,7 +141,7 @@ const SecurityScreen = () => {
             AUTHENTICATION
           </Typography>
 
-          <TouchableOpacity style={styles.row}>
+          <TouchableOpacity style={styles.row} onPress={() => navigation.navigate('ChangePassword')}>
             <View style={styles.iconCircle}>
               <Feather name="lock" size={18} color="#000" />
             </View>
@@ -40,7 +154,7 @@ const SecurityScreen = () => {
                 color="#666"
                 style={{ marginTop: 2 }}
               >
-                Last updated 3 months ago
+                Ensure your account is secure
               </Typography>
             </View>
             <Feather name="chevron-right" size={20} color="#CCC" />
@@ -59,12 +173,13 @@ const SecurityScreen = () => {
                 color="#666"
                 style={{ marginTop: 2 }}
               >
-                Extra security for your account
+                {twoFactor ? 'Email OTP verification on login' : 'Extra security for your account'}
               </Typography>
             </View>
             <Switch
               value={twoFactor}
-              onValueChange={setTwoFactor}
+              onValueChange={handleToggle2FA}
+              disabled={isLoading2FA}
               trackColor={{ false: '#EAEBEE', true: '#0047AB' }}
             />
           </View>
@@ -87,7 +202,8 @@ const SecurityScreen = () => {
             </View>
             <Switch
               value={biometrics}
-              onValueChange={setBiometrics}
+              onValueChange={handleToggleBiometrics}
+              disabled={isLoadingBio}
               trackColor={{ false: '#EAEBEE', true: '#0047AB' }}
             />
           </View>
@@ -103,23 +219,47 @@ const SecurityScreen = () => {
             DEVICES
           </Typography>
 
-          <View style={styles.row}>
-            <View style={styles.iconCircle}>
-              <Feather name="smartphone" size={18} color="#000" />
-            </View>
-            <View style={{ flex: 1, marginLeft: 16 }}>
-              <Typography variant="body" weight="700">
-                iPhone 14 Pro Max
-              </Typography>
-              <Typography
-                variant="caption"
-                color="#666"
-                style={{ marginTop: 2 }}
-              >
-                Current Device • London, UK
-              </Typography>
-            </View>
-          </View>
+          {isLoadingSessions ? (
+            <ActivityIndicator size="small" color="#000" style={{ marginVertical: 20 }} />
+          ) : sessions.length === 0 ? (
+            <Typography variant="caption" color="#999" style={{ textAlign: 'center', marginVertical: 20 }}>
+              No active sessions found.
+            </Typography>
+          ) : (
+            sessions.map(session => (
+              <View key={session.id} style={styles.row}>
+                <View style={styles.iconCircle}>
+                  <Feather
+                    name={session.platform === 'ios' ? 'smartphone' : 'smartphone'}
+                    size={18}
+                    color="#000"
+                  />
+                </View>
+                <View style={{ flex: 1, marginLeft: 16 }}>
+                  <Typography variant="body" weight="700">
+                    {session.deviceName} {session.isCurrent && '(Current)'}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    color="#666"
+                    style={{ marginTop: 2 }}
+                  >
+                    {session.platform.toUpperCase()} • {session.osVersion}
+                  </Typography>
+                </View>
+                {!session.isCurrent && (
+                  <TouchableOpacity 
+                    onPress={() => handleRemoveDevice(session.id)}
+                    style={styles.removeBtn}
+                  >
+                    <Typography variant="caption" weight="700" color="#FF3B30">
+                      Logout
+                    </Typography>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -143,6 +283,50 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  removeBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#FFF1F0',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+    paddingHorizontal: 8,
+  },
+  avatarContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    position: 'relative',
+  },
+  avatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+  },
+  avatarMock: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#0047AB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#F8F9FB',
   },
 });
 

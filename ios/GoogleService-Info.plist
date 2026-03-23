@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CLIENT_ID</key>
+	<string>698639438639-6a7bs7mpp8iuak7ei7nlaftfmjbe3djh.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.698639438639-6a7bs7mpp8iuak7ei7nlaftfmjbe3djh</string>
 	<key>API_KEY</key>
 	<string>AIzaSyB77W9Ma8_hEpy87wU-KrdU_mlTdlFc0aY</string>
 	<key>GCM_SENDER_ID</key>
@@ -26,5 +30,12 @@
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
 	<string>1:698639438639:ios:51e3440457b1f9987e47da</string>
+	<key>CLIENT_ID</key>
+	<string>698639438639-6a7bs7mpp8iuak7ei7nlaftfmjbe3djh.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.698639438639-6a7bs7mpp8iuak7ei7nlaftfmjbe3djh</string>
+
+	<key>DATABASE_URL</key>
+	<string>https://ezfinance-5a811-default-rtdb.firebaseio.com</string>
 </dict>
 </plist>

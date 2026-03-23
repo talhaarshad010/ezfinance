@@ -22,7 +22,7 @@ pod 'FirebaseAppCheckInterop', :modular_headers => true
 pod 'RecaptchaInterop', :modular_headers => true
 pod 'FirebaseCoreExtension', :modular_headers => true
 pod 'FirebaseSharedSwift', :modular_headers => true
-pod 'GTMSessionFetcher', :modular_headers => true
+pod 'GTMSessionFetcher', '~> 3.4', :modular_headers => true
 pod 'leveldb-library', :modular_headers => true
 
 linkage = ENV['USE_FRAMEWORKS'] || 'static'

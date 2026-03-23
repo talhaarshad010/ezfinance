@@ -1,43 +1,66 @@
 import React from 'react';
-import {View, StyleSheet, ScrollView, TouchableOpacity, Dimensions} from 'react-native';
-import {Typography, Card} from '../../../components';
-import {colors} from '../../../theme/colors';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Dimensions,
+} from 'react-native';
+import { Typography, Card } from '../../../components';
+import { colors } from '../../../theme/colors';
 import Feather from 'react-native-vector-icons/Feather';
-import Svg, {Path, Defs, LinearGradient, Stop, Circle} from 'react-native-svg';
+import Svg, {
+  Path,
+  Defs,
+  LinearGradient,
+  Stop,
+  Circle,
+} from 'react-native-svg';
 
-const {width} = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
-const StockDetailScreen = ({navigation}: any) => {
+const StockDetailScreen = ({ navigation }: any) => {
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Custom Navigation Bar */}
-      <View style={styles.navBar}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={24} color="#000" />
-        </TouchableOpacity>
-        <Typography variant="h3" weight="700">Stock Detail</Typography>
-        <View style={{flexDirection: 'row'}}>
-           <TouchableOpacity style={{marginRight: 16}}><Feather name="search" size={24} color="#000" /></TouchableOpacity>
-           <TouchableOpacity><Feather name="share-2" size={24} color="#000" /></TouchableOpacity>
-        </View>
-      </View>
-
       {/* Title Section */}
       <View style={styles.titleSection}>
-        <View style={styles.logoContainer}><Feather name="briefcase" size={30} color="#000" /></View>
-        <View style={{marginLeft: 16}}>
-          <Typography variant="h1" weight="700">NVIDIA Corp.</Typography>
-          <Typography variant="caption" color="#666" weight="700">NVDA • NASDAQ</Typography>
+        <View style={styles.logoContainer}>
+          <Feather name="briefcase" size={30} color="#000" />
+        </View>
+        <View style={{ marginLeft: 16 }}>
+          <Typography variant="h1" weight="700">
+            NVIDIA Corp.
+          </Typography>
+          <Typography variant="caption" color="#666" weight="700">
+            NVDA • NASDAQ
+          </Typography>
         </View>
       </View>
 
       {/* Price Section */}
       <View style={styles.priceSection}>
-        <Typography variant="h1" weight="700" style={{fontSize: 48}}>$788.17</Typography>
-        <View style={{flexDirection: 'row', alignItems: 'center', marginTop: 4}}>
-           <Feather name="trending-up" size={16} color={colors.accent.successText} />
-           <Typography variant="body" weight="700" color={colors.accent.successText} style={{marginLeft: 4}}>+$12.40 (1.60%)</Typography>
-           <Typography variant="body" color="#AAA" style={{marginLeft: 8}}>TODAY</Typography>
+        <Typography variant="h1" weight="700" style={{ fontSize: 48 }}>
+          $788.17
+        </Typography>
+        <View
+          style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}
+        >
+          <Feather
+            name="trending-up"
+            size={16}
+            color={colors.accent.successText}
+          />
+          <Typography
+            variant="body"
+            weight="700"
+            color={colors.accent.successText}
+            style={{ marginLeft: 4 }}
+          >
+            +$12.40 (1.60%)
+          </Typography>
+          <Typography variant="body" color="#AAA" style={{ marginLeft: 8 }}>
+            TODAY
+          </Typography>
         </View>
       </View>
 
@@ -45,16 +68,27 @@ const StockDetailScreen = ({navigation}: any) => {
       <Card style={styles.chartCard}>
         <View style={styles.timeTabs}>
           {['1D', '1W', '1M', '1Y', '5Y'].map((tab, i) => (
-            <TouchableOpacity key={tab} style={[styles.timeTab, i === 2 && styles.activeTimeTab]}>
-              <Typography variant="caption" weight="700" color={i === 2 ? '#FFF' : '#333'}>{tab}</Typography>
+            <TouchableOpacity
+              key={tab}
+              style={[styles.timeTab, i === 2 && styles.activeTimeTab]}
+            >
+              <Typography
+                variant="caption"
+                weight="700"
+                color={i === 2 ? '#FFF' : '#333'}
+              >
+                {tab}
+              </Typography>
             </TouchableOpacity>
           ))}
-          <TouchableOpacity style={styles.expandBtn}><Feather name="maximize-2" size={16} color="#AAA" /></TouchableOpacity>
+          <TouchableOpacity style={styles.expandBtn}>
+            <Feather name="maximize-2" size={16} color="#AAA" />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.chartWrapper}>
           <Svg height="200" width={width - 50}>
-             <Defs>
+            <Defs>
               <LinearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
                 <Stop offset="0" stopColor={colors.primary} stopOpacity="0.1" />
                 <Stop offset="1" stopColor={colors.primary} stopOpacity="0" />
@@ -95,47 +129,93 @@ const StockDetailScreen = ({navigation}: any) => {
       <View style={styles.actions}>
         <TouchableOpacity style={styles.portfolioBtn}>
           <Feather name="plus-circle" size={20} color="#FFF" />
-          <Typography variant="body" weight="700" color="#FFF" style={{marginLeft: 12}}>ADD TO PORTFOLIO</Typography>
+          <Typography
+            variant="body"
+            weight="700"
+            color="#FFF"
+            style={{ marginLeft: 12 }}
+          >
+            ADD TO PORTFOLIO
+          </Typography>
         </TouchableOpacity>
         <TouchableOpacity style={styles.alertBtn}>
           <Feather name="bell" size={20} color="#333" />
-          <Typography variant="body" weight="700" color="#333" style={{marginLeft: 12}}>SET ALERT</Typography>
+          <Typography
+            variant="body"
+            weight="700"
+            color="#333"
+            style={{ marginLeft: 12 }}
+          >
+            SET ALERT
+          </Typography>
         </TouchableOpacity>
       </View>
 
       {/* Analyst Rating */}
       <Card style={styles.ratingCard}>
-        <View style={{flexDirection: 'row', alignItems: 'center'}}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Feather name="zap" size={20} color={colors.primary} />
-          <Typography variant="body" weight="700" style={{marginLeft: 8}}>Analyst Rating</Typography>
+          <Typography variant="body" weight="700" style={{ marginLeft: 8 }}>
+            Analyst Rating
+          </Typography>
         </View>
         <View style={styles.ratingBar}>
-           <View style={[styles.ratingFill, {flex: 0.85, backgroundColor: '#003366'}]} />
-           <View style={[styles.ratingFill, {flex: 0.1, backgroundColor: '#AAA'}]} />
-           <View style={[styles.ratingFill, {flex: 0.05, backgroundColor: colors.accent.errorText}]} />
+          <View
+            style={[
+              styles.ratingFill,
+              { flex: 0.85, backgroundColor: '#003366' },
+            ]}
+          />
+          <View
+            style={[styles.ratingFill, { flex: 0.1, backgroundColor: '#AAA' }]}
+          />
+          <View
+            style={[
+              styles.ratingFill,
+              { flex: 0.05, backgroundColor: colors.accent.errorText },
+            ]}
+          />
         </View>
-        <View style={{flexDirection: 'row', justifyContent: 'space-between', marginTop: 8}}>
-            <Typography variant="caption" weight="700" color="#AAA">85% BUY</Typography>
-            <Typography variant="caption" weight="700" color="#AAA">5% SELL</Typography>
+        <View
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            marginTop: 8,
+          }}
+        >
+          <Typography variant="caption" weight="700" color="#AAA">
+            85% BUY
+          </Typography>
+          <Typography variant="caption" weight="700" color="#AAA">
+            5% SELL
+          </Typography>
         </View>
       </Card>
 
-      <View style={{height: 100}} />
+      <View style={{ height: 100 }} />
     </ScrollView>
   );
 };
 
-const StatBox = ({label, val}: {label: string; val: string}) => (
+const StatBox = ({ label, val }: { label: string; val: string }) => (
   <View style={styles.statBox}>
-    <Typography variant="caption" color="#AAA" weight="600">{label}</Typography>
-    <Typography variant="h3" weight="700" style={{marginTop: 4}}>{val}</Typography>
+    <Typography variant="caption" color="#AAA" weight="600">
+      {label}
+    </Typography>
+    <Typography variant="h3" weight="700" style={{ marginTop: 4 }}>
+      {val}
+    </Typography>
   </View>
 );
 
-const DataRow = ({label, val}: {label: string; val: string}) => (
+const DataRow = ({ label, val }: { label: string; val: string }) => (
   <View style={styles.dataRow}>
-    <Typography variant="body" color="#666">{label}</Typography>
-    <Typography variant="body" weight="700">{val}</Typography>
+    <Typography variant="body" color="#666">
+      {label}
+    </Typography>
+    <Typography variant="body" weight="700">
+      {val}
+    </Typography>
   </View>
 );
 
@@ -270,7 +350,7 @@ const styles = StyleSheet.create({
   },
   ratingFill: {
     height: '100%',
-  }
+  },
 });
 
 export default StockDetailScreen;

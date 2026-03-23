@@ -6,12 +6,15 @@ import {
   TouchableOpacity,
   ScrollView,
   KeyboardAvoidingView,
+  Image,
   Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
 import { Typography, Input, Button, Card, Logo } from '../../../components';
 import { colors } from '../../../theme/colors';
+import { signUp, signInWithGoogle } from '../../../services/authService';
+import { useToast } from '../../../context/ToastContext';
 
 const RegisterScreen = () => {
   const navigation = useNavigation<any>();
@@ -20,11 +23,56 @@ const RegisterScreen = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agree, setAgree] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const { showToast } = useToast();
 
-  const handleRegister = () => {
-    // Placeholder registration logic
-    navigation.navigate('Login');
+  const handleRegister = async () => {
+    if (!fullName || !email || !password || !confirmPassword) {
+      showToast('Please fill in all fields', 'error');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      showToast('Passwords do not match', 'error');
+      return;
+    }
+
+    if (!agree) {
+      showToast('Please agree to the Terms & Service', 'error');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await signUp(fullName, email, password);
+      showToast('Account created successfully!', 'success');
+      // Navigation is handled by auth state listener in AppNavigator
+    } catch (error: any) {
+      let errorMessage = 'An error occurred during registration.';
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = 'This email is already in use.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address.';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'Password is too weak.';
+      }
+      showToast(errorMessage, 'error');
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithGoogle();
+      showToast('Signed in with Google!', 'success');
+    } catch (error: any) {
+      if (error.code !== 'ASYNC_OP_IN_PROGRESS') {
+        showToast('Google Sign-In failed.', 'error');
+      }
+    }
+  };
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -108,6 +156,7 @@ const RegisterScreen = () => {
                 onPress={handleRegister}
                 style={styles.registerButton}
                 disabled={!agree}
+                isLoading={isLoading}
               />
             </View>
           </Card>
@@ -117,17 +166,18 @@ const RegisterScreen = () => {
             <Typography variant="caption" weight="700" color="#AAA" style={styles.socialTitle}>
               OR CONTINUE WITH
             </Typography>
-            <View style={styles.socialButtons}>
-              <TouchableOpacity style={styles.socialBtn}>
-                <Feather name="at-sign" size={20} color="#000" />
-                <Typography variant="body" weight="700" style={{ marginLeft: 12 }}>Google</Typography>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.socialBtn}>
-                <Feather name="phone" size={20} color="#000" />
-                <Typography variant="body" weight="700" style={{ marginLeft: 12 }}>Apple</Typography>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity style={styles.googleBtn} onPress={handleGoogleSignIn}>
+              <Image 
+                source={require('../../../assets/images/Logo-google-icon-PNG.png')} 
+                style={styles.googleIcon} 
+                resizeMode="contain"
+              />
+              <Typography variant="body" weight="700" style={{ marginLeft: 12 }}>
+                Continue with Google
+              </Typography>
+            </TouchableOpacity>
           </View>
+
 
           {/* Footer */}
           <View style={styles.footer}>
@@ -227,13 +277,9 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginBottom: 20,
   },
-  socialButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+
+  googleBtn: {
     width: '100%',
-  },
-  socialBtn: {
-    flex: 0.48,
     backgroundColor: '#FFF',
     height: 56,
     borderRadius: 16,
@@ -242,7 +288,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#EEE',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 1,
   },
+  googleIcon: {
+    width: 24,
+    height: 24,
+  },
+
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',

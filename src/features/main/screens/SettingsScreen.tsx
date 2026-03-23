@@ -1,12 +1,14 @@
 import React from 'react';
-import {View, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, SafeAreaView} from 'react-native';
+import {View, StyleSheet, ScrollView, TouchableOpacity, Switch, SafeAreaView} from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import {Typography, Card} from '../../../components';
 import {useNavigation} from '@react-navigation/native';
+import { useToast } from '../../../context/ToastContext';
 
 const SettingsScreen = () => {
   const navigation = useNavigation<any>();
   const [isDarkMode, setIsDarkMode] = React.useState(false);
+  const { showToast } = useToast();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -43,7 +45,7 @@ const SettingsScreen = () => {
           </Typography>
           <TouchableOpacity 
             style={styles.configureBtn} 
-            onPress={() => Alert.alert('Notifications', 'Preferences configuration coming soon.')}
+            onPress={() => showToast('Preferences configuration coming soon.', 'info', 'Notifications')}
           >
             <Typography variant="body" weight="700" color="#FFF">Configure</Typography>
           </TouchableOpacity>
@@ -58,7 +60,7 @@ const SettingsScreen = () => {
           </Typography>
           <TouchableOpacity 
             style={styles.exportLink}
-            onPress={() => Alert.alert('Export', 'Financial data export is being prepared.')}
+            onPress={() => showToast('Financial data export is being prepared.', 'info', 'Export')}
           >
             <Typography variant="body" weight="700" color="#000">Export now</Typography>
             <Feather name="download" size={16} color="#000" style={{marginLeft: 8}} />
@@ -117,7 +119,7 @@ const SettingsScreen = () => {
                trackColor={{ false: "#EAEBEE", true: "#000" }}
                thumbColor={"#FFF"}
                ios_backgroundColor="#EAEBEE"
-               onValueChange={(val) => Alert.alert('Biometrics', `Biometric login updated.`)}
+               onValueChange={(val) => showToast('Biometric login updated.', 'success', 'Biometrics')}
                value={true}
             />
           </View>
