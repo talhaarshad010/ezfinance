@@ -134,6 +134,12 @@ export const DrawerContent = (props: DrawerContentComponentProps) => {
           active={currentScreenName === 'BudgetPlanner'}
           onPress={() => navigateTo('BudgetPlanner')} 
         />
+        <MenuItem 
+          icon="briefcase" 
+          label="Bank Accounts" 
+          active={currentScreenName === 'BankAccounts'}
+          onPress={() => navigateTo('BankAccounts')} 
+        />
 
         {/* Growth */}
         <SectionHeader title="Growth" />

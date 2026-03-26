@@ -16,6 +16,7 @@ import BudgetPlannerScreen from '../features/main/screens/BudgetPlannerScreen';
 import { useToast } from '../context/ToastContext';
 import { HeaderProfile } from '../components/HeaderProfile';
 import NotificationsScreen from '../features/main/screens/NotificationsScreen';
+import BankAccountsScreen from '../features/main/screens/BankAccountsScreen';
 
 const Drawer = createDrawerNavigator();
 
@@ -127,6 +128,12 @@ export const MainDrawerNavigator = () => {
           options={{ drawerItemStyle: { display: 'none' } }}
         >
             {() => <SceneWrapper><NotificationsScreen /></SceneWrapper>}
+        </Drawer.Screen>
+        <Drawer.Screen
+          name="BankAccounts"
+          options={{ title: 'Bank Accounts', drawerItemStyle: { display: 'none' } }}
+        >
+            {() => <SceneWrapper><BankAccountsScreen /></SceneWrapper>}
         </Drawer.Screen>
       </Drawer.Navigator>
     </View>

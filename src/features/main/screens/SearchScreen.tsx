@@ -2,13 +2,13 @@ import React, { useState, useMemo } from 'react';
 import {
   View,
   StyleSheet,
-  SafeAreaView,
   TextInput,
   TouchableOpacity,
   FlatList,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Feather from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { Typography, Card } from '../../../components';
@@ -53,10 +53,15 @@ const SEARCH_DATABASE: SearchItem[] = [
   { id: 'mk1', title: 'Apple Inc (AAPL)', subtitle: 'Stock • Technology', target: 'StockDetail', params: { symbol: 'AAPL' }, category: 'Market', icon: 'activity' },
   { id: 'mk2', title: 'Bitcoin (BTC)', subtitle: 'Crypto • Digital Gold', target: 'AssetDetail', params: { id: 'bitcoin' }, category: 'Market', icon: 'zap' },
   { id: 'mk3', title: 'Ethereum (ETH)', subtitle: 'Crypto • Smart Contracts', target: 'AssetDetail', params: { id: 'ethereum' }, category: 'Market', icon: 'circle' },
+  
+  // Bank Accounts
+  { id: 'ba1', title: 'Bank Accounts', subtitle: 'Manage your bank accounts', target: 'BankAccounts', category: 'Menu', icon: 'briefcase' },
+  { id: 'ba2', title: 'Add Bank Account', subtitle: 'Link a new bank account', target: 'AddAccount', category: 'Menu', icon: 'plus-circle' },
 ];
 
 const SearchScreen = () => {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
 
   const filteredItems = useMemo(() => {
@@ -76,7 +81,7 @@ const SearchScreen = () => {
     // These screens are direct children of 'Drawer'
     const drawerScreens = [
       'StockMarket', 'CryptoMarket', 'AddExpense', 'Analytics', 
-      'BudgetPlanner', 'Portfolio', 'Settings', 'Notifications'
+      'BudgetPlanner', 'Portfolio', 'Settings', 'Notifications', 'BankAccounts'
     ];
 
     if (tabScreens.includes(item.target)) {
@@ -137,7 +142,7 @@ const SearchScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
@@ -189,7 +194,7 @@ const SearchScreen = () => {
           }
         />
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 };
 

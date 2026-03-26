@@ -10,12 +10,39 @@ import {
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
-import { Typography, Card, Button, CalendarPicker } from '../../../components';
+import { Typography, Card, CalendarPicker } from '../../../components';
+import { useAppSelector } from '../../../store/hooks';
+import { getBankById } from '../../../constants/pakistaniBanks';
+import { colors } from '../../../theme/colors';
 
 const ExpensesScreen = () => {
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [activeCategory, setActiveCategory] = useState('All Categories');
+  const [activeBankId, setActiveBankId] = useState<string | null>(null);
+
+  const { accounts, transactions } = useAppSelector(state => state.bankAccounts);
+
+  // Unify and filter expenses from all cards
+  const allExpenses = React.useMemo(() => {
+    const list: any[] = [];
+    Object.keys(transactions).forEach(accountId => {
+      transactions[accountId].forEach(tx => {
+        if (tx.type === 'expense') {
+          const account = accounts.find(a => a.id === accountId);
+          list.push({
+            ...tx,
+            bankName: account?.bankName || 'Unknown Bank',
+            bankAbbreviation: account?.bankAbbreviation || '??',
+            bankId: account?.bankId,
+          });
+        }
+      });
+    });
+
+    // Sort by date descending
+    return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [accounts, transactions]);
 
   const categories = [
     'All Categories',
@@ -66,14 +93,6 @@ const ExpensesScreen = () => {
               }
               onPress={() => setActiveCategory(cat)}
             >
-              {cat === 'All Categories' && (
-                <Feather
-                  name="layers"
-                  size={16}
-                  color={activeCategory === cat ? '#FFF' : '#000'}
-                  style={{ marginRight: 8 }}
-                />
-              )}
               <Typography
                 variant="caption"
                 weight="700"
@@ -86,7 +105,37 @@ const ExpensesScreen = () => {
         </ScrollView>
       </View>
 
-      <View style={{ flexDirection: 'row', marginBottom: 24 }}>
+      <View style={{ marginBottom: 24 }}>
+        <Typography variant="caption" weight="700" color="#AAA" style={{ marginBottom: 12, letterSpacing: 1 }}>FILTER BY CARD</Typography>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRow}
+        >
+          <TouchableOpacity
+            style={activeBankId === null ? styles.filterBtnBlack : styles.filterBtnWhite}
+            onPress={() => setActiveBankId(null)}
+          >
+            <Typography variant="caption" weight="700" color={activeBankId === null ? '#FFF' : '#333'}>All Cards</Typography>
+          </TouchableOpacity>
+          {accounts.map((acc) => (
+            <TouchableOpacity
+              key={acc.id}
+              style={activeBankId === acc.id ? styles.filterBtnBlack : styles.filterBtnWhite}
+              onPress={() => setActiveBankId(acc.id)}
+            >
+              <View style={styles.bankFilterIcon}>
+                <Image source={{ uri: getBankById(acc.bankId)?.logo }} style={styles.miniLogo} resizeMode="contain" />
+              </View>
+              <Typography variant="caption" weight="700" color={activeBankId === acc.id ? '#FFF' : '#333'}>
+                {acc.bankAbbreviation}
+              </Typography>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      <View style={{ flexDirection: 'row', marginBottom: 24, justifyContent: 'space-between', alignItems: 'center' }}>
         <TouchableOpacity
           style={styles.filterBtnWhite}
           onPress={() => setShowCalendar(true)}
@@ -104,6 +153,12 @@ const ExpensesScreen = () => {
             })}
           </Typography>
         </TouchableOpacity>
+
+        {(activeCategory !== 'All Categories' || activeBankId !== null) && (
+          <TouchableOpacity onPress={() => { setActiveCategory('All Categories'); setActiveBankId(null); }}>
+             <Typography variant="caption" color={colors.primary} weight="700">Reset Filters</Typography>
+          </TouchableOpacity>
+        )}
       </View>
 
       <CalendarPicker
@@ -114,87 +169,86 @@ const ExpensesScreen = () => {
       />
 
       {/* Transactions List */}
-      <ExpenseCard
-        icon="coffee"
-        category="Food"
-        tag="LUNCH"
-        date="Oct 24, 2023"
-        desc="Office Catering"
-        amount="1200"
-      />
-      <ExpenseCard
-        icon="car"
-        category="Transport"
-        tag="FUEL"
-        date="Oct 23, 2023"
-        desc="Shell Station"
-        amount="8500"
-      />
-      <ExpenseCard
-        icon="shopping-bag"
-        category="Shopping"
-        tag="FASHION"
-        date="Oct 21, 2023"
-        desc="Brand Outlet"
-        amount="14200"
-      />
-      <ExpenseCard
-        icon="briefcase"
-        category="Services"
-        tag="MAINTENANCE"
-        date="Oct 20, 2023"
-        desc="Plumbing Fix"
-        amount="3500"
-      />
-      <ExpenseCard
-        icon="youtube"
-        category="Entertainment"
-        tag="DIGITAL"
-        date="Oct 19, 2023"
-        desc="Streaming Hub"
-        amount="1900"
-      />
+      {allExpenses.length > 0 ? (
+        allExpenses
+          .filter(exp => (activeCategory === 'All Categories' || exp.category === activeCategory) && (activeBankId === null || exp.accountId === activeBankId))
+          .map(expense => (
+            <ExpenseCard
+              key={expense.id}
+              expense={expense}
+            />
+          ))
+      ) : (
+        <View style={styles.emptyContainer}>
+          <Feather name="minus-circle" size={48} color="#CCC" />
+          <Typography variant="body" color="#AAA" style={{ marginTop: 16 }}>
+            No expenses found across your accounts.
+          </Typography>
+        </View>
+      )}
 
       <View style={{ height: 100 }} />
     </ScrollView>
   );
 };
 
-const ExpenseCard = ({ icon, category, tag, date, desc, amount }: any) => {
+const ExpenseCard = ({ expense }: { expense: any }) => {
   const navigation = useNavigation<any>();
+  const bank = getBankById(expense.bankId);
+  
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-PK', { day: 'numeric', month: 'short' });
+  };
+
+  // Map category to icon
+  const getIcon = (cat: string) => {
+    switch (cat) {
+      case 'Food': return 'coffee';
+      case 'Transport': return 'car';
+      case 'Shopping': return 'shopping-bag';
+      case 'Rent': return 'home';
+      default: return 'credit-card';
+    }
+  };
+
   return (
     <TouchableOpacity
-      onPress={() => navigation.navigate('ExpenseDetail')}
+      onPress={() => navigation.navigate('TransactionDetail', { transaction: expense })}
       activeOpacity={0.8}
     >
       <Card style={styles.card}>
         <View style={styles.iconBox}>
-          <Feather name={icon} size={20} color="#000" />
+          {bank?.logo ? (
+            <Image source={{ uri: bank.logo }} style={styles.bankLogo} resizeMode="contain" />
+          ) : (
+            <Feather name={getIcon(expense.category)} size={20} color="#000" />
+          )}
         </View>
         <View style={{ flex: 1, marginLeft: 16 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Typography variant="body" weight="700">
-              {category}
+              {expense.description}
             </Typography>
             <Typography
               variant="caption"
               weight="700"
-              color="#AAA"
+              color={colors.primary}
               style={{ marginLeft: 8, fontSize: 10, letterSpacing: 0.5 }}
             >
-              {tag}
+              {expense.bankAbbreviation}
             </Typography>
           </View>
           <Typography variant="caption" color="#666" style={{ marginTop: 4 }}>
-            {date} • {desc}
+            {formatDate(expense.date)} • {expense.category || 'Uncategorized'}
           </Typography>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
           <Typography variant="caption" weight="700" style={{ fontSize: 10 }}>
             PKR
           </Typography>
-          <Typography variant="body" weight="700" style={{ fontSize: 16 }}>
-            {amount}
+          <Typography variant="body" weight="700" style={{ fontSize: 16, color: '#D32F2F' }}>
+            {expense.amount.toLocaleString()}
           </Typography>
         </View>
       </Card>
@@ -266,6 +320,30 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#EEE',
+  },
+  bankFilterIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FFF',
+    marginRight: 8,
+    overflow: 'hidden',
+  },
+  bankLogo: {
+    width: '100%',
+    height: '100%',
+  },
+  miniLogo: {
+    width: '100%',
+    height: '100%',
+  },
+  emptyContainer: {
+    padding: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalBg: {
     flex: 1,

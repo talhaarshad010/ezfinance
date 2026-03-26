@@ -12,6 +12,10 @@ import EditProfileScreen from '../features/main/screens/EditProfileScreen';
 import SecurityScreen from '../features/main/screens/SecurityScreen';
 import AssetDetailScreen from '../features/main/screens/AssetDetailScreen';
 import SearchScreen from '../features/main/screens/SearchScreen';
+import AddAccountScreen from '../features/main/screens/AddAccountScreen';
+import AccountDetailScreen from '../features/main/screens/AccountDetailScreen';
+import AddTransactionScreen from '../features/main/screens/AddTransactionScreen';
+import TransactionDetailScreen from '../features/main/screens/TransactionDetailScreen';
 import OTPVerificationScreen from '../features/auth/screens/OTPVerificationScreen';
 import {
   TouchableOpacity,
@@ -360,6 +364,26 @@ export const AppNavigator = () => {
               name="Search"
               component={SearchScreen}
               options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="AddAccount"
+              component={AddAccountScreen}
+              options={{ title: 'Add Account' }}
+            />
+            <Stack.Screen
+              name="AccountDetail"
+              component={AccountDetailScreen}
+              options={{ title: 'Account Details' }}
+            />
+            <Stack.Screen
+              name="AddTransaction"
+              component={AddTransactionScreen}
+              options={{ title: 'Add Transaction' }}
+            />
+            <Stack.Screen
+              name="TransactionDetail"
+              component={TransactionDetailScreen}
+              options={{ title: 'Transaction' }}
             />
           </Stack.Navigator>
         </>

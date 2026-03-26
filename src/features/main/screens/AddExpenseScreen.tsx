@@ -3,16 +3,72 @@ import {View, StyleSheet, ScrollView, TextInput, TouchableOpacity, Modal} from '
 import Feather from 'react-native-vector-icons/Feather';
 import {Typography, Card, Button, CalendarPicker} from '../../../components';
 import { useToast } from '../../../context/ToastContext';
+import { useAppSelector, useAppDispatch } from '../../../store/hooks';
+import { getBankById } from '../../../constants/pakistaniBanks';
+import { saveTransaction } from '../../../services/bankAccountService';
+import { addTransaction, updateAccountBalance } from '../../../store/slices/bankAccountsSlice';
+import { Image } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 
 const AddExpenseScreen = () => {
-  const [activeModal, setActiveModal] = useState<'category' | 'payment' | 'date' | null>(null);
+  const navigation = useNavigation<any>();
+  const dispatch = useAppDispatch();
   const { showToast } = useToast();
+  
+  const { accounts } = useAppSelector(state => state.bankAccounts);
+  
+  const [activeModal, setActiveModal] = useState<'category' | 'payment' | 'date' | null>(null);
+  const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('Dining & Drinks');
-  const [payment, setPayment] = useState('Credit Card (Visa)');
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(accounts[0]?.id || null);
   const [date, setDate] = useState<Date>(new Date());
+  const [description, setDescription] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
-  const categories = ['Dining & Drinks', 'Transport', 'Groceries', 'Entertainment', 'Shopping'];
-  const paymentMethods = ['Credit Card (Visa)', 'Apple Pay', 'Cash', 'Bank Transfer'];
+  const categories = ['Dining & Drinks', 'Transport', 'Groceries', 'Entertainment', 'Shopping', 'Services', 'Rent'];
+
+  const selectedAccount = accounts.find(a => a.id === selectedAccountId);
+  const selectedBank = selectedAccount ? getBankById(selectedAccount.bankId) : null;
+
+  const handleSave = async () => {
+    if (!amount || parseFloat(amount) <= 0) {
+      showToast('Please enter a valid amount', 'error', 'Invalid Amount');
+      return;
+    }
+    if (!selectedAccountId) {
+      showToast('Please select a payment method (linked card)', 'error', 'Missing Account');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const numAmount = parseFloat(amount);
+      const txData = {
+        description: description || category,
+        amount: numAmount,
+        type: 'expense' as const,
+        category,
+        date: date.toISOString(),
+        createdAt: Date.now(),
+      };
+
+      const savedTx = await saveTransaction(selectedAccountId, txData);
+      
+      // Update Redux
+      dispatch(addTransaction(savedTx));
+      
+      const newBalance = (selectedAccount?.balance || 0) - numAmount;
+      dispatch(updateAccountBalance({ accountId: selectedAccountId, balance: newBalance }));
+
+      showToast('Expense recorded successfully.', 'success', 'Success');
+      navigation.goBack();
+    } catch (e) {
+      console.error('Save expense error:', e);
+      showToast('Failed to save expense. Please try again.', 'error', 'Error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
@@ -25,12 +81,14 @@ const AddExpenseScreen = () => {
 
       <Typography variant="caption" weight="700" color="#666" style={styles.label}>AMOUNT</Typography>
       <View style={styles.amountBox}>
-        <Typography variant="h2" weight="500" color="#333" style={{marginRight: 8}}>$</Typography>
+        <Typography variant="h2" weight="500" color="#333" style={{marginRight: 8}}>PKR</Typography>
         <TextInput 
           placeholder="0.00"
           placeholderTextColor="#DDD"
           style={styles.amountInput}
           keyboardType="numeric"
+          value={amount}
+          onChangeText={setAmount}
         />
       </View>
 
@@ -48,8 +106,19 @@ const AddExpenseScreen = () => {
         style={styles.dropdownBox}
         onPress={() => setActiveModal('payment')}
       >
-        <Typography variant="body" color="#333">{payment}</Typography>
-        <Feather name="credit-card" size={20} color="#333" />
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {selectedBank?.logo ? (
+            <View style={styles.miniBankIcon}>
+              <Image source={{ uri: selectedBank.logo }} style={styles.imageFull} resizeMode="contain" />
+            </View>
+          ) : (
+            <Feather name="credit-card" size={20} color="#333" style={{ marginRight: 12 }} />
+          )}
+          <Typography variant="body" color="#333">
+            {selectedAccount ? `${selectedAccount.bankAbbreviation} (••• ${selectedAccount.accountNumber.slice(-4)})` : 'Select Card'}
+          </Typography>
+        </View>
+        <Feather name="chevron-down" size={20} color="#AAA" />
       </TouchableOpacity>
 
       <Typography variant="caption" weight="700" color="#666" style={styles.label}>DATE</Typography>
@@ -68,14 +137,19 @@ const AddExpenseScreen = () => {
           placeholderTextColor="#AAA"
           style={styles.textAreaInput}
           multiline
+          value={description}
+          onChangeText={setDescription}
         />
       </View>
 
       <TouchableOpacity 
-        style={styles.saveBtn}
-        onPress={() => showToast('Expense saved successfully (demo mode).', 'success', 'Success')}
+        style={[styles.saveBtn, isSaving && { opacity: 0.7 }]}
+        onPress={handleSave}
+        disabled={isSaving}
       >
-        <Typography variant="body" weight="700" color="#FFF">Save Expense</Typography>
+        <Typography variant="body" weight="700" color="#FFF">
+          {isSaving ? 'Processing...' : 'Save Expense'}
+        </Typography>
       </TouchableOpacity>
 
       <Card style={styles.tipCard}>
@@ -107,12 +181,44 @@ const AddExpenseScreen = () => {
                 </TouchableOpacity>
             ))}
 
-            {activeModal === 'payment' && paymentMethods.map((p, i) => (
-                <TouchableOpacity key={i} style={styles.modalOption} onPress={() => { setPayment(p); setActiveModal(null); }}>
-                    <Typography variant="body" weight={payment === p ? '700' : '500'}>{p}</Typography>
-                    {payment === p && <Feather name="check" size={20} color="#000" />}
-                </TouchableOpacity>
-            ))}
+            {activeModal === 'payment' && (
+              accounts.length > 0 ? (
+                accounts.map((acc) => {
+                  const bank = getBankById(acc.bankId);
+                  return (
+                    <TouchableOpacity 
+                      key={acc.id} 
+                      style={styles.modalOption} 
+                      onPress={() => { setSelectedAccountId(acc.id); setActiveModal(null); }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <View style={styles.modalBankIcon}>
+                          {bank?.logo && <Image source={{ uri: bank.logo }} style={styles.imageFull} resizeMode="contain" />}
+                        </View>
+                        <View>
+                          <Typography variant="body" weight={selectedAccountId === acc.id ? '700' : '500'}>
+                            {acc.bankName}
+                          </Typography>
+                          <Typography variant="caption" color="#666">
+                            PKR {acc.balance.toLocaleString()} • •••{acc.accountNumber.slice(-4)}
+                          </Typography>
+                        </View>
+                      </View>
+                      {selectedAccountId === acc.id && <Feather name="check" size={20} color="#000" />}
+                    </TouchableOpacity>
+                  );
+                })
+              ) : (
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                  <Typography variant="body" color="#666">No linked cards found.</Typography>
+                  <Button 
+                    title="Add Account" 
+                    onPress={() => { setActiveModal(null); navigation.navigate('AddAccount'); }}
+                    style={{ marginTop: 16 }}
+                  />
+                </View>
+              )
+            )}
 
           </View>
         </View>
@@ -243,6 +349,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 8,
     marginBottom: 12,
+  },
+  miniBankIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFF',
+    marginRight: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#EEE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBankIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F9F9F9',
+    marginRight: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageFull: {
+    width: '100%',
+    height: '100%',
   }
 });
 

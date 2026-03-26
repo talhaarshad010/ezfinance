@@ -2,16 +2,44 @@ import React from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
-import { Typography, Card, Logo } from '../../../components';
+import { Typography, Card } from '../../../components';
 import { colors } from '../../../theme/colors';
 import { useToast } from '../../../context/ToastContext';
-import { useAppSelector } from '../../../store/hooks';
+import { useAppSelector, useAppDispatch } from '../../../store/hooks';
+import { useFocusEffect } from '@react-navigation/native';
+import { fetchAccounts } from '../../../services/bankAccountService';
+import { setAccounts } from '../../../store/slices/bankAccountsSlice';
+import { getBankById } from '../../../constants/pakistaniBanks';
+import { Image } from 'react-native';
 
 const DashboardScreen = () => {
   const navigation = useNavigation<any>();
+  const dispatch = useAppDispatch();
   const { showToast } = useToast();
   const profile = useAppSelector(state => state.user.profile);
+  const { accounts } = useAppSelector(state => state.bankAccounts);
   const userName = profile?.name?.split(' ')[0] || 'User';
+
+  const loadAccounts = React.useCallback(async () => {
+    try {
+      const data = await fetchAccounts();
+      dispatch(setAccounts(data));
+    } catch (e) {
+      console.error('Dashboard load accounts error:', e);
+    }
+  }, [dispatch]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadAccounts();
+    }, [loadAccounts]),
+  );
+
+  const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
+
+  const formatCurrency = (amount: number) => {
+    return `PKR ${amount.toLocaleString('en-PK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  };
 
   return (
     <View style={styles.container}>
@@ -27,29 +55,87 @@ const DashboardScreen = () => {
         </View>
 
         <Card style={styles.balanceCard}>
-          <Typography variant="label" color="#AAA">
+          <Typography variant="label" color="#AAA" style={{ letterSpacing: 1 }}>
             TOTAL BALANCE
           </Typography>
           <Typography variant="h1" color="#FFF" style={styles.balanceText}>
-            PKR 120,500
+             {formatCurrency(totalBalance)}
           </Typography>
           <View style={styles.linkedAccounts}>
-            <View style={[styles.miniAvatar, { backgroundColor: '#0047AB' }]} />
-            <View
-              style={[
-                styles.miniAvatar,
-                { backgroundColor: '#555', marginLeft: -8 },
-              ]}
-            />
+            {accounts.slice(0, 3).map((acc, index) => {
+              const bank = getBankById(acc.bankId);
+              return (
+                <View 
+                  key={acc.id} 
+                  style={[
+                    styles.miniAvatar, 
+                    { 
+                      backgroundColor: '#FFF', 
+                      marginLeft: index === 0 ? 0 : -10,
+                      zIndex: 10 - index,
+                      overflow: 'hidden',
+                      borderWidth: 1.5,
+                      borderColor: '#000'
+                    }
+                  ]}
+                >
+                  {bank?.logo ? (
+                    <Image source={{ uri: bank.logo }} style={styles.miniLogo} resizeMode="contain" />
+                  ) : (
+                    <Typography variant="caption" weight="700" color="#000" style={{ fontSize: 8 }}>
+                      {acc.bankAbbreviation}
+                    </Typography>
+                  )}
+                </View>
+              );
+            })}
             <Typography
               variant="caption"
               color="#AAA"
               style={{ marginLeft: 8 }}
             >
-              Linked accounts active
+              {accounts.length > 0 ? `${accounts.length} Linked accounts active` : 'No accounts linked'}
             </Typography>
           </View>
         </Card>
+
+        {accounts.length > 0 && (
+          <View style={styles.linkedSection}>
+            <View style={styles.sectionHeader}>
+              <Typography variant="body" weight="700">Linked Accounts</Typography>
+              <TouchableOpacity onPress={() => navigation.navigate('Drawer', { screen: 'BankAccounts' })}>
+                <Typography variant="caption" color={colors.primary} weight="600">View All</Typography>
+              </TouchableOpacity>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.accountsScroll}>
+              {accounts.map(acc => {
+                const bank = getBankById(acc.bankId);
+                return (
+                  <TouchableOpacity 
+                    key={acc.id} 
+                    style={styles.accountMiniCard}
+                    activeOpacity={0.8}
+                    onPress={() => navigation.navigate('AccountDetail', { accountId: acc.id })}
+                  >
+                    <View style={[styles.bankCircle, { backgroundColor: '#FFF' }]}>
+                      {bank?.logo ? (
+                        <Image source={{ uri: bank.logo }} style={styles.miniLogo} resizeMode="contain" />
+                      ) : (
+                        <Typography variant="caption" weight="700" color="#000" style={{ fontSize: 10 }}>
+                          {acc.bankAbbreviation}
+                        </Typography>
+                      )}
+                    </View>
+                    <Typography variant="caption" weight="700" style={{ marginTop: 8 }}>{acc.bankName}</Typography>
+                    <Typography variant="caption" color={colors.text.muted} style={{ fontSize: 10 }}>
+                       PKR {acc.balance.toLocaleString()}
+                    </Typography>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
 
         <View style={styles.quickActions}>
           <TouchableOpacity
@@ -199,8 +285,48 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  miniLogo: {
+    width: '100%',
+    height: '100%',
+  },
+  linkedSection: {
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  accountsScroll: {
+    marginHorizontal: -24,
+    paddingHorizontal: 24,
+  },
+  accountMiniCard: {
+    backgroundColor: '#FFF',
+    padding: 16,
+    borderRadius: 20,
+    width: 130,
+    marginRight: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  bankCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+    overflow: 'hidden',
   },
   quickActions: {
     marginBottom: 16,
