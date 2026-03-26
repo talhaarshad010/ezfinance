@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,22 +6,45 @@ import {
   FlatList,
   RefreshControl,
   Image,
+  Alert,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Feather from 'react-native-vector-icons/Feather';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Typography, Card } from '../../../components';
 import { useAppSelector, useAppDispatch } from '../../../store/hooks';
-import { setAccounts, setLoading } from '../../../store/slices/bankAccountsSlice';
-import { fetchAccounts } from '../../../services/bankAccountService';
+import {
+  setAccounts,
+  setLoading,
+  removeAccount,
+  updateAccountBalance,
+  BankAccount,
+} from '../../../store/slices/bankAccountsSlice';
+import {
+  fetchAccounts,
+  deleteAccount,
+  updateBalance,
+} from '../../../services/bankAccountService';
 import { getBankById } from '../../../constants/pakistaniBanks';
+import { useToast } from '../../../context/ToastContext';
 
 const BankAccountsScreen = () => {
   const navigation = useNavigation<any>();
   const dispatch = useAppDispatch();
   const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
   const { accounts, loading } = useAppSelector(state => state.bankAccounts);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Update Balance Modal state
+  const [balanceModalVisible, setBalanceModalVisible] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<BankAccount | null>(null);
+  const [newBalance, setNewBalance] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const loadAccounts = useCallback(async () => {
     try {
@@ -45,6 +68,84 @@ const BankAccountsScreen = () => {
     setRefreshing(false);
   };
 
+  // ==================== ACTIONS ====================
+
+  const handleLongPress = (account: BankAccount) => {
+    Alert.alert(
+      account.bankName,
+      `${account.accountTitle} • ${maskAccountNumber(account.accountNumber)}`,
+      [
+        {
+          text: 'Update Balance',
+          onPress: () => openBalanceModal(account),
+        },
+        {
+          text: 'Remove Account',
+          style: 'destructive',
+          onPress: () => confirmRemoveAccount(account),
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
+  };
+
+  const confirmRemoveAccount = (account: BankAccount) => {
+    Alert.alert(
+      'Remove Account',
+      `Are you sure you want to remove "${account.bankName} - ${account.accountTitle}"? This will also delete all associated transactions.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteAccount(account.id);
+              dispatch(removeAccount(account.id));
+              showToast('Account removed', 'success', 'Done');
+            } catch (e) {
+              showToast('Failed to remove account', 'error', 'Error');
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const openBalanceModal = (account: BankAccount) => {
+    setSelectedAccount(account);
+    setNewBalance(String(account.balance));
+    setBalanceModalVisible(true);
+  };
+
+  const closeBalanceModal = () => {
+    setBalanceModalVisible(false);
+    setSelectedAccount(null);
+    setNewBalance('');
+  };
+
+  const handleSaveBalance = async () => {
+    if (!selectedAccount) return;
+    const parsed = parseFloat(newBalance);
+    if (isNaN(parsed) || parsed < 0) {
+      showToast('Please enter a valid amount', 'error', 'Invalid');
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateBalance(selectedAccount.id, parsed);
+      dispatch(updateAccountBalance({ accountId: selectedAccount.id, balance: parsed }));
+      showToast('Balance updated', 'success', 'Done');
+      closeBalanceModal();
+    } catch (e) {
+      showToast('Failed to update balance', 'error', 'Error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ==================== HELPERS ====================
+
   const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
 
   const formatCurrency = (amount: number) => {
@@ -55,6 +156,8 @@ const BankAccountsScreen = () => {
     if (!num || num.length < 4) return num;
     return `●●●● ${num.slice(-4)}`;
   };
+
+  // ==================== RENDER ====================
 
   const renderHeader = () => (
     <View>
@@ -88,6 +191,11 @@ const BankAccountsScreen = () => {
           </Typography>
         </TouchableOpacity>
       </View>
+
+      {/* Hint */}
+      <Typography variant="caption" color="#BBB" style={styles.hintText}>
+        Long-press an account to update balance or remove
+      </Typography>
     </View>
   );
 
@@ -97,6 +205,8 @@ const BankAccountsScreen = () => {
       <TouchableOpacity
         activeOpacity={0.7}
         onPress={() => navigation.navigate('AccountDetail', { accountId: item.id })}
+        onLongPress={() => handleLongPress(item)}
+        delayLongPress={400}
       >
         <Card style={styles.accountCard}>
           <View style={styles.accountRow}>
@@ -154,6 +264,106 @@ const BankAccountsScreen = () => {
     </View>
   );
 
+  const renderBalanceModal = () => {
+    const bankData = selectedAccount ? getBankById(selectedAccount.bankId) : null;
+    return (
+      <Modal
+        visible={balanceModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={closeBalanceModal}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.modalContent}>
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={closeBalanceModal} style={styles.modalCloseBtn}>
+                <Feather name="x" size={20} color="#000" />
+              </TouchableOpacity>
+              <Typography variant="h3" weight="700" style={{ flex: 1, textAlign: 'center' }}>
+                Update Balance
+              </Typography>
+              <View style={{ width: 36 }} />
+            </View>
+
+            {/* Account Info */}
+            {selectedAccount && (
+              <View style={styles.modalAccountInfo}>
+                <View style={[styles.modalBankAvatar, { backgroundColor: selectedAccount.bankColor || '#000', overflow: 'hidden' }]}>
+                  {bankData?.logo ? (
+                    <Image
+                      source={{ uri: bankData.logo }}
+                      style={styles.bankLogo}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <Typography variant="caption" weight="700" color="#FFF" style={{ fontSize: 10 }}>
+                      {selectedAccount.bankAbbreviation || 'BK'}
+                    </Typography>
+                  )}
+                </View>
+                <View style={{ marginLeft: 12 }}>
+                  <Typography variant="body" weight="700">{selectedAccount.bankName}</Typography>
+                  <Typography variant="caption" color="#999">
+                    {selectedAccount.accountTitle}
+                  </Typography>
+                </View>
+              </View>
+            )}
+
+            {/* Current Balance */}
+            <View style={styles.currentBalanceRow}>
+              <Typography variant="caption" color="#999" weight="600" style={{ letterSpacing: 0.5 }}>
+                CURRENT BALANCE
+              </Typography>
+              <Typography variant="body" weight="700" color="#999">
+                {formatCurrency(selectedAccount?.balance || 0)}
+              </Typography>
+            </View>
+
+            {/* Input */}
+            <View style={styles.modalInputContainer}>
+              <Typography variant="caption" weight="600" color="#666" style={{ marginBottom: 8 }}>
+                NEW BALANCE (PKR)
+              </Typography>
+              <View style={styles.modalInputWrapper}>
+                <Typography variant="h3" weight="700" color="#999" style={{ marginRight: 4 }}>
+                  ₨
+                </Typography>
+                <TextInput
+                  style={styles.modalInput}
+                  value={newBalance}
+                  onChangeText={setNewBalance}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  placeholderTextColor="#CCC"
+                  autoFocus
+                  selectTextOnFocus
+                />
+              </View>
+            </View>
+
+            {/* Save Button */}
+            <TouchableOpacity
+              style={[styles.saveBtn, saving && { opacity: 0.6 }]}
+              onPress={handleSaveBalance}
+              disabled={saving}
+              activeOpacity={0.85}
+            >
+              <Feather name="check" size={18} color="#FFF" />
+              <Typography variant="body" weight="700" color="#FFF" style={{ marginLeft: 8 }}>
+                {saving ? 'Saving...' : 'Save Balance'}
+              </Typography>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <FlatList
@@ -182,6 +392,9 @@ const BankAccountsScreen = () => {
           <Feather name="plus" size={24} color="#FFF" />
         </TouchableOpacity>
       )}
+
+      {/* Balance Update Modal */}
+      {renderBalanceModal()}
     </View>
   );
 };
@@ -222,7 +435,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 4,
   },
   addBtn: {
     flexDirection: 'row',
@@ -231,6 +444,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
+  },
+  hintText: {
+    marginBottom: 14,
+    fontSize: 11,
   },
   accountCard: {
     marginBottom: 12,
@@ -290,6 +507,82 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
+  },
+  // ==================== MODAL STYLES ====================
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+    paddingTop: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  modalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalAccountInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FB',
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 16,
+  },
+  modalBankAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+  },
+  currentBalanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 4,
+  },
+  modalInputContainer: {
+    marginBottom: 24,
+  },
+  modalInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 56,
+  },
+  modalInput: {
+    flex: 1,
+    fontFamily: 'Inter-Bold',
+    fontSize: 22,
+    color: '#000',
+  },
+  saveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000',
+    paddingVertical: 16,
+    borderRadius: 20,
   },
 });
 
