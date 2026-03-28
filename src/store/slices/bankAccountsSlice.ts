@@ -79,7 +79,15 @@ const bankAccountsSlice = createSlice({
         state.transactions[accountId] = state.transactions[accountId].filter(t => t.id !== transactionId);
       }
     },
-    resetBankAccounts: () => initialState,
+    setAllTransactions: (state, action: PayloadAction<Record<string, Transaction[]>>) => {
+      state.transactions = action.payload;
+    },
+    resetBankAccounts: (state) => {
+      state.accounts = [];
+      state.transactions = {};
+      state.loading = false;
+      state.error = null;
+    },
   },
 });
 
@@ -93,6 +101,7 @@ export const {
   setTransactions,
   addTransaction,
   removeTransaction,
+  setAllTransactions,
   resetBankAccounts,
 } = bankAccountsSlice.actions;
 

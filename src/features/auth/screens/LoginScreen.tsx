@@ -2,18 +2,18 @@ import React, { useState } from 'react';
 import {
   View,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Image,
+  StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
-import { Typography, Input, Button, Card, Logo } from '../../../components';
-import { colors } from '../../../theme/colors';
+import { Typography, Input, Button, Card, Logo, LoadingOverlay } from '../../../components';
 import { signIn, signInWithGoogle } from '../../../services/authService';
 import { useToast } from '../../../context/ToastContext';
 
@@ -34,7 +34,6 @@ const LoginScreen = () => {
     try {
       await signIn(email, password);
       showToast('Login successful!', 'success');
-      // Navigation is handled by the auth state listener in AppNavigator
     } catch (error: any) {
       let errorMessage = 'An error occurred during login.';
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
@@ -51,6 +50,7 @@ const LoginScreen = () => {
   };
 
   const handleGoogleSignIn = async () => {
+    setIsLoading(true);
     try {
       await signInWithGoogle();
       showToast('Signed in with Google!', 'success');
@@ -58,12 +58,14 @@ const LoginScreen = () => {
       if (error.code !== 'ASYNC_OP_IN_PROGRESS') {
         showToast('Google Sign-In failed.', 'error');
       }
+    } finally {
+      setIsLoading(false);
     }
   };
 
-
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F9F9F9" translucent />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
@@ -164,7 +166,6 @@ const LoginScreen = () => {
             </TouchableOpacity>
           </View>
 
-
           {/* Footer */}
           <View style={styles.footer}>
             <Typography variant="body" color="#666">
@@ -178,6 +179,7 @@ const LoginScreen = () => {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <LoadingOverlay visible={isLoading} />
     </SafeAreaView>
   );
 };
@@ -318,6 +320,5 @@ const styles = StyleSheet.create({
     height: 24,
   },
 });
-
 
 export default LoginScreen;

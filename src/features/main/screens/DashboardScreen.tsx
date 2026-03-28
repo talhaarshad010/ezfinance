@@ -11,6 +11,7 @@ import { fetchAccounts } from '../../../services/bankAccountService';
 import { setAccounts } from '../../../store/slices/bankAccountsSlice';
 import { getBankById } from '../../../constants/pakistaniBanks';
 import { Image } from 'react-native';
+import { Transaction } from '../../../store/slices/bankAccountsSlice';
 
 const DashboardScreen = () => {
   const navigation = useNavigation<any>();
@@ -37,8 +38,66 @@ const DashboardScreen = () => {
 
   const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
 
+  const transactions = Object.values(
+    useAppSelector(state => state.bankAccounts.transactions),
+  ).flat();
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  // 1. Calculate Monthly Summaries (Current Month)
+  const monthlyIncome = transactions
+    .filter(tx => {
+      const d = new Date(tx.date);
+      return (
+        tx.type === 'income' &&
+        d.getMonth() === currentMonth &&
+        d.getFullYear() === currentYear
+      );
+    })
+    .reduce((acc, tx) => acc + tx.amount, 0);
+
+  const monthlyExpenses = transactions
+    .filter(tx => {
+      const d = new Date(tx.date);
+      return (
+        tx.type === 'expense' &&
+        d.getMonth() === currentMonth &&
+        d.getFullYear() === currentYear
+      );
+    })
+    .reduce((acc, tx) => acc + tx.amount, 0);
+
+  // 2. Calculate 6-Month Historical Spending Trend
+  const historyData: { label: string; amount: number }[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date();
+    d.setMonth(now.getMonth() - i);
+    const m = d.getMonth();
+    const y = d.getFullYear();
+    const label = d.toLocaleString('en-PK', { month: 'short' });
+
+    const amount = transactions
+      .filter(tx => {
+        const txD = new Date(tx.date);
+        return (
+          tx.type === 'expense' &&
+          txD.getMonth() === m &&
+          txD.getFullYear() === y
+        );
+      })
+      .reduce((acc, tx) => acc + tx.amount, 0);
+
+    historyData.push({ label, amount });
+  }
+
+  const maxSpending = Math.max(...historyData.map(h => h.amount), 1);
+
   const formatCurrency = (amount: number) => {
-    return `PKR ${amount.toLocaleString('en-PK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    return `PKR ${amount.toLocaleString('en-PK', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    })}`;
   };
 
   return (
@@ -59,30 +118,39 @@ const DashboardScreen = () => {
             TOTAL BALANCE
           </Typography>
           <Typography variant="h1" color="#FFF" style={styles.balanceText}>
-             {formatCurrency(totalBalance)}
+            {formatCurrency(totalBalance)}
           </Typography>
           <View style={styles.linkedAccounts}>
             {accounts.slice(0, 3).map((acc, index) => {
               const bank = getBankById(acc.bankId);
               return (
-                <View 
-                  key={acc.id} 
+                <View
+                  key={acc.id}
                   style={[
-                    styles.miniAvatar, 
-                    { 
-                      backgroundColor: '#FFF', 
+                    styles.miniAvatar,
+                    {
+                      backgroundColor: '#FFF',
                       marginLeft: index === 0 ? 0 : -10,
                       zIndex: 10 - index,
                       overflow: 'hidden',
                       borderWidth: 1.5,
-                      borderColor: '#000'
-                    }
+                      borderColor: '#000',
+                    },
                   ]}
                 >
                   {bank?.logo ? (
-                    <Image source={{ uri: bank.logo }} style={styles.miniLogo} resizeMode="contain" />
+                    <Image
+                      source={{ uri: bank.logo }}
+                      style={styles.miniLogo}
+                      resizeMode="contain"
+                    />
                   ) : (
-                    <Typography variant="caption" weight="700" color="#000" style={{ fontSize: 8 }}>
+                    <Typography
+                      variant="caption"
+                      weight="700"
+                      color="#000"
+                      style={{ fontSize: 8 }}
+                    >
                       {acc.bankAbbreviation}
                     </Typography>
                   )}
@@ -94,7 +162,9 @@ const DashboardScreen = () => {
               color="#AAA"
               style={{ marginLeft: 8 }}
             >
-              {accounts.length > 0 ? `${accounts.length} Linked accounts active` : 'No accounts linked'}
+              {accounts.length > 0
+                ? `${accounts.length} Linked accounts active`
+                : 'No accounts linked'}
             </Typography>
           </View>
         </Card>
@@ -102,33 +172,74 @@ const DashboardScreen = () => {
         {accounts.length > 0 && (
           <View style={styles.linkedSection}>
             <View style={styles.sectionHeader}>
-              <Typography variant="body" weight="700">Linked Accounts</Typography>
-              <TouchableOpacity onPress={() => navigation.navigate('Drawer', { screen: 'BankAccounts' })}>
-                <Typography variant="caption" color={colors.primary} weight="600">View All</Typography>
+              <Typography variant="body" weight="700">
+                Linked Accounts
+              </Typography>
+              <TouchableOpacity
+                onPress={() =>
+                  navigation.navigate('Drawer', { screen: 'BankAccounts' })
+                }
+              >
+                <Typography
+                  variant="caption"
+                  color={colors.primary}
+                  weight="600"
+                >
+                  View All
+                </Typography>
               </TouchableOpacity>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.accountsScroll}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.accountsScroll}
+            >
               {accounts.map(acc => {
                 const bank = getBankById(acc.bankId);
                 return (
-                  <TouchableOpacity 
-                    key={acc.id} 
+                  <TouchableOpacity
+                    key={acc.id}
                     style={styles.accountMiniCard}
                     activeOpacity={0.8}
-                    onPress={() => navigation.navigate('AccountDetail', { accountId: acc.id })}
+                    onPress={() =>
+                      navigation.navigate('AccountDetail', {
+                        accountId: acc.id,
+                      })
+                    }
                   >
-                    <View style={[styles.bankCircle, { backgroundColor: '#FFF' }]}>
+                    <View
+                      style={[styles.bankCircle, { backgroundColor: '#FFF' }]}
+                    >
                       {bank?.logo ? (
-                        <Image source={{ uri: bank.logo }} style={styles.miniLogo} resizeMode="contain" />
+                        <Image
+                          source={{ uri: bank.logo }}
+                          style={styles.miniLogo}
+                          resizeMode="contain"
+                        />
                       ) : (
-                        <Typography variant="caption" weight="700" color="#000" style={{ fontSize: 10 }}>
+                        <Typography
+                          variant="caption"
+                          weight="700"
+                          color="#000"
+                          style={{ fontSize: 10 }}
+                        >
                           {acc.bankAbbreviation}
                         </Typography>
                       )}
                     </View>
-                    <Typography variant="caption" weight="700" style={{ marginTop: 8 }}>{acc.bankName}</Typography>
-                    <Typography variant="caption" color={colors.text.muted} style={{ fontSize: 10 }}>
-                       PKR {acc.balance.toLocaleString()}
+                    <Typography
+                      variant="caption"
+                      weight="700"
+                      style={{ marginTop: 8 }}
+                    >
+                      {acc.bankName}
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      color={colors.text.muted}
+                      style={{ fontSize: 10 }}
+                    >
+                      PKR {acc.balance.toLocaleString()}
                     </Typography>
                   </TouchableOpacity>
                 );
@@ -193,18 +304,22 @@ const DashboardScreen = () => {
             <Typography variant="caption" color={colors.text.muted}>
               Monthly Income
             </Typography>
-            <Typography variant="h2">PKR 85,000</Typography>
+            <Typography variant="h2">
+              {formatCurrency(monthlyIncome)}
+            </Typography>
             <Typography variant="caption" color="#2E7D32">
-              ↗ 12% increase
+              Current Month
             </Typography>
           </Card>
           <Card style={{ ...styles.summaryItem, marginTop: 16 }}>
             <Typography variant="caption" color={colors.text.muted}>
               Monthly Expenses
             </Typography>
-            <Typography variant="h2">PKR 42,300</Typography>
+            <Typography variant="h2">
+              {formatCurrency(monthlyExpenses)}
+            </Typography>
             <Typography variant="caption" color="#D32F2F">
-              ↘ 5% decrease
+              Current Month
             </Typography>
           </Card>
         </View>
@@ -218,23 +333,31 @@ const DashboardScreen = () => {
             </View>
           </View>
           <View style={styles.barChartMock}>
-            {[0.4, 0.6, 0.8, 0.5, 1, 0.7].map((h, i) => (
-              <View key={i} style={styles.barCol}>
-                <View
-                  style={[
-                    styles.bar,
-                    {
-                      height: h * 120,
-                      backgroundColor:
-                        i === 4 ? '#000' : i === 2 ? '#0047AB' : '#EEE',
-                    },
-                  ]}
-                />
-                <Typography variant="caption" style={{ marginTop: 8 }}>
-                  {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'][i]}
-                </Typography>
-              </View>
-            ))}
+            {historyData.map((h, i) => {
+              const barHeight = (h.amount / maxSpending) * 120;
+              const isCurrentMonth = i === 5;
+
+              return (
+                <View key={i} style={styles.barCol}>
+                  <View
+                    style={[
+                      styles.bar,
+                      {
+                        height: Math.max(barHeight, 5), // Min visible height
+                        backgroundColor: isCurrentMonth
+                          ? '#000'
+                          : h.amount > 0
+                          ? '#0047AB'
+                          : '#EEE',
+                      },
+                    ]}
+                  />
+                  <Typography variant="caption" style={{ marginTop: 8 }}>
+                    {h.label}
+                  </Typography>
+                </View>
+              );
+            })}
           </View>
         </Card>
       </ScrollView>

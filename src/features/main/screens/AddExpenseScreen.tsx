@@ -16,16 +16,16 @@ const AddExpenseScreen = () => {
   const { showToast } = useToast();
   
   const { accounts } = useAppSelector(state => state.bankAccounts);
+  const budgetCategories = useAppSelector(state => state.budget.categories);
   
   const [activeModal, setActiveModal] = useState<'category' | 'payment' | 'date' | null>(null);
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState('Dining & Drinks');
+  const [category, setCategory] = useState(budgetCategories[0]?.name || 'Other');
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(accounts[0]?.id || null);
   const [date, setDate] = useState<Date>(new Date());
   const [description, setDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  const categories = ['Dining & Drinks', 'Transport', 'Groceries', 'Entertainment', 'Shopping', 'Services', 'Rent'];
 
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);
   const selectedBank = selectedAccount ? getBankById(selectedAccount.bankId) : null;
@@ -162,7 +162,7 @@ const AddExpenseScreen = () => {
         </View>
       </Card>
 
-      <Modal visible={activeModal !== null} transparent animationType="slide">
+      <Modal visible={activeModal === 'category' || activeModal === 'payment'} transparent animationType="slide">
         <View style={styles.modalBg}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -174,10 +174,10 @@ const AddExpenseScreen = () => {
                 </TouchableOpacity>
             </View>
             
-            {activeModal === 'category' && categories.map((c, i) => (
-                <TouchableOpacity key={i} style={styles.modalOption} onPress={() => { setCategory(c); setActiveModal(null); }}>
-                    <Typography variant="body" weight={category === c ? '700' : '500'}>{c}</Typography>
-                    {category === c && <Feather name="check" size={20} color="#000" />}
+            {activeModal === 'category' && budgetCategories.map((c, i) => (
+                <TouchableOpacity key={i} style={styles.modalOption} onPress={() => { setCategory(c.name); setActiveModal(null); }}>
+                    <Typography variant="body" weight={category === c.name ? '700' : '500'}>{c.name}</Typography>
+                    {category === c.name && <Feather name="check" size={20} color="#000" />}
                 </TouchableOpacity>
             ))}
 
@@ -229,6 +229,7 @@ const AddExpenseScreen = () => {
          onClose={() => setActiveModal(null)} 
          onSelectDate={(d: Date) => setDate(d)} 
          initialDate={date} 
+         maxDate={new Date()}
       />
 
       <View style={{height: 100}} />

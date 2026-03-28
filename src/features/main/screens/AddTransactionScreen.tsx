@@ -15,18 +15,6 @@ import { useAppDispatch, useAppSelector } from '../../../store/hooks';
 import { addTransaction as addTransactionAction, updateAccountBalance } from '../../../store/slices/bankAccountsSlice';
 import { saveTransaction } from '../../../services/bankAccountService';
 
-const CATEGORIES = [
-  { id: 'food', label: 'Food & Dining', icon: 'coffee' },
-  { id: 'transport', label: 'Transport', icon: 'truck' },
-  { id: 'shopping', label: 'Shopping', icon: 'shopping-bag' },
-  { id: 'bills', label: 'Bills & Utilities', icon: 'file-text' },
-  { id: 'salary', label: 'Salary', icon: 'dollar-sign' },
-  { id: 'transfer', label: 'Transfer', icon: 'repeat' },
-  { id: 'health', label: 'Health', icon: 'heart' },
-  { id: 'education', label: 'Education', icon: 'book' },
-  { id: 'entertainment', label: 'Entertainment', icon: 'film' },
-  { id: 'other', label: 'Other', icon: 'grid' },
-];
 
 const AddTransactionScreen = () => {
   const navigation = useNavigation<any>();
@@ -39,10 +27,11 @@ const AddTransactionScreen = () => {
     state.bankAccounts.accounts.find(a => a.id === accountId),
   );
 
+  const budgetCategories = useAppSelector(state => state.budget.categories);
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [type, setType] = useState<'income' | 'expense'>('expense');
-  const [selectedCategory, setSelectedCategory] = useState('other');
+  const [selectedCategoryId, setSelectedCategoryId] = useState(budgetCategories[0]?.id || 'other');
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -61,7 +50,7 @@ const AddTransactionScreen = () => {
         description: description.trim(),
         amount: parseFloat(amount),
         type,
-        category: CATEGORIES.find(c => c.id === selectedCategory)?.label || 'Other',
+        category: budgetCategories.find(c => c.id === selectedCategoryId)?.name || 'Other',
         date: new Date().toISOString().split('T')[0],
         createdAt: Date.now(),
       };
@@ -159,27 +148,27 @@ const AddTransactionScreen = () => {
         CATEGORY
       </Typography>
       <View style={styles.categoryGrid}>
-        {CATEGORIES.map(cat => (
+        {budgetCategories.map(cat => (
           <TouchableOpacity
             key={cat.id}
             style={[
               styles.categoryChip,
-              selectedCategory === cat.id && styles.categoryChipActive,
+              selectedCategoryId === cat.id && styles.categoryChipActive,
             ]}
-            onPress={() => setSelectedCategory(cat.id)}
+            onPress={() => setSelectedCategoryId(cat.id)}
           >
             <Feather
               name={cat.icon}
               size={14}
-              color={selectedCategory === cat.id ? '#FFF' : '#666'}
+              color={selectedCategoryId === cat.id ? '#FFF' : '#666'}
             />
             <Typography
               variant="caption"
               weight="600"
-              color={selectedCategory === cat.id ? '#FFF' : '#666'}
+              color={selectedCategoryId === cat.id ? '#FFF' : '#666'}
               style={{ marginLeft: 6 }}
             >
-              {cat.label}
+              {cat.name}
             </Typography>
           </TouchableOpacity>
         ))}
