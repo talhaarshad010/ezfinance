@@ -14,11 +14,10 @@ import { Typography } from '../../../components';
 import { useNavigation } from '@react-navigation/native';
 import { useToast } from '../../../context/ToastContext';
 import { isTwoFactorEnabled, setTwoFactorEnabled } from '../../../services/authService';
-import { isBiometricEnabled, setBiometricEnabled, isBiometricAvailable } from '../../../services/biometricService';
 import { getActiveSessions, terminateSession, UserSession } from '../../../services/sessionService';
 import auth from '@react-native-firebase/auth';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
-import { setTwoFactor, setBiometrics as setReduxBiometrics } from '../../../store/slices/settingsSlice';
+import { setTwoFactor } from '../../../store/slices/settingsSlice';
 
 const SecurityScreen = () => {
   const navigation = useNavigation<any>();
@@ -26,12 +25,9 @@ const SecurityScreen = () => {
   const dispatch = useAppDispatch();
   const profile = useAppSelector(state => state.user.profile);
 
-  
   const twoFactor = useAppSelector(state => state.settings.twoFactorEnabled);
-  const biometrics = useAppSelector(state => state.settings.biometricsEnabled);
   
   const [isLoading2FA, setIsLoading2FA] = useState(false);
-  const [isLoadingBio, setIsLoadingBio] = useState(false);
   const [sessions, setSessions] = useState<UserSession[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
 
@@ -62,30 +58,6 @@ const SecurityScreen = () => {
       showToast('Failed to update 2FA setting.', 'error');
     } finally {
       setIsLoading2FA(false);
-    }
-  };
-
-  const handleToggleBiometrics = async (enabled: boolean) => {
-    if (enabled) {
-      const { available, error } = await isBiometricAvailable();
-      if (!available) {
-        showToast(error || 'Biometrics not available on this device.', 'error');
-        return;
-      }
-    }
-
-    setIsLoadingBio(true);
-    try {
-      await setBiometricEnabled(enabled);
-      dispatch(setReduxBiometrics(enabled));
-      showToast(
-        enabled ? 'Biometric Login enabled!' : 'Biometric Login disabled.',
-        enabled ? 'success' : 'info',
-      );
-    } catch (error) {
-      showToast('Failed to update biometric setting.', 'error');
-    } finally {
-      setIsLoadingBio(false);
     }
   };
 
@@ -180,30 +152,6 @@ const SecurityScreen = () => {
               value={twoFactor}
               onValueChange={handleToggle2FA}
               disabled={isLoading2FA}
-              trackColor={{ false: '#EAEBEE', true: '#0047AB' }}
-            />
-          </View>
-
-          <View style={styles.row}>
-            <View style={styles.iconCircle}>
-              <Feather name="smile" size={18} color="#000" />
-            </View>
-            <View style={{ flex: 1, marginLeft: 16 }}>
-              <Typography variant="body" weight="700">
-                Biometric Login
-              </Typography>
-              <Typography
-                variant="caption"
-                color="#666"
-                style={{ marginTop: 2 }}
-              >
-                Use Face ID / Touch ID
-              </Typography>
-            </View>
-            <Switch
-              value={biometrics}
-              onValueChange={handleToggleBiometrics}
-              disabled={isLoadingBio}
               trackColor={{ false: '#EAEBEE', true: '#0047AB' }}
             />
           </View>

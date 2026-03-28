@@ -8,6 +8,7 @@ interface CalendarPickerProps {
   onClose: () => void;
   onSelectDate: (date: Date) => void;
   initialDate?: Date;
+  maxDate?: Date;
 }
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -21,7 +22,7 @@ const generateYears = (currentYear: number) => {
   return years;
 };
 
-export const CalendarPicker: React.FC<CalendarPickerProps> = ({ visible, onClose, onSelectDate, initialDate }) => {
+export const CalendarPicker: React.FC<CalendarPickerProps> = ({ visible, onClose, onSelectDate, initialDate, maxDate }) => {
   const [currentDate, setCurrentDate] = useState(initialDate || new Date());
   const [selectedDate, setSelectedDate] = useState(initialDate || new Date());
   
@@ -69,16 +70,19 @@ export const CalendarPicker: React.FC<CalendarPickerProps> = ({ visible, onClose
       const isSelected = selectedDate.getDate() === day && selectedDate.getMonth() === month && selectedDate.getFullYear() === year;
       const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
 
+      const isFuture = maxDate && new Date(year, month, day) > maxDate;
+
       return (
         <TouchableOpacity 
           key={`day-${day}`} 
           style={[styles.dateCell, isSelected && styles.dateCellSelected]} 
-          onPress={() => handleSelectDay(day)}
+          onPress={() => !isFuture && handleSelectDay(day)}
+          disabled={isFuture}
         >
           <Typography 
             variant="body" 
             weight={isSelected || isToday ? '700' : '500'} 
-            color={isSelected ? '#FFF' : isToday ? '#0047AB' : '#333'}
+            color={isSelected ? '#FFF' : isFuture ? '#CCC' : isToday ? '#0047AB' : '#333'}
           >
             {day}
           </Typography>

@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import {
   View,
   StyleSheet,
-  SafeAreaView,
   Dimensions,
   TouchableOpacity,
   StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
 import { Typography, Button, Logo, PaginationDots } from '../../../components';
@@ -60,8 +60,8 @@ const OnboardingScreen = () => {
   const currentStep = ONBOARDING_DATA[activeIndex];
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F9F9F9" />
+    <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F9F9F9" translucent />
 
       {/* Header */}
       <View style={styles.header}>

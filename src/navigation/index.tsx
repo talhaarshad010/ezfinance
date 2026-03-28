@@ -17,6 +17,7 @@ import AccountDetailScreen from '../features/main/screens/AccountDetailScreen';
 import AddTransactionScreen from '../features/main/screens/AddTransactionScreen';
 import TransactionDetailScreen from '../features/main/screens/TransactionDetailScreen';
 import OTPVerificationScreen from '../features/auth/screens/OTPVerificationScreen';
+import AddCategoryScreen from '../features/main/screens/AddCategoryScreen';
 import {
   TouchableOpacity,
   View,
@@ -26,18 +27,14 @@ import {
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { Typography, Logo } from '../components';
-import BiometricLockScreen from '../features/auth/screens/BiometricLockScreen';
 import {
   onAuthStateChanged,
   signOut,
   isTwoFactorEnabled,
   generateOTP,
   getUserProfile,
-  recordDeviceVerification,
   checkDeviceVerification,
-  removeDeviceVerification,
 } from '../services/authService';
-import { isBiometricEnabled } from '../services/biometricService';
 import {
   registerSession,
   listenForSessionTermination,
@@ -50,21 +47,20 @@ import { setProfile, clearProfile } from '../store/slices/userSlice';
 import { HeaderProfile } from '../components/HeaderProfile';
 import {
   setTwoFactor,
-  setBiometrics,
   resetSettings,
 } from '../store/slices/settingsSlice';
+import { fetchBudget } from '../services/budgetService';
+import { setBudgetData } from '../store/slices/budgetSlice';
 
 
 const Stack = createStackNavigator();
 
 export const AppNavigator = () => {
   const dispatch = useAppDispatch();
-  const profile = useAppSelector(state => state.user.profile);
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
 
   const [initializing, setInitializing] = React.useState(true);
   const [pendingOTP, setPendingOTP] = React.useState(false);
-  const [pendingBiometric, setPendingBiometric] = React.useState(false);
   const [otpUserData, setOtpUserData] = React.useState<{
     uid: string;
     email: string;
@@ -78,60 +74,62 @@ export const AppNavigator = () => {
 
     const unsubscribeAuth = onAuthStateChanged(async user => {
       if (user) {
-        // Handle Session Registration
-        if (!currentSessionId.current) {
-          try {
-            const sid = await DeviceInfo.getUniqueId();
-            currentSessionId.current = sid;
-            await registerSession();
+        // Handle Session Registration in background to avoid blocking
+        const handleSession = async () => {
+          if (!currentSessionId.current) {
+            try {
+              const sid = await DeviceInfo.getUniqueId();
+              currentSessionId.current = sid;
+              await registerSession();
 
-            // Listen for remote logout
-            unsubscribeTermination = listenForSessionTermination(
-              user.uid,
-              sid,
-              () => {
-                showToast(
-                  'Your session has been terminated from another device.',
-                  'info',
-                  'Logout',
-                );
-                signOut();
-              },
-            );
-          } catch (e) {
-            console.error('Session management error:', e);
+              unsubscribeTermination = listenForSessionTermination(
+                user.uid,
+                sid,
+                () => {
+                  showToast(
+                    'Your session has been terminated from another device.',
+                    'info',
+                    'Logout',
+                  );
+                  signOut();
+                },
+              );
+            } catch (e) {
+              console.error('Session management error:', e);
+            }
           }
-        }
+        };
+        handleSession();
 
-        // Only trigger 2FA on fresh login, not on app restart
         const isFreshLogin = !wasAuthenticated.current;
         wasAuthenticated.current = true;
 
-        // Fetch and Sync Profile & Settings to Redux
+        // Optimized Data Sync: Parallelize everything
         const syncUserData = async () => {
           try {
-            const [twoFA, bioEnabled, profile] = await Promise.all([
+            const [twoFA, profileData] = await Promise.all([
               isTwoFactorEnabled(user.uid),
-              isBiometricEnabled(user.uid),
               getUserProfile(user.uid),
             ]);
 
             dispatch(setTwoFactor(twoFA));
-            dispatch(setBiometrics(bioEnabled));
             dispatch(
               setProfile({
                 uid: user.uid,
-                name: profile?.name || user.displayName || 'User',
+                name: profileData?.name || user.displayName || 'User',
                 email: user.email || '',
-                photoURL: profile?.photoURL || user.photoURL || null,
-                phone: profile?.phone || null,
+                photoURL: profileData?.photoURL || user.photoURL || null,
+                phone: profileData?.phone || null,
               }),
             );
 
-            return { twoFA, bioEnabled };
+            // Fetch Budget Data in background (don't await)
+            fetchBudget().then(data => dispatch(setBudgetData(data)));
+
+            return { twoFA };
           } catch (e) {
             console.error('Data sync error:', e);
-            return { twoFA: false, bioEnabled: false };
+            return { twoFA: false };
           }
         };
 
@@ -146,15 +144,9 @@ export const AppNavigator = () => {
               setPendingOTP(true);
               setIsAuthenticated(true);
 
-              // Generate OTP (DEV SIMULATION: show in toast)
               const otp = await generateOTP(user.uid);
               setTimeout(() => {
-                showToast(
-                  `Your OTP code is: ${otp}`,
-                  'info',
-                  'Verification Code',
-                  15000,
-                );
+                showToast(`Your OTP code is: ${otp}`, 'info', 'Verification Code', 15000);
               }, 500);
             } else {
               setPendingOTP(false);
@@ -167,18 +159,14 @@ export const AppNavigator = () => {
             setIsAuthenticated(true);
           }
         } else {
-          // App restart
-          const { bioEnabled } = await syncUserData();
-          if (bioEnabled) {
-            setPendingBiometric(true);
-          }
+          // App restart: Direct entry (Instant)
+          syncUserData(); // Run in parallel
           setIsAuthenticated(true);
         }
       } else {
         wasAuthenticated.current = false;
         setIsAuthenticated(false);
         setPendingOTP(false);
-        setPendingBiometric(false);
         setOtpUserData(null);
         dispatch(clearProfile());
         dispatch(resetSettings());
@@ -217,36 +205,11 @@ export const AppNavigator = () => {
     signOut();
   };
 
-  const handleBiometricAuthenticated = () => {
-    setPendingBiometric(false);
-  };
-
   if (initializing) {
     return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: '#F8F9FB',
-        }}
-      >
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8F9FB' }}>
         <ActivityIndicator size="large" color="#000" />
       </View>
-    );
-  }
-
-  // Show Biometric Lock Screen if enabled on app restart
-  if (isAuthenticated && pendingBiometric) {
-    return (
-      <>
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor="#F8F9FB"
-          translucent={false}
-        />
-        <BiometricLockScreen onAuthenticated={handleBiometricAuthenticated} />
-      </>
     );
   }
 
@@ -254,11 +217,7 @@ export const AppNavigator = () => {
   if (isAuthenticated && pendingOTP && otpUserData) {
     return (
       <>
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor="#F8F9FB"
-          translucent={false}
-        />
+        <StatusBar barStyle="dark-content" backgroundColor="#F8F9FB" translucent={false} />
         <OTPVerificationScreen
           uid={otpUserData.uid}
           email={otpUserData.email}
@@ -273,11 +232,7 @@ export const AppNavigator = () => {
     <>
       {isAuthenticated ? (
         <>
-          <StatusBar
-            barStyle="dark-content"
-            backgroundColor="#F8F9FB"
-            translucent={false}
-          />
+          <StatusBar barStyle="dark-content" backgroundColor="#F8F9FB" translucent={false} />
           <Stack.Navigator
             screenOptions={({ navigation }) => ({
               headerStyle: {
@@ -287,10 +242,7 @@ export const AppNavigator = () => {
                 backgroundColor: '#F8F9FB',
               },
               headerLeft: () => (
-                <TouchableOpacity
-                  style={{ marginLeft: 20 }}
-                  onPress={() => navigation.goBack()}
-                >
+                <TouchableOpacity style={{ marginLeft: 20 }} onPress={() => navigation.goBack()}>
                   <Feather name="arrow-left" size={24} color="#000" />
                 </TouchableOpacity>
               ),
@@ -300,95 +252,34 @@ export const AppNavigator = () => {
               },
               headerTitleAlign: 'center',
               headerRight: () => (
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    marginRight: 20,
-                  }}
-                >
-                  <TouchableOpacity
-                    style={{ marginRight: 16 }}
-                    onPress={() => navigation.navigate('Search')}
-                  >
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 20 }}>
+                  <TouchableOpacity style={{ marginRight: 16 }} onPress={() => navigation.navigate('Search')}>
                     <Feather name="search" size={22} color="#000" />
                   </TouchableOpacity>
                   <HeaderProfile />
                 </View>
               ),
             })}
-
           >
-            <Stack.Screen
-              name="Drawer"
-              component={MainDrawerNavigator}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name="ChangePassword"
-              component={ChangePasswordScreen}
-            />
-            <Stack.Screen
-              name="StockDetail"
-              component={StockDetailScreen}
-              options={{ title: 'Stock Detail' }}
-            />
+            <Stack.Screen name="Drawer" component={MainDrawerNavigator} options={{ headerShown: false }} />
+            <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+            <Stack.Screen name="StockDetail" component={StockDetailScreen} options={{ title: 'Stock Detail' }} />
             <Stack.Screen name="AddExpense" component={AddExpenseScreen} />
-            <Stack.Screen
-              name="ExpenseDetail"
-              component={ExpenseDetailScreen}
-              options={{ title: 'Transaction' }}
-            />
-            <Stack.Screen
-              name="BuyCrypto"
-              component={BuyCryptoScreen}
-              options={{ title: '' }}
-            />
-            <Stack.Screen
-              name="EditProfile"
-              component={EditProfileScreen}
-              options={{ title: 'Edit Profile' }}
-            />
-            <Stack.Screen
-              name="Security"
-              component={SecurityScreen}
-              options={{ title: 'Security' }}
-            />
-
-            <Stack.Screen
-              name="AssetDetail"
-              component={AssetDetailScreen}
-              options={{ title: '' }}
-            />
-            <Stack.Screen
-              name="Search"
-              component={SearchScreen}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name="AddAccount"
-              component={AddAccountScreen}
-              options={{ title: 'Add Account' }}
-            />
-            <Stack.Screen
-              name="AccountDetail"
-              component={AccountDetailScreen}
-              options={{ title: 'Account Details' }}
-            />
-            <Stack.Screen
-              name="AddTransaction"
-              component={AddTransactionScreen}
-              options={{ title: 'Add Transaction' }}
-            />
-            <Stack.Screen
-              name="TransactionDetail"
-              component={TransactionDetailScreen}
-              options={{ title: 'Transaction' }}
-            />
+            <Stack.Screen name="ExpenseDetail" component={ExpenseDetailScreen} options={{ title: 'Transaction' }} />
+            <Stack.Screen name="BuyCrypto" component={BuyCryptoScreen} options={{ title: '' }} />
+            <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ title: 'Edit Profile' }} />
+            <Stack.Screen name="Security" component={SecurityScreen} options={{ title: 'Security' }} />
+            <Stack.Screen name="AssetDetail" component={AssetDetailScreen} options={{ title: '' }} />
+            <Stack.Screen name="Search" component={SearchScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="AddAccount" component={AddAccountScreen} options={{ title: 'Add Account' }} />
+            <Stack.Screen name="AccountDetail" component={AccountDetailScreen} options={{ title: 'Account Details' }} />
+            <Stack.Screen name="AddTransaction" component={AddTransactionScreen} options={{ title: 'Add Transaction' }} />
+            <Stack.Screen name="TransactionDetail" component={TransactionDetailScreen} options={{ title: 'Transaction' }} />
+            <Stack.Screen name="AddCategory" component={AddCategoryScreen} options={{ title: 'Budget Category' }} />
           </Stack.Navigator>
         </>
       ) : (
-        <AuthStack onLogin={() => setIsAuthenticated(true)} />
+        <AuthStack />
       )}
     </>
   );

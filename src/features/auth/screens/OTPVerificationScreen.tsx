@@ -2,12 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
-  SafeAreaView,
   TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Typography, Button, Logo } from '../../../components';
 import { colors } from '../../../theme/colors';
 import { useToast } from '../../../context/ToastContext';
@@ -113,7 +114,8 @@ const OTPVerificationScreen: React.FC<OTPVerificationScreenProps> = ({
   const maskedEmail = email.replace(/(.{2})(.*)(@.*)/, '$1***$3');
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F8F9FB" translucent />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
