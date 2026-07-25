@@ -280,7 +280,7 @@ export const AnalyticsScreen = () => {
             <View style={styles.heroStatsDividerRow}>
               <View style={styles.heroStatCol}>
                 <Text style={styles.heroStatLabel}>Avg. Daily</Text>
-                <Text style={[styles.heroStatValue, { color: theme.TEXT }]}>
+                <Text style={[styles.heroStatValue, { color: '#FFFFFF' }]}>
                   PKR {Math.round(displaySpent / 30).toLocaleString()}
                 </Text>
               </View>

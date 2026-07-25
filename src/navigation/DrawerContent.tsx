@@ -24,51 +24,56 @@ interface MenuItemProps {
   hasBadge?: boolean;
 }
 
-const MenuItem = ({ icon, label, onPress, active, hasBadge }: MenuItemProps) => {
-  const { theme } = useTheme();
+const MenuItem = React.memo(
+  ({ icon, label, onPress, active, hasBadge }: MenuItemProps) => {
+    const { theme } = useTheme();
 
-  return (
-    <TouchableOpacity
-      style={[
-        styles.menuItem,
-        {
-          backgroundColor: active ? `${theme.ACTIVE}18` : 'transparent',
-        },
-      ]}
-      onPress={onPress}
-      activeOpacity={0.8}
-    >
-      <View
+    return (
+      <TouchableOpacity
         style={[
-          styles.iconContainer,
+          styles.menuItem,
           {
-            backgroundColor: active ? theme.ACTIVE : theme.MODAL,
+            backgroundColor: active ? `${theme.ACTIVE}18` : 'transparent',
           },
         ]}
+        onPress={onPress}
+        activeOpacity={0.8}
       >
-        <Feather
-          name={icon}
-          size={18}
-          color={active ? '#FFFFFF' : theme.MUTED}
-        />
-      </View>
-      <Typography
-        variant="body"
-        weight={active ? '700' : '500'}
-        style={{ flex: 1, marginLeft: 14 }}
-        color={active ? theme.ACTIVE : theme.TEXT}
-      >
-        {label}
-      </Typography>
-      {hasBadge && <View style={[styles.badge, { backgroundColor: theme.RED }]} />}
-      {active && (
-        <View style={{ opacity: 0.8 }}>
-          <Feather name="chevron-right" size={16} color={theme.ACTIVE} />
+        <View
+          style={[
+            styles.iconContainer,
+            {
+              backgroundColor: active ? theme.ACTIVE : theme.MODAL,
+            },
+          ]}
+        >
+          <Feather
+            name={icon}
+            size={18}
+            color={active ? '#FFFFFF' : theme.TEXT}
+          />
         </View>
-      )}
-    </TouchableOpacity>
-  );
-};
+        <Typography
+          variant="body"
+          weight={active ? '700' : '600'}
+          color={active ? theme.TEXT : theme.MUTED}
+          style={{ flex: 1, marginLeft: 14 }}
+        >
+          {label}
+        </Typography>
+        {hasBadge && (
+          <View style={[styles.badge, { backgroundColor: theme.ACTIVE }]} />
+        )}
+        <Feather
+          name="chevron-right"
+          size={14}
+          color={active ? theme.TEXT : theme.MUTED}
+          style={{ opacity: active ? 0.9 : 0.4 }}
+        />
+      </TouchableOpacity>
+    );
+  },
+);
 
 const SectionHeader = ({ title }: { title: string }) => {
   const { theme } = useTheme();
@@ -88,7 +93,7 @@ const SectionHeader = ({ title }: { title: string }) => {
   );
 };
 
-export const DrawerContent = (props: DrawerContentComponentProps) => {
+export const DrawerContent = React.memo((props: DrawerContentComponentProps) => {
   const { theme } = useTheme();
   const currentRoute = props.state.routes[props.state.index].name;
   const activeTabRoute =
@@ -300,7 +305,7 @@ export const DrawerContent = (props: DrawerContentComponentProps) => {
       </ScrollView>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

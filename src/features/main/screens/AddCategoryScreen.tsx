@@ -1,39 +1,91 @@
-import React, { useState, useEffect } from 'react';
-import {View, StyleSheet, ScrollView, TextInput, TouchableOpacity, Modal, FlatList} from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  Modal,
+  Pressable,
+  ActivityIndicator,
+  StyleSheet,
+  StatusBar,
+} from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
-import {Typography, Card} from '../../../components';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
-import { addCategory, updateCategory, BudgetCategory } from '../../../store/slices/budgetSlice';
-import { saveCategory, updateCategory as updateCategoryInDb } from '../../../services/budgetService';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import {
+  addCategory,
+  updateCategory,
+  BudgetCategory,
+} from '../../../store/slices/budgetSlice';
+import {
+  saveCategory,
+  updateCategory as updateCategoryInDb,
+} from '../../../services/budgetService';
 
 const ICONS = [
-  'coffee', 'truck', 'package', 'tv', 'shopping-bag', 'car', 'home', 
-  'heart', 'star', 'tool', 'music', 'camera', 'briefcase', 'gift', 'shield'
+  'coffee',
+  'truck',
+  'package',
+  'tv',
+  'shopping-bag',
+  'car',
+  'home',
+  'heart',
+  'star',
+  'tool',
+  'music',
+  'camera',
+  'briefcase',
+  'gift',
+  'shield',
 ];
 
 const COLORS = [
-  '#0047AB', '#000000', '#FF3B30', '#4CD964', '#FF9500', '#5856D6', '#AF52DE', '#5AC8FA'
+  '#0047AB',
+  '#00C853',
+  '#FF3B30',
+  '#4CD964',
+  '#FF9500',
+  '#5856D6',
+  '#AF52DE',
+  '#5AC8FA',
 ];
 
-const AddCategoryScreen = () => {
+export const AddCategoryScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const dispatch = useAppDispatch();
+  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const { showToast } = useToast();
-  
+  const dispatch = useAppDispatch();
+
   const editingCategory = route.params?.category as BudgetCategory | undefined;
 
   const categories = useAppSelector(state => state.budget.categories);
-  const totalMonthlyBudget = useAppSelector(state => state.budget.totalMonthlyBudget);
-  
+  const totalMonthlyBudget = useAppSelector(
+    state => state.budget.totalMonthlyBudget,
+  );
+
   const [name, setName] = useState(editingCategory?.name || '');
-  const [limit, setLimit] = useState(editingCategory?.limit?.toString() || '');
+  const [limit, setLimit] = useState(
+    editingCategory?.limit?.toString() || '',
+  );
   const [icon, setIcon] = useState(editingCategory?.icon || 'package');
   const [color, setColor] = useState(editingCategory?.color || '#0047AB');
   const [isSaving, setIsSaving] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
+
+  // Calculate allocated budget
+  const otherCategoriesTotal = categories
+    .filter(c => c.id !== editingCategory?.id)
+    .reduce((acc, curr) => acc + curr.limit, 0);
+
+  const unallocatedBudget = Math.max(0, totalMonthlyBudget - otherCategoriesTotal);
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -46,18 +98,13 @@ const AddCategoryScreen = () => {
       return;
     }
 
-    // Validation: New Category Limit + Sum of Other Categories <= Total Monthly Budget
-    const otherCategoriesTotal = categories
-      .filter(c => c.id !== editingCategory?.id)
-      .reduce((acc, curr) => acc + curr.limit, 0);
-
     const newTotalCategoriesLimit = otherCategoriesTotal + numLimit;
     if (newTotalCategoriesLimit > totalMonthlyBudget) {
       const maxAllowed = totalMonthlyBudget - otherCategoriesTotal;
       showToast(
-        `Total category limits (${newTotalCategoriesLimit.toLocaleString()}) cannot exceed the monthly budget (${totalMonthlyBudget.toLocaleString()}). Maximum extra allowed: $${maxAllowed.toLocaleString()}`,
+        `Category limit (${numLimit.toLocaleString()}) exceeds available budget. Maximum allowed: PKR ${maxAllowed.toLocaleString()}`,
         'error',
-        'Budget Limit Exceeded'
+        'Budget Limit Exceeded',
       );
       return;
     }
@@ -90,7 +137,6 @@ const AddCategoryScreen = () => {
       }
       navigation.goBack();
     } catch (e) {
-      console.error('Save category error:', e);
       showToast('Failed to save category. Please try again.', 'error', 'Error');
     } finally {
       setIsSaving(false);
@@ -98,244 +144,472 @@ const AddCategoryScreen = () => {
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Typography variant="h1" weight="700" style={{fontSize: 28}}>
-          {editingCategory ? 'Edit Category' : 'New Category'}
-        </Typography>
-        <Typography variant="body" color="#666" style={{marginTop: 8, lineHeight: 20}}>
-          {editingCategory ? 'Modify your budget category details below.' : 'Create a new bucket to track your monthly spending.'}
-        </Typography>
-      </View>
+    <View style={[styles.container, { backgroundColor: theme.BG }]}>
+      <StatusBar
+        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.BG}
+      />
 
-      <Typography variant="caption" weight="700" color="#666" style={styles.label}>CATEGORY NAME</Typography>
-      <View style={styles.inputBox}>
-        <TextInput 
-          placeholder="e.g. Travel, Health, etc."
-          placeholderTextColor="#AAA"
-          style={styles.input}
-          value={name}
-          onChangeText={setName}
-        />
-      </View>
-
-      <Typography variant="caption" weight="700" color="#666" style={styles.label}>MONTHLY LIMIT</Typography>
-      <View style={styles.amountBox}>
-        <Typography variant="h2" weight="500" color="#333" style={{marginRight: 8}}>$</Typography>
-        <TextInput 
-          placeholder="0"
-          placeholderTextColor="#DDD"
-          style={styles.amountInput}
-          keyboardType="numeric"
-          value={limit}
-          onChangeText={setLimit}
-        />
-      </View>
-
-      <View style={styles.row}>
-        <View style={{flex: 1, marginRight: 10}}>
-          <Typography variant="caption" weight="700" color="#666" style={styles.label}>ICON</Typography>
-          <TouchableOpacity 
-            style={styles.pickerBtn}
-            onPress={() => setShowIconPicker(true)}
-          >
-            <Feather name={icon} size={24} color="#000" />
-            <Typography variant="body" style={{marginLeft: 12}}>Change</Typography>
-          </TouchableOpacity>
-        </View>
-
-        <View style={{flex: 1, marginLeft: 10}}>
-          <Typography variant="caption" weight="700" color="#666" style={styles.label}>THEME COLOR</Typography>
-          <View style={styles.colorRow}>
-            {COLORS.slice(0, 4).map(c => (
-              <TouchableOpacity 
-                key={c}
-                style={[styles.colorCircle, {backgroundColor: c}, color === c && styles.selectedColor]}
-                onPress={() => setColor(c)}
-              />
-            ))}
-          </View>
-          <View style={[styles.colorRow, {marginTop: 8}]}>
-            {COLORS.slice(4).map(c => (
-              <TouchableOpacity 
-                key={c}
-                style={[styles.colorCircle, {backgroundColor: c}, color === c && styles.selectedColor]}
-                onPress={() => setColor(c)}
-              />
-            ))}
-          </View>
-        </View>
-      </View>
-
-      <TouchableOpacity 
-        style={[styles.saveBtn, isSaving && { opacity: 0.7 }]}
-        onPress={handleSave}
-        disabled={isSaving}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 60,
+          },
+        ]}
       >
-        <Typography variant="body" weight="700" color="#FFF">
-          {isSaving ? 'Saving...' : (editingCategory ? 'Update Category' : 'Create Category')}
-        </Typography>
-      </TouchableOpacity>
+        {/* Top Header */}
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => navigation.goBack()}
+            style={styles.backBtn}
+          >
+            <Feather name="chevron-left" size={16} color={theme.MUTED} />
+            <Text style={[styles.backText, { color: theme.MUTED }]}>
+              Budget Planner
+            </Text>
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+            {editingCategory ? 'Edit Category' : 'New Category'}
+          </Text>
+          <Text style={[styles.headerSub, { color: theme.MUTED }]}>
+            {editingCategory
+              ? 'Modify your budget category limits & icons.'
+              : 'Create a new bucket to track monthly spending.'}
+          </Text>
+        </View>
 
-      <Modal visible={showIconPicker} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Typography variant="h2" weight="700">Select Icon</Typography>
-              <TouchableOpacity onPress={() => setShowIconPicker(false)}>
-                <Feather name="x" size={24} color="#000" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.iconGrid}>
-              {ICONS.map(i => (
-                <TouchableOpacity 
-                  key={i} 
-                  style={[styles.iconBox, icon === i && styles.selectedIconBox]}
-                  onPress={() => {
-                    setIcon(i);
-                    setShowIconPicker(false);
-                  }}
+        {/* Form Section */}
+        <View style={styles.sectionMargin}>
+          <View style={styles.inputsStack}>
+            {/* Category Name Field */}
+            <View style={[styles.inputCard, { backgroundColor: theme.CARD }]}>
+              <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
+                CATEGORY NAME
+              </Text>
+              <View style={styles.inputInnerRow}>
+                <View
+                  style={[
+                    styles.iconBoxPreview,
+                    { backgroundColor: `${color}18` },
+                  ]}
                 >
-                  <Feather name={i} size={24} color={icon === i ? '#FFF' : '#000'} />
-                </TouchableOpacity>
-              ))}
+                  <Feather name={icon} size={18} color={color} />
+                </View>
+                <TextInput
+                  style={[styles.textInput, { color: theme.TEXT }]}
+                  placeholder="e.g. Travel, Healthcare, Shopping"
+                  placeholderTextColor={theme.MUTED}
+                  value={name}
+                  onChangeText={setName}
+                />
+              </View>
+            </View>
+
+            {/* Monthly Limit Field */}
+            <View style={[styles.inputCard, { backgroundColor: theme.CARD }]}>
+              <View style={styles.limitHeaderRow}>
+                <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
+                  MONTHLY BUDGET LIMIT
+                </Text>
+                <Text style={[styles.limitHintText, { color: theme.MUTED }]}>
+                  Unallocated: PKR {unallocatedBudget.toLocaleString()}
+                </Text>
+              </View>
+
+              <View style={styles.amountInputRow}>
+                <Text style={[styles.currencyPrefix, { color: theme.MUTED }]}>
+                  PKR
+                </Text>
+                <TextInput
+                  style={[styles.amountInput, { color: theme.TEXT }]}
+                  placeholder="0"
+                  placeholderTextColor={theme.MUTED}
+                  keyboardType="numeric"
+                  value={limit}
+                  onChangeText={setLimit}
+                />
+              </View>
             </View>
           </View>
         </View>
-      </Modal>
 
-      <View style={{height: 100}} />
-    </ScrollView>
+        {/* Customization Grid Section */}
+        <View style={styles.sectionMargin}>
+          <Text style={[styles.sectionTitle, { color: theme.MUTED }]}>
+            CUSTOMIZATION
+          </Text>
+
+          <View style={[styles.customCard, { backgroundColor: theme.CARD }]}>
+            {/* Icon Picker Launcher */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setShowIconPicker(true)}
+              style={styles.customRow}
+            >
+              <View style={styles.customRowLeft}>
+                <View
+                  style={[
+                    styles.iconSquare,
+                    { backgroundColor: theme.MODAL },
+                  ]}
+                >
+                  <Feather name={icon} size={20} color={color} />
+                </View>
+                <View>
+                  <Text style={[styles.customTitle, { color: theme.TEXT }]}>
+                    Category Icon
+                  </Text>
+                  <Text style={[styles.customSub, { color: theme.MUTED }]}>
+                    Icon: {icon}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.changeBadge}>
+                <Text style={[styles.changeBadgeText, { color: theme.TEXT }]}>
+                  Change →
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <View
+              style={[styles.divider, { backgroundColor: theme.BORDER }]}
+            />
+
+            {/* Color Palette Picker */}
+            <View style={{ paddingTop: 4 }}>
+              <Text style={[styles.colorTitle, { color: theme.TEXT }]}>
+                Accent Theme Color
+              </Text>
+              <View style={styles.colorGrid}>
+                {COLORS.map(c => {
+                  const isSelected = color === c;
+                  return (
+                    <TouchableOpacity
+                      key={c}
+                      activeOpacity={0.8}
+                      onPress={() => setColor(c)}
+                      style={[
+                        styles.colorPill,
+                        { backgroundColor: c },
+                        isSelected && styles.selectedColorPill,
+                      ]}
+                    >
+                      {isSelected && (
+                        <Feather name="check" size={14} color="#FFFFFF" />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Submit Save Button */}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={handleSave}
+          disabled={isSaving}
+          style={[styles.submitBtn, { backgroundColor: theme.TEXT }]}
+        >
+          {isSaving ? (
+            <ActivityIndicator color={theme.BG} />
+          ) : (
+            <Text style={[styles.submitText, { color: theme.BG }]}>
+              {editingCategory ? 'Update Category →' : 'Create Category →'}
+            </Text>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
+
+      {/* Icon Picker Bottom Sheet Modal */}
+      <Modal
+        visible={showIconPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowIconPicker(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowIconPicker(false)}
+        >
+          <Pressable
+            style={[styles.sheetContent, { backgroundColor: theme.CARD }]}
+            onPress={e => e.stopPropagation()}
+          >
+            <View
+              style={[styles.sheetHandle, { backgroundColor: theme.BORDER }]}
+            />
+            <Text style={[styles.sheetTitle, { color: theme.TEXT }]}>
+              Select Category Icon
+            </Text>
+
+            <View style={styles.iconGridWrap}>
+              {ICONS.map(i => {
+                const isSelected = icon === i;
+                return (
+                  <TouchableOpacity
+                    key={i}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      setIcon(i);
+                      setShowIconPicker(false);
+                    }}
+                    style={[
+                      styles.iconGridBox,
+                      {
+                        backgroundColor: isSelected
+                          ? theme.TEXT
+                          : theme.MODAL,
+                      },
+                    ]}
+                  >
+                    <Feather
+                      name={i}
+                      size={22}
+                      color={isSelected ? theme.BG : theme.TEXT}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setShowIconPicker(false)}
+              style={styles.cancelBtn}
+            >
+              <Text style={[styles.cancelText, { color: theme.MUTED }]}>
+                Close
+              </Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
   );
 };
+
+export default AddCategoryScreen;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FB',
   },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
+  scrollContent: {
+    paddingHorizontal: 16,
   },
-  header: {
-    marginBottom: 32,
+  headerRow: {
+    marginBottom: 20,
+    paddingHorizontal: 4,
   },
-  label: {
-    letterSpacing: 1,
-    marginBottom: 12,
-    fontSize: 11,
-  },
-  inputBox: {
-    backgroundColor: '#FFF',
-    borderRadius: 20,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  input: {
-    fontSize: 16,
-    color: '#000',
-    fontFamily: 'Inter-Medium',
-  },
-  amountBox: {
+  backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EAEBEE',
-    borderRadius: 24,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    marginBottom: 24,
+    gap: 4,
+    marginBottom: 12,
+  },
+  backText: {
+    fontSize: 12,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -1.2,
+    marginBottom: 4,
+  },
+  headerSub: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  sectionMargin: {
+    marginBottom: 16,
+  },
+  inputsStack: {
+    gap: 10,
+  },
+  inputCard: {
+    borderRadius: 20,
+    padding: 16,
+  },
+  fieldLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+  },
+  limitHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  limitHintText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  inputInnerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  iconBoxPreview: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    padding: 0,
+  },
+  amountInputRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+    marginTop: 4,
+  },
+  currencyPrefix: {
+    fontSize: 18,
+    fontWeight: '800',
   },
   amountInput: {
     flex: 1,
     fontSize: 32,
-    fontFamily: 'Inter-Bold',
-    color: '#000',
+    fontWeight: '800',
+    letterSpacing: -1,
+    padding: 0,
   },
-  row: {
-    flexDirection: 'row',
-    marginBottom: 32,
+  sectionTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    paddingHorizontal: 4,
   },
-  pickerBtn: {
+  customCard: {
+    borderRadius: 24,
+    padding: 18,
+  },
+  customRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF',
-    padding: 16,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  colorRow: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  colorCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  selectedColor: {
-    borderColor: '#000',
-    transform: [{scale: 1.1}],
-  },
-  saveBtn: {
-    backgroundColor: '#000',
-    paddingVertical: 20,
-    borderRadius: 30,
+  customRowLeft: {
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 6,
-    marginTop: 20,
+    gap: 12,
+  },
+  iconSquare: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  customSub: {
+    fontSize: 11,
+  },
+  changeBadge: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  changeBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  divider: {
+    height: 1,
+    marginVertical: 14,
+  },
+  colorTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  colorGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  colorPill: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedColorPill: {
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.8)',
+  },
+  submitBtn: {
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  submitText: {
+    fontSize: 14,
+    fontWeight: '800',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
   },
-  modalContent: {
-    backgroundColor: '#FFF',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    padding: 32,
-    maxHeight: '60%',
+  sheetContent: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 16,
+    paddingBottom: 36,
   },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginVertical: 12,
   },
-  iconGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  iconBox: {
-    width: '23%',
-    aspectRatio: 1,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+  sheetTitle: {
+    fontSize: 16,
+    fontWeight: '700',
     marginBottom: 16,
   },
-  selectedIconBox: {
-    backgroundColor: '#000',
-  }
+  iconGridWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 16,
+  },
+  iconGridBox: {
+    width: '22%',
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelBtn: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  cancelText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
 });
-
-export default AddCategoryScreen;

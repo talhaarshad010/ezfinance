@@ -2,9 +2,8 @@ import React from 'react';
 import { createDrawerNavigator, useDrawerProgress } from '@react-navigation/drawer';
 import { MainNavigator } from './MainNavigator';
 import { DrawerContent } from './DrawerContent';
-import { TouchableOpacity, View, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, interpolate, Extrapolation } from 'react-native-reanimated';
-import Feather from 'react-native-vector-icons/Feather';
 import StockMarketScreen from '../features/main/screens/StockMarketScreen';
 import AddExpenseScreen from '../features/main/screens/AddExpenseScreen';
 import AnalyticsScreen from '../features/main/screens/AnalyticsScreen';
@@ -12,17 +11,14 @@ import PortfolioScreen from '../features/main/screens/PortfolioScreen';
 import CryptoMarketScreen from '../features/main/screens/CryptoMarketScreen';
 import SettingsScreen from '../features/main/screens/SettingsScreen';
 import BudgetPlannerScreen from '../features/main/screens/BudgetPlannerScreen';
-import { useToast } from '../context/ToastContext';
-import { HeaderProfile } from '../components/HeaderProfile';
 import NotificationsScreen from '../features/main/screens/NotificationsScreen';
 import BankAccountsScreen from '../features/main/screens/BankAccountsScreen';
-import { useTheme } from '../context/ThemeContext';
-
 import ProfileScreen from '../features/main/screens/ProfileScreen';
+import { useTheme } from '../context/ThemeContext';
 
 const Drawer = createDrawerNavigator();
 
-const SceneWrapper = ({ children }: { children: React.ReactNode }) => {
+const SceneWrapper = React.memo(({ children }: { children: React.ReactNode }) => {
   const progress = useDrawerProgress();
   const { theme } = useTheme();
 
@@ -37,21 +33,13 @@ const SceneWrapper = ({ children }: { children: React.ReactNode }) => {
     const borderRadius = interpolate(
       progress.value,
       [0, 1],
-      [0, 26],
-      Extrapolation.CLAMP,
-    );
-
-    const borderWidth = interpolate(
-      progress.value,
-      [0, 1],
-      [0, theme.isDark ? 1.5 : 1],
+      [0, 24],
       Extrapolation.CLAMP,
     );
 
     return {
       transform: [{ scale }],
       borderRadius,
-      borderWidth,
     };
   });
 
@@ -62,19 +50,82 @@ const SceneWrapper = ({ children }: { children: React.ReactNode }) => {
         animatedStyle,
         {
           backgroundColor: theme.BG,
-          borderColor: theme.isDark
-            ? 'rgba(255, 255, 255, 0.16)'
-            : 'rgba(0, 0, 0, 0.08)',
         },
       ]}
     >
       {children}
     </Animated.View>
   );
-};
+});
+
+// Stable component wrappers to prevent unmounting & re-creation during drawer transitions
+const MainTabsWrapper = React.memo(() => (
+  <SceneWrapper>
+    <MainNavigator />
+  </SceneWrapper>
+));
+
+const StockMarketWrapper = React.memo(() => (
+  <SceneWrapper>
+    <StockMarketScreen />
+  </SceneWrapper>
+));
+
+const CryptoMarketWrapper = React.memo(() => (
+  <SceneWrapper>
+    <CryptoMarketScreen />
+  </SceneWrapper>
+));
+
+const AddExpenseWrapper = React.memo(() => (
+  <SceneWrapper>
+    <AddExpenseScreen />
+  </SceneWrapper>
+));
+
+const AnalyticsWrapper = React.memo(() => (
+  <SceneWrapper>
+    <AnalyticsScreen />
+  </SceneWrapper>
+));
+
+const BudgetPlannerWrapper = React.memo(() => (
+  <SceneWrapper>
+    <BudgetPlannerScreen />
+  </SceneWrapper>
+));
+
+const PortfolioWrapper = React.memo(() => (
+  <SceneWrapper>
+    <PortfolioScreen />
+  </SceneWrapper>
+));
+
+const SettingsWrapper = React.memo(() => (
+  <SceneWrapper>
+    <SettingsScreen />
+  </SceneWrapper>
+));
+
+const NotificationsWrapper = React.memo(() => (
+  <SceneWrapper>
+    <NotificationsScreen />
+  </SceneWrapper>
+));
+
+const BankAccountsWrapper = React.memo(() => (
+  <SceneWrapper>
+    <BankAccountsScreen />
+  </SceneWrapper>
+));
+
+const ProfileWrapper = React.memo(() => (
+  <SceneWrapper>
+    <ProfileScreen />
+  </SceneWrapper>
+));
 
 export const MainDrawerNavigator = () => {
-  const { showToast } = useToast();
   const { theme } = useTheme();
 
   const drawerBg = theme.isDark ? '#0A0A0D' : '#F8F9FA';
@@ -84,93 +135,68 @@ export const MainDrawerNavigator = () => {
     <View style={{ flex: 1, backgroundColor: sceneBg }}>
       <Drawer.Navigator
         drawerContent={props => <DrawerContent {...props} />}
-        screenOptions={({ navigation }) => ({
-          headerShown: true,
-          headerLeft: () => (
-            <TouchableOpacity
-              style={{ marginLeft: 20 }}
-              onPress={() => (navigation as any).openDrawer()}
-            >
-              <Feather name="menu" size={24} color={theme.TEXT} />
-            </TouchableOpacity>
-          ),
-          headerTitleStyle: {
-            fontFamily: 'Inter-Bold',
-            fontSize: 18,
-            color: theme.TEXT,
-          },
-          headerTitleAlign: 'center',
-          headerRight: () => (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 20 }}>
-              <TouchableOpacity style={{ marginRight: 16 }} onPress={() => navigation.navigate('Search')}>
-                <Feather name="search" size={20} color={theme.TEXT} />
-              </TouchableOpacity>
-              <HeaderProfile />
-            </View>
-          ),
-          headerStyle: {
-            elevation: 0,
-            shadowOpacity: 0,
-            borderBottomWidth: 0,
-            backgroundColor: theme.BG,
-          },
+        screenOptions={{
+          headerShown: false,
           drawerType: 'slide',
           drawerStyle: {
-            width: '75%',
+            width: '76%',
             backgroundColor: drawerBg,
           },
           overlayColor: 'transparent',
-          sceneContainerStyle: {
+          sceneStyle: {
             backgroundColor: sceneBg,
           },
-        })}
+        }}
       >
-        <Drawer.Screen name="MainTabs" options={{ headerShown: false }}>
-          {() => <SceneWrapper><MainNavigator /></SceneWrapper>}
-        </Drawer.Screen>
-        <Drawer.Screen name="StockMarket" options={{ headerShown: false }}>
-          {() => <SceneWrapper><StockMarketScreen /></SceneWrapper>}
-        </Drawer.Screen>
-        <Drawer.Screen name="CryptoMarket" options={{ headerShown: false }}>
-          {() => <SceneWrapper><CryptoMarketScreen /></SceneWrapper>}
-        </Drawer.Screen>
-        <Drawer.Screen name="AddExpense" options={{ headerShown: false, drawerItemStyle: { display: 'none' } }}>
-          {() => <SceneWrapper><AddExpenseScreen /></SceneWrapper>}
-        </Drawer.Screen>
-        <Drawer.Screen name="Analytics" options={{ headerShown: false, drawerItemStyle: { display: 'none' } }}>
-          {() => <SceneWrapper><AnalyticsScreen /></SceneWrapper>}
-        </Drawer.Screen>
-        <Drawer.Screen name="BudgetPlanner" options={{ headerShown: false, title: 'Budget Planner' }}>
-          {() => <SceneWrapper><BudgetPlannerScreen /></SceneWrapper>}
-        </Drawer.Screen>
-        <Drawer.Screen name="Portfolio" options={{ drawerItemStyle: { display: 'none' } }}>
-          {() => <SceneWrapper><PortfolioScreen /></SceneWrapper>}
-        </Drawer.Screen>
-        <Drawer.Screen name="Settings" options={{ headerShown: false, drawerItemStyle: { display: 'none' } }}>
-          {() => <SceneWrapper><SettingsScreen /></SceneWrapper>}
-        </Drawer.Screen>
+        <Drawer.Screen name="MainTabs" component={MainTabsWrapper} />
+        <Drawer.Screen name="StockMarket" component={StockMarketWrapper} />
+        <Drawer.Screen name="CryptoMarket" component={CryptoMarketWrapper} />
+        <Drawer.Screen
+          name="AddExpense"
+          component={AddExpenseWrapper}
+          options={{ drawerItemStyle: { display: 'none' } }}
+        />
+        <Drawer.Screen
+          name="Analytics"
+          component={AnalyticsWrapper}
+          options={{ drawerItemStyle: { display: 'none' } }}
+        />
+        <Drawer.Screen
+          name="BudgetPlanner"
+          component={BudgetPlannerWrapper}
+          options={{ title: 'Budget Planner' }}
+        />
+        <Drawer.Screen
+          name="Portfolio"
+          component={PortfolioWrapper}
+          options={{ drawerItemStyle: { display: 'none' } }}
+        />
+        <Drawer.Screen
+          name="Settings"
+          component={SettingsWrapper}
+          options={{ drawerItemStyle: { display: 'none' } }}
+        />
         <Drawer.Screen
           name="Notifications"
-          options={{ headerShown: false, drawerItemStyle: { display: 'none' } }}
-        >
-          {() => <SceneWrapper><NotificationsScreen /></SceneWrapper>}
-        </Drawer.Screen>
+          component={NotificationsWrapper}
+          options={{ drawerItemStyle: { display: 'none' } }}
+        />
         <Drawer.Screen
           name="BankAccounts"
-          options={{ headerShown: false, title: 'Bank Accounts', drawerItemStyle: { display: 'none' } }}
-        >
-          {() => <SceneWrapper><BankAccountsScreen /></SceneWrapper>}
-        </Drawer.Screen>
+          component={BankAccountsWrapper}
+          options={{ title: 'Bank Accounts', drawerItemStyle: { display: 'none' } }}
+        />
         <Drawer.Screen
           name="Profile"
-          options={{ headerShown: false, drawerItemStyle: { display: 'none' } }}
-        >
-          {() => <SceneWrapper><ProfileScreen /></SceneWrapper>}
-        </Drawer.Screen>
+          component={ProfileWrapper}
+          options={{ drawerItemStyle: { display: 'none' } }}
+        />
       </Drawer.Navigator>
     </View>
   );
 };
+
+export default MainDrawerNavigator;
 
 const styles = StyleSheet.create({
   stack: {
@@ -180,7 +206,7 @@ const styles = StyleSheet.create({
       width: -8,
       height: 8,
     },
-    shadowOpacity: 0.6,
+    shadowOpacity: 0.3,
     shadowRadius: 16,
     elevation: 12,
     overflow: 'hidden',
