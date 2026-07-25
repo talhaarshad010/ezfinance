@@ -100,8 +100,7 @@ const AIAdvisorScreen = () => {
           </ScrollView>
         </View>
         
-        <View style={{height: 20}} />
-      </ScrollView>
+    </ScrollView>
 
       {/* Input Area */}
       {/* Inside Input Area container we conditionally render absolute popup */}
@@ -152,7 +151,8 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 24,
+    paddingBottom: 140,
   },
   introBox: {
     marginBottom: 32,
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFF',
     marginHorizontal: 20,
-    marginBottom: 20,
+    marginBottom: 120,
     padding: 8,
     borderRadius: 30,
     shadowColor: '#000',

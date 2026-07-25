@@ -73,12 +73,6 @@ const AccountDetailScreen = () => {
           onPress: async () => {
             try {
               await deleteTransaction(accountId, tx.id);
-              dispatch(removeTransactionAction({ accountId, transactionId: tx.id }));
-              // Update balance locally
-              const delta = tx.type === 'income' ? -tx.amount : tx.amount;
-              if (account) {
-                dispatch(updateAccountBalance({ accountId, balance: account.balance + delta }));
-              }
               showToast('Transaction deleted', 'success', 'Done');
             } catch (e) {
               showToast('Failed to delete', 'error', 'Error');

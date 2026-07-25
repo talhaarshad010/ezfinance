@@ -55,16 +55,7 @@ const AddTransactionScreen = () => {
         createdAt: Date.now(),
       };
 
-      const savedTx = await saveTransaction(accountId, txData);
-      dispatch(addTransactionAction(savedTx));
-
-      // Update local balance
-      if (account) {
-        const newBalance = type === 'income'
-          ? account.balance + parseFloat(amount)
-          : account.balance - parseFloat(amount);
-        dispatch(updateAccountBalance({ accountId, balance: newBalance }));
-      }
+      await saveTransaction(accountId, txData);
 
       showToast('Transaction added!', 'success', 'Success');
       navigation.goBack();

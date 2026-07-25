@@ -165,63 +165,8 @@ const BudgetPlannerScreen = () => {
           </View>
         </View>
 
-        {/* Housing & Utilities Large Card */}
-        {mainCategory && (
-          <Card style={styles.mainCard}>
-            <View style={styles.rowBetween}>
-              <View>
-                <Typography variant="h2" weight="700" style={{fontSize: 28}}>{mainCategory.name.split(' & ')[0]} &</Typography>
-                <Typography variant="h2" weight="700" style={{fontSize: 28}}>{mainCategory.name.split(' & ')[1] || 'Utilities'}</Typography>
-                <Typography variant="body" color="#666" style={{marginTop: 8}}>Fixed monthly</Typography>
-                <Typography variant="body" color="#666">essentials</Typography>
-              </View>
-              <View style={{alignItems: 'flex-end'}}>
-                <TouchableOpacity 
-                  onPress={() => {
-                    setSelectedCategory(mainCategory);
-                    setMenuVisible(true);
-                  }}
-                  style={{marginBottom: 10}}
-                >
-                  <Feather name="more-vertical" size={24} color="#CCC" />
-                </TouchableOpacity>
-                <Typography variant="h3" weight="700">${mainCategory.spent.toLocaleString()} /</Typography>
-                <Typography variant="h3" weight="700" color="#666">${mainCategory.limit.toLocaleString()}</Typography>
-              </View>
-            </View>
-
-            <View style={styles.progressBarLarge}>
-              <View style={[styles.progressFillLarge, {width: `${Math.min(100, (mainCategory.spent / mainCategory.limit) * 100)}%`}]} />
-            </View>
-
-            <View style={styles.rowBetween}>
-              <Typography variant="caption" weight="700" color="#AAA" style={{letterSpacing: 1}}>
-                {Math.round((mainCategory.spent / mainCategory.limit) * 100)}% EXPENDED
-              </Typography>
-              <Typography variant="caption" color="#AAA" style={{letterSpacing: 1}}>
-                ${Math.max(0, mainCategory.limit - mainCategory.spent).toLocaleString()} REMAINING
-              </Typography>
-            </View>
-
-            {/* Large Goal Circle Mockup */}
-            <View style={styles.circleContainer}>
-              <View style={[styles.circleOuter, { 
-                borderTopColor: (mainCategory.spent / mainCategory.limit) >= 0.25 ? '#000' : '#F3F4F6',
-                borderLeftColor: (mainCategory.spent / mainCategory.limit) >= 0.50 ? '#000' : '#F3F4F6',
-                borderBottomColor: (mainCategory.spent / mainCategory.limit) >= 0.75 ? '#000' : '#F3F4F6',
-              }]}>
-                <View style={styles.circleInner}>
-                  <Typography variant="h1" weight="700" style={{fontSize: 40}}>
-                    {Math.round((mainCategory.spent / mainCategory.limit) * 100)}%
-                  </Typography>
-                </View>
-              </View>
-            </View>
-          </Card>
-        )}
-
-        {/* Small Category Cards */}
-        {otherCategories.map(cat => (
+        {/* Category Cards List */}
+        {categoriesWithSpent.map(cat => (
           <BudgetCategory 
             key={cat.id}
             category={cat}
@@ -231,6 +176,7 @@ const BudgetPlannerScreen = () => {
             }}
           />
         ))}
+
 
         {/* Goal Card */}
         <Card style={styles.goalCard}>
@@ -281,7 +227,6 @@ const BudgetPlannerScreen = () => {
           </View>
         </Card>
 
-        <View style={{height: 100}} />
       </ScrollView>
 
       {/* Options Menu Modal */}
@@ -364,39 +309,61 @@ const BudgetPlannerScreen = () => {
 };
 
 const BudgetCategory = ({category, onMenuPress}: {category: IBudgetCategory & {spent: number}, onMenuPress: () => void}) => {
-  const { icon, name, spent, limit, color } = category;
+  const { name, spent, limit } = category;
   const usageFloat = spent / limit;
-  const usagePercent = Math.round(usageFloat * 100);
-  const overBudget = usageFloat > 1;
+  const usagePercent = (usageFloat * 100).toFixed(1);
+  const remaining = limit - spent;
+  
+  // Color Mapping based on image
+  let barColor = '#000000';
+  if (name.includes('Food')) barColor = '#2563EB';
+  if (name.includes('Entertainment')) barColor = '#8B5CF6';
+  if (usageFloat > 1) barColor = '#EF4444'; // Red for over-budget (Shopping in image)
+
+  // Description Mapping based on image
+  let description = '';
+  if (name.includes('Housing')) description = 'Fixed monthly essentials';
 
   return (
-    <Card style={styles.categoryCard}>
-      <View style={styles.rowBetween}>
-        <View style={styles.categoryIconBox}>
-          <Feather name={icon} size={20} color={overBudget ? colors.accent.errorText : "#000"} />
-        </View>
-        <TouchableOpacity onPress={onMenuPress}>
-          <Feather name="more-vertical" size={24} color="#CCC" />
-        </TouchableOpacity>
-      </View>
-      <Typography variant="body" weight="700" style={{marginTop: 20, fontSize: 18}}>{name}</Typography>
-      <View style={{flexDirection: 'row', alignItems: 'flex-end', marginTop: 4}}>
-        <Typography variant="h2" weight="700">${spent.toLocaleString()} / </Typography>
-        <Typography variant="h3" weight="700" color="#666">${limit.toLocaleString()}</Typography>
-      </View>
-
-      <View style={styles.progressBarSmall}>
-        <View style={[styles.progressFillSmall, {width: `${Math.min(100, usagePercent)}%`, backgroundColor: color}]} />
-      </View>
-
-      <Typography 
-        variant="caption" 
-        weight="700" 
-        color={overBudget ? colors.accent.errorText : "#AAA"} 
-        style={{marginTop: 12, letterSpacing: 1} }
+    <Card style={styles.newCategoryCard}>
+      <TouchableOpacity 
+        activeOpacity={0.7} 
+        onPress={onMenuPress}
+        style={{ width: '100%' }}
       >
-        {overBudget ? `${usagePercent}% - OVER BUDGET` : `${usagePercent}% UTILIZED`}
-      </Typography>
+        {/* Header Row */}
+        <View style={styles.rowBetween}>
+          <Typography variant="h3" weight="700" style={styles.catName}>{name}</Typography>
+          <Typography variant="h3" weight="700" style={styles.amountText}>
+            ${spent.toLocaleString()} / ${limit.toLocaleString()}
+          </Typography>
+        </View>
+
+        {/* Description Row */}
+        {description ? (
+          <Typography variant="caption" color="#666" style={styles.catDescription}>
+            {description}
+          </Typography>
+        ) : <View style={{height: 4}} />}
+
+        {/* Progress Bar */}
+        <View style={styles.newProgressBarContainer}>
+          <View style={[
+            styles.newProgressBarFill, 
+            { width: `${Math.min(100, usageFloat * 100)}%`, backgroundColor: barColor }
+          ]} />
+        </View>
+
+        {/* Footer Row */}
+        <View style={styles.rowBetween}>
+          <Typography variant="caption" weight="600" color="#AAA" style={styles.usageText}>
+            {usagePercent}% EXPENDED
+          </Typography>
+          <Typography variant="caption" weight="600" color="#AAA" style={styles.usageText}>
+            ${Math.abs(remaining).toLocaleString()} {remaining >= 0 ? 'REMAINING' : 'OVER'}
+          </Typography>
+        </View>
+      </TouchableOpacity>
     </Card>
   );
 };
@@ -409,6 +376,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 24,
+    paddingBottom: 140,
   },
   header: {
     marginBottom: 40,
@@ -629,6 +597,47 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  // New Styles for Redesign
+  newCategoryCard: {
+    paddingHorizontal: 24,
+    paddingVertical: 32,
+    borderRadius: 32,
+    marginBottom: 16,
+    backgroundColor: '#FFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  catName: {
+    fontSize: 20,
+    color: '#000',
+  },
+  amountText: {
+    fontSize: 20,
+    color: '#000',
+  },
+  catDescription: {
+    marginTop: 4,
+    marginBottom: 8,
+    fontSize: 14,
+  },
+  newProgressBarContainer: {
+    height: 10,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 5,
+    marginVertical: 16,
+    overflow: 'hidden',
+  },
+  newProgressBarFill: {
+    height: '100%',
+    borderRadius: 5,
+  },
+  usageText: {
+    fontSize: 12,
+    letterSpacing: 0.5,
   }
 });
 

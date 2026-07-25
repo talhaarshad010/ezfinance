@@ -34,6 +34,7 @@ import {
   generateOTP,
   getUserProfile,
   checkDeviceVerification,
+  recordDeviceVerification,
 } from '../services/authService';
 import {
   registerSession,

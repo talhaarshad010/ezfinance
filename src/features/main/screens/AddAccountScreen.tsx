@@ -55,7 +55,7 @@ const AddAccountScreen = () => {
 
     setSaving(true);
     try {
-      const newAccount = await saveAccount({
+      await saveAccount({
         bankId: selectedBank!.id,
         bankName: selectedBank!.shortName,
         bankColor: selectedBank!.color,
@@ -66,7 +66,6 @@ const AddAccountScreen = () => {
         createdAt: Date.now(),
       });
 
-      dispatch(addAccountAction(newAccount));
       showToast('Account added successfully!', 'success', 'Success');
       navigation.goBack();
     } catch (err) {

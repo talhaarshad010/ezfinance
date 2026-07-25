@@ -90,6 +90,12 @@ target 'ezfinance' do
         config.build_settings['HEADER_SEARCH_PATHS'] ||= '$(inherited) '
         config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_ROOT)/../../node_modules/react-native/ReactCommon/jsitooling" '
         config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_ROOT)/../../node_modules/react-native/ReactCommon" '
+
+        # Fix for fmt consteval build error in C++20
+        if target.name.downcase.include?('fmt')
+          puts "Antigravity: Setting CLANG_CXX_LANGUAGE_STANDARD to c++17 for target: #{target.name}"
+          config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+        end
       end
     end
   end

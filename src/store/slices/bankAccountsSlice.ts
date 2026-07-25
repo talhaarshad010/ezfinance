@@ -53,7 +53,10 @@ const bankAccountsSlice = createSlice({
       state.loading = false;
     },
     addAccount: (state, action: PayloadAction<BankAccount>) => {
-      state.accounts.push(action.payload);
+      const exists = state.accounts.some(a => a.id === action.payload.id);
+      if (!exists) {
+        state.accounts.push(action.payload);
+      }
     },
     removeAccount: (state, action: PayloadAction<string>) => {
       state.accounts = state.accounts.filter(a => a.id !== action.payload);
@@ -67,11 +70,14 @@ const bankAccountsSlice = createSlice({
       state.transactions[action.payload.accountId] = action.payload.transactions;
     },
     addTransaction: (state, action: PayloadAction<Transaction>) => {
-      const { accountId } = action.payload;
+      const { accountId, id } = action.payload;
       if (!state.transactions[accountId]) {
         state.transactions[accountId] = [];
       }
-      state.transactions[accountId].push(action.payload);
+      const exists = state.transactions[accountId].some(t => t.id === id);
+      if (!exists) {
+        state.transactions[accountId].push(action.payload);
+      }
     },
     removeTransaction: (state, action: PayloadAction<{ accountId: string; transactionId: string }>) => {
       const { accountId, transactionId } = action.payload;

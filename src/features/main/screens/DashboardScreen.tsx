@@ -12,6 +12,13 @@ import { setAccounts } from '../../../store/slices/bankAccountsSlice';
 import { getBankById } from '../../../constants/pakistaniBanks';
 import { Image } from 'react-native';
 import { Transaction } from '../../../store/slices/bankAccountsSlice';
+import Svg, {
+  Path,
+  Defs,
+  LinearGradient,
+  Stop,
+  Circle,
+} from 'react-native-svg';
 
 const DashboardScreen = () => {
   const navigation = useNavigation<any>();
@@ -68,6 +75,8 @@ const DashboardScreen = () => {
     })
     .reduce((acc, tx) => acc + tx.amount, 0);
 
+  const monthlySavings = monthlyIncome - monthlyExpenses;
+
   // 2. Calculate 6-Month Historical Spending Trend
   const historyData: { label: string; amount: number }[] = [];
   for (let i = 5; i >= 0; i--) {
@@ -106,68 +115,159 @@ const DashboardScreen = () => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <View style={styles.greeting}>
-          <Typography variant="h1">Hello {userName} 👋</Typography>
+        <View style={styles.topHeader}>
           <Typography variant="body" color={colors.text.muted}>
-            Your financial summary is looking strong today.
+            Hello {userName} 👋
+          </Typography>
+          <Typography variant="h1" weight="700" style={styles.dashboardTitle}>
+            Dashboard
           </Typography>
         </View>
 
-        <Card style={styles.balanceCard}>
-          <Typography variant="label" color="#AAA" style={{ letterSpacing: 1 }}>
-            TOTAL BALANCE
-          </Typography>
-          <Typography variant="h1" color="#FFF" style={styles.balanceText}>
-            {formatCurrency(totalBalance)}
-          </Typography>
-          <View style={styles.linkedAccounts}>
-            {accounts.slice(0, 3).map((acc, index) => {
-              const bank = getBankById(acc.bankId);
-              return (
+        <Card style={styles.premiumCard}>
+          <View style={styles.rowBetween}>
+            <View>
+              <Typography
+                variant="caption"
+                color="#666"
+                style={{ letterSpacing: 1.5, marginBottom: 8 }}
+              >
+                TOTAL BALANCE
+              </Typography>
+              <Typography
+                variant="h2"
+                color="#FFF"
+                style={styles.premiumBalanceText}
+              >
+                {formatCurrency(totalBalance)}
+              </Typography>
+            </View>
+            <View style={styles.progressCircleWrapper}>
+              <View style={styles.progressCircleOuter}>
                 <View
-                  key={acc.id}
                   style={[
-                    styles.miniAvatar,
-                    {
-                      backgroundColor: '#FFF',
-                      marginLeft: index === 0 ? 0 : -10,
-                      zIndex: 10 - index,
-                      overflow: 'hidden',
-                      borderWidth: 1.5,
-                      borderColor: '#000',
-                    },
+                    styles.progressCircleInner,
+                    { borderTopColor: '#00D1FF', borderRightColor: '#00D1FF' },
                   ]}
+                />
+                <Typography
+                  variant="caption"
+                  weight="700"
+                  color="#333"
+                  style={styles.progressPercent}
                 >
-                  {bank?.logo ? (
-                    <Image
-                      source={{ uri: bank.logo }}
-                      style={styles.miniLogo}
-                      resizeMode="contain"
-                    />
-                  ) : (
-                    <Typography
-                      variant="caption"
-                      weight="700"
-                      color="#000"
-                      style={{ fontSize: 8 }}
-                    >
-                      {acc.bankAbbreviation}
-                    </Typography>
-                  )}
-                </View>
-              );
-            })}
-            <Typography
-              variant="caption"
-              color="#AAA"
-              style={{ marginLeft: 8 }}
-            >
-              {accounts.length > 0
-                ? `${accounts.length} Linked accounts active`
-                : 'No accounts linked'}
-            </Typography>
+                  85%
+                </Typography>
+              </View>
+            </View>
+          </View>
+
+          <View style={[styles.rowBetween, { marginTop: 32 }]}>
+            <View style={styles.insetCard}>
+              <Typography
+                variant="caption"
+                color="#666"
+                style={{ fontSize: 10 }}
+              >
+                INCOME
+              </Typography>
+              <Typography
+                variant="body"
+                weight="700"
+                color="#4ADE80"
+                style={{ marginTop: 4 }}
+              >
+                PKR {(monthlyIncome / 1000).toFixed(0)}k
+              </Typography>
+            </View>
+            <View style={styles.insetCard}>
+              <Typography
+                variant="caption"
+                color="#666"
+                style={{ fontSize: 10 }}
+              >
+                EXPENSES
+              </Typography>
+              <Typography
+                variant="body"
+                weight="700"
+                color="#FB7185"
+                style={{ marginTop: 4 }}
+              >
+                PKR {(monthlyExpenses / 1000).toFixed(0)}k
+              </Typography>
+            </View>
+            <View style={styles.insetCard}>
+              <Typography
+                variant="caption"
+                color="#666"
+                style={{ fontSize: 10 }}
+              >
+                SAVINGS
+              </Typography>
+              <Typography
+                variant="body"
+                weight="700"
+                color="#2DD4BF"
+                style={{ marginTop: 4 }}
+              >
+                PKR {(Math.max(0, monthlySavings) / 1000).toFixed(0)}k
+              </Typography>
+            </View>
           </View>
         </Card>
+
+        <View style={styles.quickActionsRow}>
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('AddExpense')}
+          >
+            <View style={[styles.actionIconBg, { backgroundColor: '#E0F2FE' }]}>
+              <Feather name="plus" size={24} color="#0EA5E9" />
+            </View>
+            <Typography
+              variant="caption"
+              weight="700"
+              style={{ marginTop: 12 }}
+            >
+              ADD
+            </Typography>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('Portfolio')}
+          >
+            <View style={[styles.actionIconBg, { backgroundColor: '#DCFCE7' }]}>
+              <Feather name="briefcase" size={24} color="#22C55E" />
+            </View>
+            <Typography
+              variant="caption"
+              weight="700"
+              style={{ marginTop: 12 }}
+            >
+              PORTFOLIO
+            </Typography>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() =>
+              showToast('AI Assistant is ready to help.', 'info', 'AI ASK')
+            }
+          >
+            <View style={[styles.actionIconBg, { backgroundColor: '#F3E8FF' }]}>
+              <Feather name="message-square" size={24} color="#A855F7" />
+            </View>
+            <Typography
+              variant="caption"
+              weight="700"
+              style={{ marginTop: 12 }}
+            >
+              AI ASK
+            </Typography>
+          </TouchableOpacity>
+        </View>
 
         {accounts.length > 0 && (
           <View style={styles.linkedSection}>
@@ -248,58 +348,7 @@ const DashboardScreen = () => {
           </View>
         )}
 
-        <View style={styles.quickActions}>
-          <TouchableOpacity
-            style={styles.actionItem}
-            onPress={() => navigation.navigate('AddExpense')}
-          >
-            <View style={styles.iconCircle}>
-              <Feather name="plus" size={20} />
-            </View>
-            <Typography variant="body" weight="600" style={styles.actionText}>
-              Add Expense
-            </Typography>
-            <Feather name="chevron-right" size={20} color="#CCC" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.actionItem}
-            onPress={() => navigation.navigate('Portfolio')}
-          >
-            <View style={styles.iconCircle}>
-              <Feather name="pie-chart" size={20} />
-            </View>
-            <Typography variant="body" weight="600" style={styles.actionText}>
-              View Portfolio
-            </Typography>
-            <Feather name="chevron-right" size={20} color="#CCC" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionItem, styles.aiAdvisor]}
-            onPress={() =>
-              showToast(
-                'Ask our AI any financial question for immediate consultation.',
-                'info',
-                'AI Advisor',
-              )
-            }
-          >
-            <View style={[styles.iconCircle, { backgroundColor: '#334155' }]}>
-              <Feather name="zap" size={20} color="#FFF" />
-            </View>
-            <Typography
-              variant="body"
-              weight="600"
-              color="#FFF"
-              style={styles.actionText}
-            >
-              Ask AI Advisor
-            </Typography>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.summaryGrid}>
+        {/* <View style={styles.summaryGrid}>
           <Card style={styles.summaryItem}>
             <Typography variant="caption" color={colors.text.muted}>
               Monthly Income
@@ -322,43 +371,78 @@ const DashboardScreen = () => {
               Current Month
             </Typography>
           </Card>
-        </View>
+        </View> */}
 
         <Card style={styles.chartCard}>
           <View style={styles.chartHeader}>
-            <Typography variant="h2">Monthly Spending</Typography>
+            <Typography variant="h2" weight="600">
+              Spending Trends
+            </Typography>
             <View style={styles.chartDots}>
               <View style={[styles.chartDot, { backgroundColor: '#000' }]} />
               <View style={styles.chartDot} />
             </View>
           </View>
-          <View style={styles.barChartMock}>
-            {historyData.map((h, i) => {
-              const barHeight = (h.amount / maxSpending) * 120;
-              const isCurrentMonth = i === 5;
 
-              return (
-                <View key={i} style={styles.barCol}>
-                  <View
-                    style={[
-                      styles.bar,
-                      {
-                        height: Math.max(barHeight, 5), // Min visible height
-                        backgroundColor: isCurrentMonth
-                          ? '#000'
-                          : h.amount > 0
-                          ? '#0047AB'
-                          : '#EEE',
-                      },
-                    ]}
-                  />
-                  <Typography variant="caption" style={{ marginTop: 8 }}>
-                    {h.label}
-                  </Typography>
-                </View>
-              );
-            })}
+          {/* New SVG Line Chart Mockup */}
+          <View style={styles.lineChartContainer}>
+            <Svg height="160" width="100%" viewBox="0 0 300 120">
+              <Defs>
+                <LinearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor="#22C55E" stopOpacity="0.2" />
+                  <Stop offset="1" stopColor="#22C55E" stopOpacity="0" />
+                </LinearGradient>
+              </Defs>
+              {/* Area path */}
+              <Path
+                d="M 0 120 Q 75 110, 150 70 T 300 30 V 120 H 0 Z"
+                fill="url(#grad)"
+              />
+              {/* Line path */}
+              <Path
+                d="M 0 120 Q 75 110, 150 70 T 300 30"
+                fill="none"
+                stroke="#22C55E"
+                strokeWidth="3"
+              />
+              {/* Endpoint Tooltip Mock */}
+              <Circle cx="260" cy="40" r="4" fill="#22C55E" />
+              <View style={styles.tooltipBox}>
+                <Typography
+                  variant="caption"
+                  weight="700"
+                  style={{ fontSize: 10 }}
+                >
+                  PKR 80.60k
+                </Typography>
+              </View>
+            </Svg>
           </View>
+
+          {/* Time Range Selectors */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.rangeSelector}
+          >
+            {['3D', '7D', '15D', '1M', '3M', '6M', '1Y'].map(range => (
+              <TouchableOpacity
+                key={range}
+                style={[
+                  styles.rangeBtn,
+                  range === '15D' && styles.rangeBtnActive,
+                ]}
+              >
+                <Typography
+                  variant="caption"
+                  weight="700"
+                  color={range === '15D' ? '#FFF' : '#AAA'}
+                >
+                  {range}
+                </Typography>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </Card>
       </ScrollView>
     </View>
@@ -384,7 +468,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 24,
     paddingTop: 24,
-    paddingBottom: 40,
+    paddingBottom: 140,
   },
   greeting: {
     marginVertical: 24,
@@ -520,6 +604,134 @@ const styles = StyleSheet.create({
   bar: {
     width: '100%',
     borderRadius: 10,
+  },
+  // Redesign Styles
+  topHeader: {
+    marginTop: 10,
+    marginBottom: 30,
+  },
+  dashboardTitle: {
+    fontSize: 34,
+    lineHeight: 40,
+    marginTop: 4,
+  },
+  premiumCard: {
+    backgroundColor: '#000',
+    padding: 32,
+    borderRadius: 40,
+    marginBottom: 30,
+  },
+  premiumBalanceText: {
+    fontSize: 36,
+    lineHeight: 44,
+  },
+  progressCircleWrapper: {
+    width: 70,
+    height: 70,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  progressCircleOuter: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 6,
+    borderColor: '#1A1A1A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  progressCircleInner: {
+    position: 'absolute',
+    top: -6,
+    left: -6,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 6,
+    borderColor: 'transparent',
+    borderTopColor: '#00FF94',
+    borderRightColor: '#00FF94',
+    transform: [{ rotate: '45deg' }],
+  },
+  progressPercent: {
+    color: '#333',
+    fontSize: 10,
+    position: 'absolute',
+  },
+  rowBetween: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  // New Spending Chart Styles
+  lineChartContainer: {
+    height: 160,
+    marginTop: 10,
+    position: 'relative',
+  },
+  tooltipBox: {
+    position: 'absolute',
+    top: 10,
+    right: 30,
+    backgroundColor: '#FFF',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  rangeSelector: {
+    marginTop: 20,
+    flexDirection: 'row',
+  },
+  rangeBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    marginRight: 8,
+  },
+  rangeBtnActive: {
+    backgroundColor: '#2563EB',
+  },
+  insetCard: {
+    backgroundColor: '#111',
+    width: '31%',
+    padding: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#222',
+  },
+  quickActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 32,
+  },
+  actionCard: {
+    backgroundColor: '#FFF',
+    width: '31%',
+    aspectRatio: 1,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  actionIconBg: {
+    width: 50,
+    height: 50,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

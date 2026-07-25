@@ -187,7 +187,6 @@ const ExpensesScreen = () => {
         </View>
       )}
 
-      <View style={{ height: 100 }} />
     </ScrollView>
   );
 };
@@ -264,6 +263,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 16,
+    paddingBottom: 140,
   },
   header: {
     marginBottom: 24,

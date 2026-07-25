@@ -344,8 +344,7 @@ const ProfileScreen = () => {
           />
         </TouchableOpacity>
 
-        <View style={{ height: 100 }} />
-      </ScrollView>
+    </ScrollView>
 
       {/* Photo Bottom Sheet Modal */}
       <Modal
@@ -479,6 +478,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 24,
+    paddingBottom: 140,
   },
   headerArea: {
     alignItems: 'center',

@@ -52,15 +52,9 @@ const AddExpenseScreen = () => {
         createdAt: Date.now(),
       };
 
-      const savedTx = await saveTransaction(selectedAccountId, txData);
+      await saveTransaction(selectedAccountId, txData);
       
-      // Update Redux
-      dispatch(addTransaction(savedTx));
-      
-      const newBalance = (selectedAccount?.balance || 0) - numAmount;
-      dispatch(updateAccountBalance({ accountId: selectedAccountId, balance: newBalance }));
-
-      showToast('Expense recorded successfully.', 'success', 'Success');
+      showToast('Expense recorded successfully!', 'success', 'Success');
       navigation.goBack();
     } catch (e) {
       console.error('Save expense error:', e);

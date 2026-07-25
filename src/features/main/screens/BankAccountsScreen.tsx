@@ -101,7 +101,6 @@ const BankAccountsScreen = () => {
           onPress: async () => {
             try {
               await deleteAccount(account.id);
-              dispatch(removeAccount(account.id));
               showToast('Account removed', 'success', 'Done');
             } catch (e) {
               showToast('Failed to remove account', 'error', 'Error');
@@ -134,7 +133,6 @@ const BankAccountsScreen = () => {
     setSaving(true);
     try {
       await updateBalance(selectedAccount.id, parsed);
-      dispatch(updateAccountBalance({ accountId: selectedAccount.id, balance: parsed }));
       showToast('Balance updated', 'success', 'Done');
       closeBalanceModal();
     } catch (e) {
