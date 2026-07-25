@@ -1,170 +1,32 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React from 'react';
 import {
   View,
-  StyleSheet,
+  Text,
   ScrollView,
   TouchableOpacity,
-  Modal,
+  StyleSheet,
+  StatusBar,
   Image,
-  Dimensions,
-  Platform,
-  PermissionsAndroid,
+  DeviceEventEmitter,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { Typography, Card } from '../../../components';
-import { colors } from '../../../theme/colors';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../../context/ThemeContext';
+import { useAppSelector } from '../../../store/hooks';
 import { useToast } from '../../../context/ToastContext';
-import {
-  signOut,
-  getUserProfile,
-  updateProfilePhoto,
-  deleteProfilePhoto,
-} from '../../../services/authService';
-import auth from '@react-native-firebase/auth';
-import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
-import { useAppDispatch, useAppSelector } from '../../../store/hooks';
-import { updatePhoto } from '../../../store/slices/userSlice';
 
-const { width } = Dimensions.get('window');
-
-const ProfileScreen = () => {
+export const ProfileScreen = () => {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const { showToast } = useToast();
-  const dispatch = useAppDispatch();
+
   const profile = useAppSelector(state => state.user.profile);
 
-  const [showPhotoSheet, setShowPhotoSheet] = useState(false);
-  const [userName, setUserName] = useState(profile?.name || '');
-  const [userEmail, setUserEmail] = useState(profile?.email || '');
-  const [photoURL, setPhotoURL] = useState<string | null>(
-    profile?.photoURL || null,
-  );
-  const [isUploading, setIsUploading] = useState(false);
-
-  const loadUserData = useCallback(async () => {
-    const user = auth().currentUser;
-    if (user) {
-      setUserName(user.displayName || 'User');
-      setUserEmail(user.email || '');
-      try {
-        const profile = await getUserProfile(user.uid);
-        if (profile?.photoURL) {
-          setPhotoURL(profile.photoURL);
-        } else {
-          setPhotoURL(user.photoURL || null);
-        }
-        if (profile?.name) setUserName(profile.name);
-      } catch (e) {
-        // Use auth data as fallback
-      }
-    }
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadUserData();
-    }, [loadUserData]),
-  );
-
-  const handleLogout = async () => {
-    try {
-      await signOut();
-      showToast('You have been signed out.', 'success', 'Logout');
-    } catch (error) {
-      showToast('Failed to sign out. Please try again.', 'error', 'Logout');
-    }
-  };
-
-  const handleUploadPhoto = () => {
-    setShowPhotoSheet(false);
-    setTimeout(async () => {
-      try {
-        const result = await launchImageLibrary({
-          mediaType: 'photo',
-          quality: 0.5,
-          maxWidth: 400,
-          maxHeight: 400,
-          includeBase64: true,
-        });
-
-        if (result.didCancel) return;
-        if (result.errorCode) {
-          showToast('Failed to pick image.', 'error');
-          return;
-        }
-
-        const asset = result.assets?.[0];
-        if (asset?.base64) {
-          setIsUploading(true);
-          const dataUri = `data:${asset.type || 'image/jpeg'};base64,${
-            asset.base64
-          }`;
-          await updateProfilePhoto(dataUri);
-          setPhotoURL(dataUri);
-          dispatch(updatePhoto(dataUri));
-          showToast('Profile photo updated!', 'success');
-          setIsUploading(false);
-        }
-      } catch (error) {
-        setIsUploading(false);
-        showToast('Failed to update profile photo.', 'error');
-      }
-    }, 500);
-  };
-
-  const handleTakePhoto = () => {
-    setShowPhotoSheet(false);
-    setTimeout(async () => {
-      try {
-        const result = await launchCamera({
-          mediaType: 'photo',
-          quality: 0.5,
-          maxWidth: 400,
-          maxHeight: 400,
-          includeBase64: true,
-        });
-
-        if (result.didCancel) return;
-        if (result.errorCode) {
-          showToast('Failed to take photo.', 'error');
-          return;
-        }
-
-        const asset = result.assets?.[0];
-        if (asset?.base64) {
-          setIsUploading(true);
-          const dataUri = `data:${asset.type || 'image/jpeg'};base64,${
-            asset.base64
-          }`;
-          await updateProfilePhoto(dataUri);
-          setPhotoURL(dataUri);
-          dispatch(updatePhoto(dataUri));
-          showToast('Profile photo updated!', 'success');
-          setIsUploading(false);
-        }
-      } catch (error) {
-        setIsUploading(false);
-        showToast('Failed to update profile photo.', 'error');
-      }
-    }, 500);
-  };
-
-  const handleDeletePhoto = async () => {
-    setShowPhotoSheet(false);
-    try {
-      await deleteProfilePhoto();
-      setPhotoURL(null);
-      dispatch(updatePhoto(null));
-      showToast('Profile photo removed.', 'success');
-    } catch (error) {
-      showToast('Failed to remove profile photo.', 'error');
-    }
-  };
-
   const getInitials = () => {
-    if (!userName) return '?';
-    return userName
+    if (!profile?.name) return 'TA';
+    return profile.name
       .split(' ')
       .map(n => n[0])
       .join('')
@@ -173,458 +35,545 @@ const ProfileScreen = () => {
   };
 
   return (
-    <>
-      <ScrollView
-        style={styles.container}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
-      >
-        {/* Profile Header */}
-        <View style={styles.headerArea}>
-          <View style={styles.avatarContainer}>
-            {photoURL ? (
-              <Image source={{ uri: photoURL }} style={styles.avatarImage} />
-            ) : (
-              <View style={styles.avatarMock}>
-                <Typography
-                  variant="h1"
-                  weight="700"
-                  color="#FFF"
-                  style={{ fontSize: 32 }}
-                >
-                  {getInitials()}
-                </Typography>
-              </View>
-            )}
-            <TouchableOpacity
-              style={styles.editBadge}
-              onPress={() => setShowPhotoSheet(true)}
-            >
-              <Feather name="edit-2" size={14} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-          <Typography
-            variant="caption"
-            weight="700"
-            color="#AAA"
-            style={{ letterSpacing: 1, marginTop: 16 }}
-          >
-            PREMIUM ACCOUNT
-          </Typography>
-          <Typography
-            variant="h1"
-            weight="700"
-            style={{ marginTop: 4, fontSize: 32 }}
-          >
-            {userName}
-          </Typography>
-          <Typography variant="body" color="#666" style={{ marginTop: 4 }}>
-            {userEmail}
-          </Typography>
+    <View style={[styles.container, { backgroundColor: theme.BG }]}>
+      <StatusBar
+        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.BG}
+      />
 
-          <View style={styles.badgesRow}>
-            <View style={styles.badge}>
-              <Feather name="check-circle" size={14} color="#000" />
-              <Typography
-                variant="caption"
-                weight="700"
-                style={{ marginLeft: 6 }}
-              >
-                Identity Verified
-              </Typography>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 110,
+          },
+        ]}
+      >
+        {/* Top Header */}
+        <View style={styles.headerRow}>
+          <View>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => navigation.goBack()}
+              style={styles.backBtn}
+            >
+              <Feather name="chevron-left" size={16} color={theme.MUTED} />
+              <Text style={[styles.backText, { color: theme.MUTED }]}>
+                Account & Preferences
+              </Text>
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+              My Profile
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('EditProfile')}
+            style={[styles.editHeaderBtn, { backgroundColor: theme.CARD }]}
+          >
+            <Feather name="edit-3" size={15} color={theme.TEXT} />
+            <Text style={[styles.editHeaderText, { color: theme.TEXT }]}>
+              Edit
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Hero User Profile Card */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.heroCard, { backgroundColor: theme.CARD }]}>
+            <View style={styles.profileRow}>
+              <View style={styles.avatarWrap}>
+                <View
+                  style={[
+                    styles.avatarBorder,
+                    { borderColor: theme.ACTIVE, backgroundColor: theme.MODAL },
+                  ]}
+                >
+                  {profile?.photoURL ? (
+                    <Image
+                      source={{ uri: profile.photoURL }}
+                      style={styles.avatarImg}
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.avatarImg,
+                        styles.initialsAvatar,
+                        { backgroundColor: theme.MODAL },
+                      ]}
+                    >
+                      <Text style={[styles.initialsText, { color: theme.TEXT }]}>
+                        {getInitials()}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <View
+                  style={[
+                    styles.activeBadge,
+                    { backgroundColor: theme.GREEN, borderColor: theme.CARD },
+                  ]}
+                />
+              </View>
+
+              <View style={styles.profileMeta}>
+                <Text style={[styles.profileName, { color: theme.TEXT }]}>
+                  {profile?.name || 'Talha Arshad'}
+                </Text>
+                <Text style={[styles.profileEmail, { color: theme.MUTED }]}>
+                  {profile?.email || 'talhaarshad010@gmail.com'}
+                </Text>
+
+                <View
+                  style={[
+                    styles.tierBadge,
+                    { backgroundColor: `${theme.ACTIVE}15` },
+                  ]}
+                >
+                  <Feather name="award" size={12} color="#FFD700" />
+                  <Text style={[styles.tierText, { color: theme.ACTIVE }]}>
+                    PRO MEMBER — TIER 1
+                  </Text>
+                </View>
+              </View>
             </View>
-            <View style={styles.badge}>
-              <Feather name="award" size={14} color="#0047AB" />
-              <Typography
-                variant="caption"
-                weight="700"
-                style={{ marginLeft: 6 }}
+
+            {/* Quick Metrics Divider Row */}
+            <View
+              style={[
+                styles.metricsRow,
+                { borderTopColor: theme.BORDER },
+              ]}
+            >
+              <View style={styles.metricCol}>
+                <Text style={[styles.metricLabel, { color: theme.MUTED }]}>
+                  MEMBER SINCE
+                </Text>
+                <Text style={[styles.metricValue, { color: theme.TEXT }]}>
+                  Jan 2024
+                </Text>
+              </View>
+
+              <View
+                style={[
+                  styles.metricColBordered,
+                  { borderLeftColor: theme.BORDER },
+                ]}
               >
-                Tier 1 Investor
-              </Typography>
+                <Text style={[styles.metricLabel, { color: theme.MUTED }]}>
+                  ACCOUNTS
+                </Text>
+                <Text style={[styles.metricValue, { color: theme.TEXT }]}>
+                  3 Banks Linked
+                </Text>
+              </View>
+
+              <View
+                style={[
+                  styles.metricColBordered,
+                  { borderLeftColor: theme.BORDER },
+                ]}
+              >
+                <Text style={[styles.metricLabel, { color: theme.MUTED }]}>
+                  2FA SECURITY
+                </Text>
+                <View style={styles.secVerifiedRow}>
+                  <Feather name="check-circle" size={12} color={theme.GREEN} />
+                  <Text
+                    style={[styles.metricValue, { color: theme.GREEN }]}
+                  >
+                    Active
+                  </Text>
+                </View>
+              </View>
             </View>
           </View>
         </View>
 
-        {/* Stats Card */}
-        <Card style={styles.statsCard}>
-          <Typography variant="caption" color="#AAA">
-            Monthly Income
-          </Typography>
-          <Typography
-            variant="h1"
-            color="#FFF"
-            style={{ fontSize: 28, marginTop: 4 }}
-          >
-            $12,450.00
-          </Typography>
+        {/* Financial Snapshot Card */}
+        <View style={styles.sectionMargin}>
+          <Text style={[styles.sectionTitle, { color: theme.MUTED }]}>
+            FINANCIAL STANDING
+          </Text>
+          <View style={[styles.card, { backgroundColor: theme.CARD }]}>
+            <View style={styles.cardHeaderRow}>
+              <View>
+                <Text style={[styles.cardSubText, { color: theme.MUTED }]}>
+                  Total Portfolio Net Worth
+                </Text>
+                <Text style={[styles.netWorthAmount, { color: theme.TEXT }]}>
+                  PKR 5,740,000
+                </Text>
+              </View>
 
-          <Typography variant="caption" color="#AAA" style={{ marginTop: 24 }}>
-            Risk Tolerance
-          </Typography>
-          <View
-            style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}
-          >
-            <Typography
-              variant="body"
-              weight="700"
-              color="#FFF"
-              style={{ marginRight: 12 }}
-            >
-              Aggressive
-            </Typography>
-            <View style={{ flexDirection: 'row' }}>
-              {[1, 2, 3].map(i => (
-                <View
-                  key={i}
-                  style={[styles.riskBar, { backgroundColor: '#FFF' }]}
-                />
-              ))}
-              <View style={[styles.riskBar, { backgroundColor: '#333' }]} />
+              <View
+                style={[
+                  styles.scoreBadge,
+                  { backgroundColor: `${theme.GREEN}15` },
+                ]}
+              >
+                <Text style={[styles.scoreText, { color: theme.GREEN }]}>
+                  Credit 784 — Excellent
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.snapshotGrid}>
+              <View style={[styles.snapBox, { backgroundColor: theme.MODAL }]}>
+                <Text style={[styles.snapLabel, { color: theme.MUTED }]}>
+                  MONTHLY INCOME
+                </Text>
+                <Text style={[styles.snapVal, { color: theme.GREEN }]}>
+                  PKR 150,000
+                </Text>
+              </View>
+
+              <View style={[styles.snapBox, { backgroundColor: theme.MODAL }]}>
+                <Text style={[styles.snapLabel, { color: theme.MUTED }]}>
+                  MONTHLY BURN RATE
+                </Text>
+                <Text style={[styles.snapVal, { color: theme.TEXT }]}>
+                  PKR 80,000 (53%)
+                </Text>
+              </View>
             </View>
           </View>
-        </Card>
+        </View>
 
-        {/* Settings List */}
-        <Typography
-          variant="caption"
-          weight="700"
-          color="#999"
-          style={{ letterSpacing: 1, marginLeft: 8, marginBottom: 8 }}
-        >
-          ACCOUNT SETTINGS
-        </Typography>
-
-        <SettingRow
-          icon="user"
-          title="Edit Profile"
-          subtitle="Update your personal details and bio"
-          onPress={() => navigation.navigate('EditProfile')}
-        />
-        <SettingRow
-          icon="shield"
-          title="Security"
-          subtitle="2FA, Password changes, and Login sessions"
-          onPress={() => navigation.navigate('Security')}
-        />
-        <SettingRow
-          icon="bell"
-          title="Notifications"
-          subtitle="Configure alerts and daily summaries"
-          badge="3 NEW"
-          onPress={() =>
-            showToast(
-              'Configure alerts and daily summaries.',
-              'info',
-              'Notifications',
-            )
-          }
-        />
-
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-          <View style={styles.logoutIconBox}>
-            <Feather name="log-out" size={18} color={colors.accent.errorText} />
-          </View>
-          <View style={{ flex: 1, marginLeft: 16 }}>
-            <Typography
-              variant="body"
-              weight="700"
-              color={colors.accent.errorText}
-            >
-              Logout
-            </Typography>
-            <Typography variant="caption" color="#E57373">
-              Securely sign out of your account
-            </Typography>
-          </View>
-          <Feather
-            name="arrow-right"
-            size={20}
-            color={colors.accent.errorText}
-          />
-        </TouchableOpacity>
-
-    </ScrollView>
-
-      {/* Photo Bottom Sheet Modal */}
-      <Modal
-        visible={showPhotoSheet}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowPhotoSheet(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowPhotoSheet(false)}
-        >
-          <View style={styles.bottomSheet}>
-            <View style={styles.sheetHandle} />
-            <Typography variant="h2" weight="700" style={{ marginBottom: 24 }}>
-              Profile Photo
-            </Typography>
-
-            <TouchableOpacity
-              style={styles.sheetOption}
-              onPress={handleTakePhoto}
-            >
-              <View style={styles.sheetIconBox}>
-                <Feather name="camera" size={20} color="#000" />
-              </View>
-              <Typography
-                variant="body"
-                weight="600"
-                style={{ marginLeft: 16 }}
-              >
-                Take Photo
-              </Typography>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.sheetOption}
-              onPress={handleUploadPhoto}
-            >
-              <View style={styles.sheetIconBox}>
-                <Feather name="image" size={20} color="#000" />
-              </View>
-              <Typography
-                variant="body"
-                weight="600"
-                style={{ marginLeft: 16 }}
-              >
-                Choose from Gallery
-              </Typography>
-            </TouchableOpacity>
-
-            {photoURL && (
+        {/* Navigation Shortcuts List */}
+        <View style={styles.sectionMargin}>
+          <Text style={[styles.sectionTitle, { color: theme.MUTED }]}>
+            ACCOUNT MANAGEMENT
+          </Text>
+          <View style={[styles.listCard, { backgroundColor: theme.CARD }]}>
+            {[
+              {
+                icon: 'user',
+                label: 'Personal Information',
+                sub: 'Name, Email, Phone & Avatar',
+                screen: 'EditProfile',
+              },
+              {
+                icon: 'shield',
+                label: 'Security & 2FA Authentication',
+                sub: 'Password, Biometrics & Session management',
+                screen: 'Security',
+              },
+              {
+                icon: 'credit-card',
+                label: 'Bank Accounts & Payment Cards',
+                sub: 'Meezan, HBL, Bank Alfalah linked',
+                screen: 'BankAccounts',
+              },
+              {
+                icon: 'pie-chart',
+                label: 'Budget Envelopes & Limits',
+                sub: 'Category caps, monthly targets',
+                screen: 'BudgetPlanner',
+              },
+              {
+                icon: 'settings',
+                label: 'App Preferences & Tax Bracket',
+                sub: 'Theme, FBR Tax Rates, PRA Province',
+                screen: 'Settings',
+              },
+              {
+                icon: 'bell',
+                label: 'Notifications & Alert Rules',
+                sub: 'Spending alerts, price triggers',
+                screen: 'Notifications',
+              },
+            ].map((item, idx, arr) => (
               <TouchableOpacity
-                style={styles.sheetOption}
-                onPress={handleDeletePhoto}
+                key={item.label}
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate(item.screen)}
+                style={[
+                  styles.menuRowItem,
+                  idx < arr.length - 1 && {
+                    borderBottomWidth: 1,
+                    borderBottomColor: theme.BORDER,
+                  },
+                ]}
               >
                 <View
-                  style={[styles.sheetIconBox, { backgroundColor: '#FFEBEE' }]}
+                  style={[
+                    styles.menuIconBox,
+                    { backgroundColor: theme.MODAL },
+                  ]}
                 >
-                  <Feather
-                    name="trash-2"
-                    size={20}
-                    color={colors.accent.errorText}
-                  />
+                  <Feather name={item.icon} size={18} color={theme.TEXT} />
                 </View>
-                <Typography
-                  variant="body"
-                  weight="600"
-                  color={colors.accent.errorText}
-                  style={{ marginLeft: 16 }}
-                >
-                  Delete Photo
-                </Typography>
-              </TouchableOpacity>
-            )}
 
-            <TouchableOpacity
-              style={styles.sheetCancel}
-              onPress={() => setShowPhotoSheet(false)}
-            >
-              <Typography variant="body" weight="700" color="#666">
-                Cancel
-              </Typography>
-            </TouchableOpacity>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.menuItemTitle, { color: theme.TEXT }]}>
+                    {item.label}
+                  </Text>
+                  <Text style={[styles.menuItemSub, { color: theme.MUTED }]}>
+                    {item.sub}
+                  </Text>
+                </View>
+
+                <Feather name="chevron-right" size={16} color={theme.MUTED} />
+              </TouchableOpacity>
+            ))}
           </View>
+        </View>
+
+        {/* Sign Out Button */}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => {
+            showToast('Signed out successfully', 'info');
+            DeviceEventEmitter.emit('LOGOUT');
+          }}
+          style={[styles.signOutBtn, { backgroundColor: theme.CARD }]}
+        >
+          <Feather name="log-out" size={18} color={theme.RED} />
+          <Text style={[styles.signOutText, { color: theme.RED }]}>
+            Sign Out of Account
+          </Text>
         </TouchableOpacity>
-      </Modal>
-    </>
+      </ScrollView>
+    </View>
   );
 };
 
-const SettingRow = ({ icon, title, subtitle, badge, onPress }: any) => (
-  <TouchableOpacity style={styles.settingRow} onPress={onPress}>
-    <View style={styles.iconBox}>
-      <Feather name={icon} size={20} color="#000" />
-    </View>
-    <View style={{ flex: 1, marginLeft: 16 }}>
-      <Typography variant="body" weight="700">
-        {title}
-      </Typography>
-      <Typography variant="caption" color="#666" style={{ marginTop: 2 }}>
-        {subtitle}
-      </Typography>
-    </View>
-    {badge && (
-      <View style={styles.notificationBadge}>
-        <Typography
-          variant="caption"
-          weight="700"
-          color="#FFF"
-          style={{ fontSize: 10, textAlign: 'center' }}
-        >
-          3{'\n'}NEW
-        </Typography>
-      </View>
-    )}
-    <Feather
-      name="chevron-right"
-      size={20}
-      color="#CCC"
-      style={{ marginLeft: 12 }}
-    />
-  </TouchableOpacity>
-);
+export default ProfileScreen;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FB',
   },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 140,
+  scrollContent: {
+    paddingHorizontal: 16,
   },
-  headerArea: {
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 16,
+    paddingHorizontal: 4,
   },
-  avatarContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#FFCCBC',
-    justifyContent: 'center',
+  backBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
   },
-  avatarImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+  backText: {
+    fontSize: 12,
   },
-  avatarMock: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#000',
-    justifyContent: 'center',
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -1.2,
+  },
+  editHeaderBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 100,
   },
-  editBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#000',
-    justifyContent: 'center',
+  editHeaderText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sectionMargin: {
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  heroCard: {
+    borderRadius: 28,
+    padding: 20,
+  },
+  profileRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 18,
+  },
+  avatarWrap: {
+    position: 'relative',
+    marginRight: 16,
+  },
+  avatarBorder: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    padding: 3,
     borderWidth: 2,
-    borderColor: '#F8F9FB',
   },
-  badgesRow: {
-    flexDirection: 'row',
-    marginTop: 16,
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F0F0F0',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginHorizontal: 4,
-  },
-  statsCard: {
-    backgroundColor: '#000',
-    padding: 32,
+  avatarImg: {
+    width: '100%',
+    height: '100%',
     borderRadius: 30,
-    marginBottom: 32,
   },
-  riskBar: {
-    width: 24,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 4,
-  },
-  settingRow: {
-    flexDirection: 'row',
+  initialsAvatar: {
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    padding: 20,
-    borderRadius: 24,
-    marginBottom: 12,
-  },
-  iconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#FFF',
     justifyContent: 'center',
-    alignItems: 'center',
   },
-  notificationBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.accent.errorText,
-    justifyContent: 'center',
-    alignItems: 'center',
+  initialsText: {
+    fontSize: 20,
+    fontWeight: '800',
   },
-  logoutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFEBEE',
-    padding: 20,
-    borderRadius: 24,
-    marginTop: 8,
+  activeBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2.5,
   },
-  logoutIconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#FFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  // Bottom Sheet Styles
-  modalOverlay: {
+  profileMeta: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
   },
-  bottomSheet: {
-    backgroundColor: '#FFF',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 40,
+  profileName: {
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 2,
   },
-  sheetHandle: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#E0E0E0',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 20,
+  profileEmail: {
+    fontSize: 12,
+    marginBottom: 8,
   },
-  sheetOption: {
+  tierBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
+    gap: 5,
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 100,
   },
-  sheetIconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
+  tierText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
   },
-  sheetCancel: {
-    alignItems: 'center',
-    paddingVertical: 16,
-    marginTop: 8,
+  metricsRow: {
+    flexDirection: 'row',
+    paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+  },
+  metricCol: {
+    flex: 1,
+  },
+  metricColBordered: {
+    flex: 1,
+    paddingLeft: 12,
+    borderLeftWidth: 1,
+  },
+  metricLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 3,
+  },
+  metricValue: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  secVerifiedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  card: {
+    borderRadius: 24,
+    padding: 20,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  cardSubText: {
+    fontSize: 11,
+    marginBottom: 2,
+  },
+  netWorthAmount: {
+    fontSize: 26,
+    fontWeight: '800',
+    letterSpacing: -1,
+  },
+  scoreBadge: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 100,
+  },
+  scoreText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  snapshotGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  snapBox: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 16,
+  },
+  snapLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  snapVal: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  listCard: {
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  menuRowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 14,
+  },
+  menuIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuItemTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  menuItemSub: {
+    fontSize: 11,
+  },
+  signOutBtn: {
+    height: 52,
+    borderRadius: 26,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 8,
+  },
+  signOutText: {
+    fontSize: 14,
+    fontWeight: '800',
   },
 });
-
-export default ProfileScreen;

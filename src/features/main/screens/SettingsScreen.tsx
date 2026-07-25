@@ -1,248 +1,687 @@
-import React from 'react';
-import {View, StyleSheet, ScrollView, TouchableOpacity, Switch, SafeAreaView} from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  Animated,
+  StyleSheet,
+  StatusBar,
+} from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
-import {Typography, Card} from '../../../components';
-import {useNavigation} from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 
-const SettingsScreen = () => {
-  const navigation = useNavigation<any>();
-  const [isDarkMode, setIsDarkMode] = React.useState(false);
-  const { showToast } = useToast();
+const BRACKETS = [
+  { label: 'Up to 600K', range: '≤ PKR 6,00,000', rate: 'Exempt' },
+  { label: '600K – 1.2M', range: 'PKR 6,00,001–12,00,000', rate: '5%' },
+  { label: '1.2M – 2.2M', range: 'PKR 12,00,001–22,00,000', rate: '15%' },
+  { label: '2.2M – 3.2M', range: 'PKR 22,00,001–32,00,000', rate: '25%' },
+  { label: '3.2M – 4.1M', range: 'PKR 32,00,001–41,00,000', rate: '30%' },
+  { label: 'Above 4.1M', range: '> PKR 41,00,000', rate: '35%' },
+];
+
+const PROVINCES = [
+  { id: 'punjab', label: 'Punjab – PRA' },
+  { id: 'sindh', label: 'Sindh – SRB' },
+  { id: 'kpk', label: 'KPK – KPRA' },
+  { id: 'balochistan', label: 'Balochistan – BRA' },
+];
+
+function PillToggle({
+  options,
+  value,
+  onChange,
+}: {
+  options: { id: string; label: string }[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const { theme } = useTheme();
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <Typography variant="h1" weight="700" style={{fontSize: 48}}>Settings</Typography>
-          <Typography variant="body" style={styles.subtitle}>
-            Configure your financial workspace and security protocols.
-          </Typography>
+    <View style={[styles.pillToggleContainer, { backgroundColor: theme.CARD }]}>
+      {options.map(o => {
+        const active = o.id === value;
+        return (
+          <TouchableOpacity
+            key={o.id}
+            activeOpacity={0.8}
+            onPress={() => onChange(o.id)}
+            style={[
+              styles.pillOptionBtn,
+              {
+                backgroundColor: active ? theme.TEXT : 'transparent',
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.pillOptionText,
+                {
+                  color: active ? theme.BG : theme.MUTED,
+                },
+              ]}
+            >
+              {o.label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+  const { theme } = useTheme();
+  const animX = useRef(new Animated.Value(on ? 20 : 2)).current;
+
+  useEffect(() => {
+    Animated.spring(animX, {
+      toValue: on ? 20 : 2,
+      useNativeDriver: false,
+      stiffness: 300,
+      damping: 22,
+    }).start();
+  }, [on, animX]);
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={onToggle}
+      style={[
+        styles.toggleTrack,
+        {
+          backgroundColor: on ? theme.GREEN : theme.MODAL,
+        },
+      ]}
+    >
+      <Animated.View
+        style={[
+          styles.toggleThumb,
+          {
+            transform: [{ translateX: animX }],
+          },
+        ]}
+      />
+    </TouchableOpacity>
+  );
+}
+
+export const SettingsScreen = () => {
+  const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const { theme, toggle, setTheme } = useTheme();
+  const { showToast } = useToast();
+
+  const [fbr, setFbr] = useState<string>('filer');
+  const [province, setProvince] = useState<string>('punjab');
+  const [bracket, setBracket] = useState(2);
+  const [smsEnabled, setSmsEnabled] = useState(true);
+  const [isolatedMode, setIsolatedMode] = useState(false);
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.BG }]}>
+      <StatusBar
+        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.BG}
+      />
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 100,
+          },
+        ]}
+      >
+        {/* Header */}
+        <View style={styles.headerBox}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('MainTabs'))}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}
+          >
+            <Feather name="chevron-left" size={16} color={theme.MUTED} />
+            <Text style={[styles.subheadText, { color: theme.MUTED, marginBottom: 0 }]}>
+              Preferences
+            </Text>
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+            Settings
+          </Text>
         </View>
 
-        {/* Change Password Card */}
-        <TouchableOpacity onPress={() => navigation.navigate('ChangePassword')} activeOpacity={0.9}>
-          <Card style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={styles.iconCircle}>
-                <Feather name="lock" size={20} color="#000" />
-              </View>
-              <Feather name="arrow-up-right" size={24} color="#CCC" />
-            </View>
-            <Typography variant="h2" weight="700" style={{marginTop: 24}}>Change Password</Typography>
-            <Typography variant="body" color="#666" style={{marginTop: 8, lineHeight: 22}}>
-              Update your security credentials to keep your account safe.
-            </Typography>
-          </Card>
-        </TouchableOpacity>
+        {/* ── Display Mode State Controller ── */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.card, { backgroundColor: theme.CARD }]}>
+            <Text style={[styles.sectionTitle, { color: theme.MUTED }]}>
+              Display Mode
+            </Text>
 
-        {/* Notifications Card */}
-        <Card style={styles.card}>
-          <Feather name="bell" size={24} color="#000" />
-          <Typography variant="h2" weight="700" style={{marginTop: 24}}>Notification Preferences</Typography>
-          <Typography variant="body" color="#666" style={{marginTop: 8, lineHeight: 22}}>
-            Manage alerts for transactions, limits, and market updates.
-          </Typography>
-          <TouchableOpacity 
-            style={styles.configureBtn} 
-            onPress={() => showToast('Preferences configuration coming soon.', 'info', 'Notifications')}
-          >
-            <Typography variant="body" weight="700" color="#FFF">Configure</Typography>
-          </TouchableOpacity>
-        </Card>
-
-        {/* Export Card */}
-        <Card style={styles.card}>
-          <Feather name="layers" size={24} color="#000" />
-          <Typography variant="h2" weight="700" style={{marginTop: 24}}>Export Financial Data</Typography>
-          <Typography variant="body" color="#666" style={{marginTop: 8, lineHeight: 22}}>
-            Download your complete transaction history in CSV or PDF format.
-          </Typography>
-          <TouchableOpacity 
-            style={styles.exportLink}
-            onPress={() => showToast('Financial data export is being prepared.', 'info', 'Export')}
-          >
-            <Typography variant="body" weight="700" color="#000">Export now</Typography>
-            <Feather name="download" size={16} color="#000" style={{marginLeft: 8}} />
-          </TouchableOpacity>
-        </Card>
-
-        {/* App Settings Card */}
-        <Card style={styles.card}>
-          <View style={styles.appSettingsHeader}>
-            <Feather name="settings" size={20} color="#000" />
-            <Typography variant="h2" weight="700" style={{marginLeft: 12}}>App Settings</Typography>
-          </View>
-
-          {/* Display Mode */}
-          <View style={styles.settingItem}>
-            <View style={{flex: 1}}>
-              <Typography variant="body" weight="700">Display Mode</Typography>
-              <Typography variant="caption" color="#666" style={{marginTop: 4}}>Switch between Light and Dark interface</Typography>
-            </View>
-            <View style={styles.segmentControl}>
-              <TouchableOpacity 
-                style={[styles.segment, !isDarkMode && styles.segmentActive]} 
-                onPress={() => setIsDarkMode(false)}
+            <View style={styles.themeRow}>
+              {/* STARK LIGHT */}
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => setTheme(false)}
+                style={[
+                  styles.themeCardBtn,
+                  {
+                    borderColor: !theme.isDark ? theme.ACTIVE : theme.BORDER,
+                    backgroundColor: !theme.isDark
+                      ? `${theme.ACTIVE}18`
+                      : theme.MODAL,
+                  },
+                ]}
               >
-                <Typography variant="caption" weight="700" color={!isDarkMode ? "#000" : "#666"}>Light</Typography>
+                <Feather
+                  name="sun"
+                  size={20}
+                  color={!theme.isDark ? theme.ACTIVE : theme.MUTED}
+                />
+                <View style={styles.alignCenter}>
+                  <Text
+                    style={[
+                      styles.themeCardTitle,
+                      {
+                        color: !theme.isDark ? theme.ACTIVE : theme.MUTED,
+                      },
+                    ]}
+                  >
+                    STATE B
+                  </Text>
+                  <Text style={[styles.themeCardSub, { color: theme.MUTED }]}>
+                    STARK LIGHT
+                  </Text>
+                </View>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.segment, isDarkMode && styles.segmentActive]} 
-                onPress={() => setIsDarkMode(true)}
+
+              {/* ABSOLUTE DARK */}
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => setTheme(true)}
+                style={[
+                  styles.themeCardBtn,
+                  {
+                    borderColor: theme.isDark ? theme.ACTIVE : theme.BORDER,
+                    backgroundColor: theme.isDark
+                      ? `${theme.ACTIVE}18`
+                      : theme.MODAL,
+                  },
+                ]}
               >
-                <Typography variant="caption" weight="700" color={isDarkMode ? "#000" : "#666"}>Dark</Typography>
+                <Feather
+                  name="moon"
+                  size={20}
+                  color={theme.isDark ? theme.ACTIVE : theme.MUTED}
+                />
+                <View style={styles.alignCenter}>
+                  <Text
+                    style={[
+                      styles.themeCardTitle,
+                      {
+                        color: theme.isDark ? theme.ACTIVE : theme.MUTED,
+                      },
+                    ]}
+                  >
+                    STATE A
+                  </Text>
+                  <Text style={[styles.themeCardSub, { color: theme.MUTED }]}>
+                    ABSOLUTE DARK
+                  </Text>
+                </View>
               </TouchableOpacity>
             </View>
           </View>
+        </View>
 
-          <View style={styles.divider} />
+        {/* ── FBR Profile Compliance ── */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.card, { backgroundColor: theme.CARD }]}>
+            <Text style={[styles.sectionTitle, { color: theme.MUTED }]}>
+              FBR Profile
+            </Text>
 
-          {/* Default Currency */}
-          <View style={styles.settingItem}>
-            <View style={{flex: 1}}>
-              <Typography variant="body" weight="700">Default Currency</Typography>
-              <Typography variant="caption" color="#666" style={{marginTop: 4}}>Used for global balance summaries</Typography>
-            </View>
-            <Typography variant="body" weight="700">USD ($)</Typography>
-          </View>
-
-          <View style={styles.divider} />
-
-          {/* Biometric */}
-          <View style={styles.settingItem}>
-            <View style={{flex: 1}}>
-               <Typography variant="body" weight="700">Biometric Login</Typography>
-               <Typography variant="caption" color="#666" style={{marginTop: 4}}>Use FaceID or Fingerprint for access</Typography>
-            </View>
-            <Switch
-               trackColor={{ false: "#EAEBEE", true: "#000" }}
-               thumbColor={"#FFF"}
-               ios_backgroundColor="#EAEBEE"
-               onValueChange={(val) => showToast('Biometric login updated.', 'success', 'Biometrics')}
-               value={true}
+            <PillToggle
+              options={[
+                { id: 'filer', label: 'FILER' },
+                { id: 'nonfiler', label: 'NON-FILER' },
+              ]}
+              value={fbr}
+              onChange={val => {
+                setFbr(val);
+                showToast(
+                  `FBR profile updated to ${val.toUpperCase()}`,
+                  'info',
+                  'FBR Profile',
+                );
+              }}
             />
-          </View>
-        </Card>
 
-        {/* Active Account Card */}
-        <Card style={styles.accountCard}>
-          <View style={styles.userIconCircle}>
-            <Feather name="user" size={24} color="#000" />
+            <Text style={[styles.fbrDescText, { color: theme.MUTED }]}>
+              {fbr === 'filer'
+                ? 'Reduced withholding tax rates and full FBR return filing access.'
+                : 'Higher WHT rates apply. File your return to unlock filer benefits.'}
+            </Text>
           </View>
-          <View style={{marginLeft: 16}}>
-            <Typography variant="caption" weight="700" color="#666" style={{letterSpacing: 1}}>ACTIVE ACCOUNT</Typography>
-            <Typography variant="h3" weight="700" style={{marginTop: 4}}>alex.walker@ezfinance.com</Typography>
-          </View>
-        </Card>
+        </View>
 
-        <View style={{height: 60}} />
+        {/* ── Province / Revenue Authority ── */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.card, { backgroundColor: theme.CARD }]}>
+            <View style={styles.iconTitleRow}>
+              <Feather name="map-pin" size={13} color={theme.MUTED} />
+              <Text style={[styles.sectionTitle, { color: theme.MUTED }]}>
+                Province · Revenue Authority
+              </Text>
+            </View>
+
+            <View style={styles.listWrap}>
+              {PROVINCES.map(p => {
+                const isSelected = province === p.id;
+                return (
+                  <TouchableOpacity
+                    key={p.id}
+                    activeOpacity={0.8}
+                    onPress={() => setProvince(p.id)}
+                    style={[
+                      styles.provRowBtn,
+                      {
+                        backgroundColor: isSelected
+                          ? `${theme.ACTIVE}18`
+                          : 'transparent',
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.provLabel,
+                        {
+                          color: isSelected ? theme.ACTIVE : theme.TEXT,
+                          fontWeight: isSelected ? '600' : '400',
+                        },
+                      ]}
+                    >
+                      {p.label}
+                    </Text>
+                    {isSelected && (
+                      <View
+                        style={[
+                          styles.activeDot,
+                          { backgroundColor: theme.ACTIVE },
+                        ]}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+
+        {/* ── Salary Tax Bracket ── */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.card, { backgroundColor: theme.CARD }]}>
+            <Text style={[styles.sectionTitle, { color: theme.MUTED }]}>
+              Annual Salary Bracket
+            </Text>
+
+            <View style={styles.listWrap}>
+              {BRACKETS.map((b, i) => {
+                const isSelected = bracket === i;
+                return (
+                  <TouchableOpacity
+                    key={i}
+                    activeOpacity={0.8}
+                    onPress={() => setBracket(i)}
+                    style={[
+                      styles.bracketRowBtn,
+                      {
+                        backgroundColor: isSelected
+                          ? `${theme.ACTIVE}18`
+                          : 'transparent',
+                      },
+                    ]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.bracketLabel,
+                          { color: isSelected ? theme.ACTIVE : theme.TEXT },
+                        ]}
+                      >
+                        {b.label}
+                      </Text>
+                      <Text style={[styles.bracketRange, { color: theme.MUTED }]}>
+                        {b.range}
+                      </Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.bracketRate,
+                        { color: isSelected ? theme.ACTIVE : theme.MUTED },
+                      ]}
+                    >
+                      {b.rate}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <View style={[styles.slabSummaryBox, { backgroundColor: theme.MODAL }]}>
+              <Text style={[styles.slabSummaryText, { color: theme.MUTED }]}>
+                Selected slab:{' '}
+                <Text style={{ color: theme.ACTIVE, fontWeight: '700' }}>
+                  {BRACKETS[bracket].label} — {BRACKETS[bracket].rate} WHT
+                </Text>
+                . All tax projections in-app use this bracket.
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* ── SMS & Privacy ── */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.card, { backgroundColor: theme.CARD }]}>
+            <View style={styles.iconTitleRow}>
+              <Feather name="shield" size={13} color={theme.MUTED} />
+              <Text style={[styles.sectionTitle, { color: theme.MUTED }]}>
+                Privacy & SMS Engine
+              </Text>
+            </View>
+
+            <View style={styles.toggleRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.toggleTitle, { color: theme.TEXT }]}>
+                  Bank SMS Parsing
+                </Text>
+                <Text style={[styles.toggleSub, { color: theme.MUTED }]}>
+                  Auto-detect HBL, Meezan, Alfalah transactions
+                </Text>
+              </View>
+              <Toggle
+                on={smsEnabled}
+                onToggle={() => setSmsEnabled(v => !v)}
+              />
+            </View>
+
+            <View style={styles.toggleRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.toggleTitle, { color: theme.TEXT }]}>
+                  Isolated Wealth Mode
+                </Text>
+                <Text style={[styles.toggleSub, { color: theme.MUTED }]}>
+                  Hides private cash flows from AI analysis
+                </Text>
+              </View>
+              <Toggle
+                on={isolatedMode}
+                onToggle={() => setIsolatedMode(v => !v)}
+              />
+            </View>
+
+            {isolatedMode && (
+              <View
+                style={[
+                  styles.warningBox,
+                  { backgroundColor: `${theme.RED}18` },
+                ]}
+              >
+                <Text style={[styles.warningText, { color: theme.RED }]}>
+                  Isolated Wealth Mode active — cash transactions excluded from
+                  all AI projections.
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* ── App Info Card ── */}
+        <View style={styles.sectionMargin}>
+          <View
+            style={[
+              styles.cardNoPadding,
+              { backgroundColor: theme.CARD },
+            ]}
+          >
+            {[
+              { label: 'App Version', value: '2.4.1' },
+              { label: 'FBR Data Updated', value: 'Finance Act 2024' },
+              { label: 'SECP Rules', value: 'Compliant – 2024' },
+            ].map((row, i) => (
+              <TouchableOpacity
+                key={row.label}
+                activeOpacity={0.7}
+                style={[
+                  styles.infoRow,
+                  {
+                    borderBottomWidth: i < 2 ? 1 : 0,
+                    borderBottomColor: theme.BORDER,
+                  },
+                ]}
+              >
+                <Text style={[styles.infoLabel, { color: theme.MUTED }]}>
+                  {row.label}
+                </Text>
+                <View style={styles.infoValueWrap}>
+                  <Text style={[styles.infoValue, { color: theme.TEXT }]}>
+                    {row.value}
+                  </Text>
+                  <Feather
+                    name="chevron-right"
+                    size={13}
+                    color={theme.MUTED}
+                  />
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
+
+export default SettingsScreen;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FB',
   },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 40,
+  scrollContent: {
+    paddingHorizontal: 16,
   },
-  header: {
-    marginBottom: 48,
+  headerBox: {
+    marginBottom: 20,
+    paddingHorizontal: 4,
   },
-  subtitle: {
-    marginTop: 12,
-    lineHeight: 24,
-    color: '#333',
-    paddingRight: 20,
+  subheadText: {
+    fontSize: 11,
+    letterSpacing: 0.4,
+    marginBottom: 3,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -1.2,
+  },
+  sectionMargin: {
+    marginBottom: 12,
   },
   card: {
-    marginBottom: 20,
-    padding: 32,
-    borderRadius: 32,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  iconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  configureBtn: {
-    backgroundColor: '#000',
-    paddingHorizontal: 32,
-    paddingVertical: 16,
     borderRadius: 24,
-    alignSelf: 'flex-start',
-    marginTop: 32,
+    padding: 20,
   },
-  exportLink: {
+  cardNoPadding: {
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  sectionTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginBottom: 14,
+  },
+  themeRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 32,
+    gap: 10,
   },
-  appSettingsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  segmentControl: {
-    flexDirection: 'row',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    padding: 4,
-    width: 140,
-  },
-  segment: {
+  themeCardBtn: {
     flex: 1,
-    paddingVertical: 8,
+    height: 80,
+    borderRadius: 18,
+    borderWidth: 2,
     alignItems: 'center',
-    borderRadius: 8,
+    justifyContent: 'center',
+    gap: 6,
   },
-  segmentActive: {
-    backgroundColor: '#FFF',
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.05,
-    elevation: 2,
+  alignCenter: {
+    alignItems: 'center',
   },
-  divider: {
-    height: 1,
-    backgroundColor: '#F3F4F6',
-    marginVertical: 24,
+  themeCardTitle: {
+    fontSize: 11,
+    fontWeight: '700',
   },
-  accountCard: {
+  themeCardSub: {
+    fontSize: 9,
+    letterSpacing: 0.6,
+  },
+  pillToggleContainer: {
+    flexDirection: 'row',
+    borderRadius: 100,
+    padding: 3,
+    gap: 3,
+  },
+  pillOptionBtn: {
+    flex: 1,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pillOptionText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  fbrDescText: {
+    fontSize: 11,
+    marginTop: 10,
+    lineHeight: 16,
+  },
+  iconTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 24,
-    borderRadius: 32,
-    marginBottom: 40,
-    borderWidth: 1,
-    borderColor: '#F3F4F6',
+    gap: 8,
+    marginBottom: 6,
   },
-  userIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
+  listWrap: {
+    gap: 2,
+  },
+  provRowBtn: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+  },
+  provLabel: {
+    fontSize: 13,
+  },
+  activeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  bracketRowBtn: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+  },
+  bracketLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 1,
+  },
+  bracketRange: {
+    fontSize: 10,
+  },
+  bracketRate: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  slabSummaryBox: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 14,
+  },
+  slabSummaryText: {
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  toggleTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 3,
+  },
+  toggleSub: {
+    fontSize: 11,
+  },
+  toggleTrack: {
+    width: 46,
+    height: 26,
+    borderRadius: 13,
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  toggleThumb: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FFFFFF',
+  },
+  warningBox: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 14,
+  },
+  warningText: {
+    fontSize: 11,
+    fontWeight: '600',
+    lineHeight: 16,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+  },
+  infoLabel: {
+    fontSize: 13,
+  },
+  infoValueWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  infoValue: {
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
-
-export default SettingsScreen;

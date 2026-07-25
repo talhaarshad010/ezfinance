@@ -2,7 +2,11 @@ import React from 'react';
 import { AuthStack } from './AuthStack';
 export type { AuthStackParamList } from './AuthStack';
 import { MainDrawerNavigator } from './MainDrawerNavigator';
-import { createStackNavigator } from '@react-navigation/stack';
+import {
+  createStackNavigator,
+  CardStyleInterpolators,
+  TransitionPresets,
+} from '@react-navigation/stack';
 import ChangePasswordScreen from '../features/main/screens/ChangePasswordScreen';
 import StockDetailScreen from '../features/main/screens/StockDetailScreen';
 import AddExpenseScreen from '../features/main/screens/AddExpenseScreen';
@@ -54,10 +58,13 @@ import { fetchBudget } from '../services/budgetService';
 import { setBudgetData } from '../store/slices/budgetSlice';
 
 
+import { useTheme } from '../context/ThemeContext';
+
 const Stack = createStackNavigator();
 
 export const AppNavigator = () => {
   const dispatch = useAppDispatch();
+  const { theme } = useTheme();
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
 
   const [initializing, setInitializing] = React.useState(true);
@@ -233,29 +240,37 @@ export const AppNavigator = () => {
     <>
       {isAuthenticated ? (
         <>
-          <StatusBar barStyle="dark-content" backgroundColor="#F8F9FB" translucent={false} />
+          <StatusBar
+            barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+            backgroundColor={theme.BG}
+            translucent={false}
+          />
           <Stack.Navigator
             screenOptions={({ navigation }) => ({
+              cardStyle: { backgroundColor: theme.BG },
+              gestureEnabled: true,
+              ...TransitionPresets.SlideFromRightIOS,
               headerStyle: {
                 elevation: 0,
                 shadowOpacity: 0,
                 borderBottomWidth: 0,
-                backgroundColor: '#F8F9FB',
+                backgroundColor: theme.BG,
               },
               headerLeft: () => (
                 <TouchableOpacity style={{ marginLeft: 20 }} onPress={() => navigation.goBack()}>
-                  <Feather name="arrow-left" size={24} color="#000" />
+                  <Feather name="arrow-left" size={24} color={theme.TEXT} />
                 </TouchableOpacity>
               ),
               headerTitleStyle: {
                 fontFamily: 'Inter-Bold',
                 fontSize: 18,
+                color: theme.TEXT,
               },
               headerTitleAlign: 'center',
               headerRight: () => (
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 20 }}>
                   <TouchableOpacity style={{ marginRight: 16 }} onPress={() => navigation.navigate('Search')}>
-                    <Feather name="search" size={22} color="#000" />
+                    <Feather name="search" size={22} color={theme.TEXT} />
                   </TouchableOpacity>
                   <HeaderProfile />
                 </View>
@@ -263,20 +278,20 @@ export const AppNavigator = () => {
             })}
           >
             <Stack.Screen name="Drawer" component={MainDrawerNavigator} options={{ headerShown: false }} />
-            <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
-            <Stack.Screen name="StockDetail" component={StockDetailScreen} options={{ title: 'Stock Detail' }} />
-            <Stack.Screen name="AddExpense" component={AddExpenseScreen} />
-            <Stack.Screen name="ExpenseDetail" component={ExpenseDetailScreen} options={{ title: 'Transaction' }} />
-            <Stack.Screen name="BuyCrypto" component={BuyCryptoScreen} options={{ title: '' }} />
-            <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ title: 'Edit Profile' }} />
-            <Stack.Screen name="Security" component={SecurityScreen} options={{ title: 'Security' }} />
-            <Stack.Screen name="AssetDetail" component={AssetDetailScreen} options={{ title: '' }} />
+            <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="StockDetail" component={StockDetailScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="AddExpense" component={AddExpenseScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="ExpenseDetail" component={ExpenseDetailScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="BuyCrypto" component={BuyCryptoScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Security" component={SecurityScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="AssetDetail" component={AssetDetailScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Search" component={SearchScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="AddAccount" component={AddAccountScreen} options={{ title: 'Add Account' }} />
-            <Stack.Screen name="AccountDetail" component={AccountDetailScreen} options={{ title: 'Account Details' }} />
-            <Stack.Screen name="AddTransaction" component={AddTransactionScreen} options={{ title: 'Add Transaction' }} />
-            <Stack.Screen name="TransactionDetail" component={TransactionDetailScreen} options={{ title: 'Transaction' }} />
-            <Stack.Screen name="AddCategory" component={AddCategoryScreen} options={{ title: 'Budget Category' }} />
+            <Stack.Screen name="AddAccount" component={AddAccountScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="AccountDetail" component={AccountDetailScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="AddTransaction" component={AddTransactionScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="TransactionDetail" component={TransactionDetailScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="AddCategory" component={AddCategoryScreen} options={{ headerShown: false }} />
           </Stack.Navigator>
         </>
       ) : (

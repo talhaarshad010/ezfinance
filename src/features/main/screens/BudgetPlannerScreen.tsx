@@ -1,49 +1,124 @@
-import React, { useState } from 'react';
-import {View, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, TouchableWithoutFeedback, TextInput, RefreshControl} from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  Modal,
+  Pressable,
+  Animated,
+  StyleSheet,
+  StatusBar,
+} from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
-import {Typography, Card} from '../../../components';
-import {colors} from '../../../theme/colors';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import { useAppSelector, useAppDispatch } from '../../../store/hooks';
-import { useNavigation } from '@react-navigation/native';
-import { deleteCategory, setTotalMonthlyBudget, BudgetCategory as IBudgetCategory } from '../../../store/slices/budgetSlice';
-import { updateMonthlyBudget, deleteCategoryFromDb } from '../../../services/budgetService';
+import {
+  deleteCategory,
+  setTotalMonthlyBudget,
+  BudgetCategory as IBudgetCategory,
+} from '../../../store/slices/budgetSlice';
+import {
+  updateMonthlyBudget,
+  deleteCategoryFromDb,
+} from '../../../services/budgetService';
 
-const MONTHS = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+const MONTHS = [
+  'JANUARY',
+  'FEBRUARY',
+  'MARCH',
+  'APRIL',
+  'MAY',
+  'JUNE',
+  'JULY',
+  'AUGUST',
+  'SEPTEMBER',
+  'OCTOBER',
+  'NOVEMBER',
+  'DECEMBER',
+];
 
-const BudgetPlannerScreen = () => {
+function Track({ pct }: { pct: number }) {
+  const { theme } = useTheme();
+  const fill =
+    pct >= 100
+      ? theme.RED
+      : pct >= 80
+      ? '#FF9500'
+      : theme.GREEN;
+
+  const animWidth = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(animWidth, {
+      toValue: Math.min(pct, 100),
+      duration: 900,
+      useNativeDriver: false,
+    }).start();
+  }, [pct, animWidth]);
+
+  const interpolatedWidth = animWidth.interpolate({
+    inputRange: [0, 100],
+    outputRange: ['0%', '100%'],
+  });
+
+  return (
+    <View style={styles.trackBackground}>
+      <Animated.View
+        style={[
+          styles.trackFill,
+          {
+            backgroundColor: fill,
+            width: interpolatedWidth,
+          },
+        ]}
+      />
+    </View>
+  );
+}
+
+export const BudgetPlannerScreen = () => {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const dispatch = useAppDispatch();
   const { showToast } = useToast();
-  
+
   const categories = useAppSelector(state => state.budget.categories);
-  const totalMonthlyBudget = useAppSelector(state => state.budget.totalMonthlyBudget);
+  const totalMonthlyBudget = useAppSelector(
+    state => state.budget.totalMonthlyBudget,
+  );
   const accounts = useAppSelector(state => state.bankAccounts.accounts);
-  const allTransactions = Object.values(useAppSelector(state => state.bankAccounts.transactions)).flat();
-  
-  const [selectedCategory, setSelectedCategory] = useState<IBudgetCategory | null>(null);
+  const allTransactions = Object.values(
+    useAppSelector(state => state.bankAccounts.transactions),
+  ).flat();
+
+  const [selectedCategory, setSelectedCategory] =
+    useState<IBudgetCategory | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [editBudgetVisible, setEditBudgetVisible] = useState(false);
-  const [newBudgetInput, setNewBudgetInput] = useState(totalMonthlyBudget.toString());
+  const [newBudgetInput, setNewBudgetInput] = useState(
+    totalMonthlyBudget.toString(),
+  );
 
-  React.useEffect(() => {
-    // Sync UI with Redux when component mounts (Redux already handles initial fetch in AppNavigator)
+  useEffect(() => {
     setNewBudgetInput(totalMonthlyBudget.toString());
   }, [totalMonthlyBudget]);
-
-  const onRefresh = async () => {
-    // No-op as data is real-time
-  };
 
   const now = new Date();
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
   const monthName = MONTHS[currentMonth];
 
-  // Calculate Total Available Balance (Merged)
-  const totalAccountBalance = accounts.reduce((acc, curr) => acc + curr.balance, 0);
+  const totalAccountBalance = accounts.reduce(
+    (acc, curr) => acc + curr.balance,
+    0,
+  );
 
-  // Calculate Spent per Category from current month transactions
   const spentByCategoryId: Record<string, number> = {};
   allTransactions.forEach(tx => {
     const txDate = new Date(tx.date);
@@ -52,7 +127,6 @@ const BudgetPlannerScreen = () => {
       txDate.getUTCMonth() === currentMonth &&
       txDate.getUTCFullYear() === currentYear
     ) {
-      // Find matching budget category by name
       const cat = categories.find(c => c.name === tx.category);
       if (cat) {
         spentByCategoryId[cat.id] = (spentByCategoryId[cat.id] || 0) + tx.amount;
@@ -62,23 +136,29 @@ const BudgetPlannerScreen = () => {
 
   const categoriesWithSpent = categories.map(cat => ({
     ...cat,
-    spent: spentByCategoryId[cat.id] || 0
+    spent: spentByCategoryId[cat.id] || 0,
   }));
 
-  const mainCategory = categoriesWithSpent.find(c => c.isMain);
-  const otherCategories = categoriesWithSpent.filter(c => !c.isMain);
+  const totalSpentAll = categoriesWithSpent.reduce(
+    (sum, c) => sum + c.spent,
+    0,
+  );
+  const totalAllocatedAll = categoriesWithSpent.reduce(
+    (sum, c) => sum + c.limit,
+    0,
+  );
 
-  const handleEdit = (category: IBudgetCategory) => {
+  const handleEditCategory = (category: IBudgetCategory) => {
     setMenuVisible(false);
     navigation.navigate('AddCategory', { category });
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDeleteCategory = async (id: string) => {
     try {
       setMenuVisible(false);
       await deleteCategoryFromDb(id);
       dispatch(deleteCategory(id));
-      showToast('Category deleted successfully.', 'success', 'Deleted');
+      showToast('Category envelope deleted successfully.', 'success', 'Deleted');
     } catch (e) {
       showToast('Failed to delete category.', 'error', 'Error');
     }
@@ -87,27 +167,15 @@ const BudgetPlannerScreen = () => {
   const handleUpdateTotalBudget = async () => {
     const val = parseFloat(newBudgetInput);
     if (isNaN(val) || val < 0) {
-      showToast('Please enter a valid amount.', 'error', 'Invalid Input');
-      return;
-    }
-    
-    // Validation A: Total Monthly Budget <= Merged Account Balance
-    if (val > totalAccountBalance) {
-      showToast(
-        `Total monthly budget ($${val.toLocaleString()}) cannot exceed your merged account balance ($${totalAccountBalance.toLocaleString()}).`,
-        'error',
-        'Insufficient Funds'
-      );
+      showToast('Please enter a valid budget amount.', 'error', 'Invalid Input');
       return;
     }
 
-    // Validation B: Total Monthly Budget >= Sum of all Category Limits
-    const totalCategoriesLimit = categories.reduce((acc, curr) => acc + curr.limit, 0);
-    if (val < totalCategoriesLimit) {
+    if (totalAccountBalance > 0 && val > totalAccountBalance) {
       showToast(
-        `Your total budget ($${val.toLocaleString()}) must be at least as high as your assigned category limits ($${totalCategoriesLimit.toLocaleString()}).`,
+        `Monthly budget (PKR ${val.toLocaleString()}) cannot exceed total account balance (PKR ${totalAccountBalance.toLocaleString()}).`,
         'error',
-        'Budget Conflict'
+        'Insufficient Funds',
       );
       return;
     }
@@ -116,529 +184,649 @@ const BudgetPlannerScreen = () => {
       await updateMonthlyBudget(val);
       dispatch(setTotalMonthlyBudget(val));
       setEditBudgetVisible(false);
-      showToast('Monthly budget updated!', 'success', 'Updated');
+      showToast(
+        `Total monthly budget updated to PKR ${val.toLocaleString()}`,
+        'success',
+        'Budget Updated',
+      );
     } catch (e) {
-      showToast('Failed to update total budget.', 'error', 'Error');
+      showToast('Failed to update budget.', 'error', 'Error');
     }
   };
 
-  const totalSpent = categoriesWithSpent.reduce((acc, curr) => acc + curr.spent, 0);
-  const totalUsagePercent = totalMonthlyBudget > 0 ? Math.round((totalSpent / totalMonthlyBudget) * 100) : 0;
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView 
-        showsVerticalScrollIndicator={false} 
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={false} onRefresh={onRefresh} />
-        }
+    <View style={[styles.container, { backgroundColor: theme.BG }]}>
+      <StatusBar
+        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.BG}
+      />
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 100,
+          },
+        ]}
       >
-        
-        {/* Header */}
-        <View style={styles.header}>
-          <Typography variant="caption" weight="700" color="#666" style={{letterSpacing: 1.5}}>{monthName} {currentYear}</Typography>
-          <Typography variant="h1" weight="700" style={{fontSize: 48, marginTop: 8}}>${totalSpent.toLocaleString()}</Typography>
-          
-          <View style={styles.budgetMeta}>
-            <TouchableOpacity onPress={() => setEditBudgetVisible(true)} style={styles.row}>
-              <Typography variant="body" color="#666">Total Monthly Budget: ${totalMonthlyBudget.toLocaleString()}</Typography>
-              <Feather name="edit-3" size={14} color="#AAA" style={{marginLeft: 8}} />
+        {/* Top Header */}
+        <View style={styles.headerRow}>
+          <View>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => navigation.goBack()}
+              style={styles.backBtn}
+            >
+              <Feather name="chevron-left" size={16} color={theme.MUTED} />
+              <Text style={[styles.backText, { color: theme.MUTED }]}>
+                Envelopes & Caps
+              </Text>
             </TouchableOpacity>
-            <View style={styles.usageBadge}>
-              <Typography variant="caption" weight="700" color="#000">{totalUsagePercent}% used</Typography>
-            </View>
+            <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+              Budget Planner
+            </Text>
           </View>
 
-          <View style={styles.headerActions}>
-            <TouchableOpacity 
-              style={styles.newCategoryBtn}
-              onPress={() => navigation.navigate('AddCategory')}
-            >
-              <Feather name="plus-circle" size={20} color="#FFF" />
-              <Typography variant="body" weight="700" color="#FFF" style={{marginLeft: 10}}>New Category</Typography>
-            </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('AddCategory')}
+            style={[styles.addBtn, { backgroundColor: theme.TEXT }]}
+          >
+            <Feather name="plus" size={18} color={theme.BG} />
+          </TouchableOpacity>
+        </View>
 
-            <Card style={styles.mergedBalanceCard}>
-              <Typography variant="caption" weight="700" color="#666">TOTAL BALANCE</Typography>
-              <Typography variant="h3" weight="700" style={{marginTop: 4}}>${totalAccountBalance.toLocaleString()}</Typography>
-            </Card>
+        {/* Hero Budget Card (Always Dark / Premium Slate) */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.heroCard, { backgroundColor: theme.HERO_BG }]}>
+            <View style={styles.heroHeaderRow}>
+              <Text style={styles.heroSubhead}>
+                TOTAL MONTHLY BUDGET · {monthName} {currentYear}
+              </Text>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => setEditBudgetVisible(true)}
+                style={styles.editIconBtn}
+              >
+                <Feather name="edit-2" size={14} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.heroAmount}>
+              {totalMonthlyBudget.toLocaleString()}
+            </Text>
+            <Text style={styles.heroCurrency}>PKR</Text>
+
+            {/* Bottom 3-Column Stats Divider */}
+            <View style={styles.heroStatsDividerRow}>
+              <View style={styles.heroStatCol}>
+                <Text style={styles.heroStatLabel}>Spent</Text>
+                <Text style={[styles.heroStatValue, { color: theme.RED }]}>
+                  PKR {totalSpentAll.toLocaleString()}
+                </Text>
+              </View>
+
+              <View style={styles.heroStatColBordered}>
+                <Text style={styles.heroStatLabel}>Allocated</Text>
+                <Text style={[styles.heroStatValue, { color: theme.ACTIVE }]}>
+                  PKR {totalAllocatedAll.toLocaleString()}
+                </Text>
+              </View>
+
+              <View style={styles.heroStatColBordered}>
+                <Text style={styles.heroStatLabel}>Remaining</Text>
+                <Text style={[styles.heroStatValue, { color: theme.GREEN }]}>
+                  PKR {Math.max(0, totalMonthlyBudget - totalSpentAll).toLocaleString()}
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
 
-        {/* Category Cards List */}
-        {categoriesWithSpent.map(cat => (
-          <BudgetCategory 
-            key={cat.id}
-            category={cat}
-            onMenuPress={() => {
-              setSelectedCategory(cat);
-              setMenuVisible(true);
-            }}
-          />
-        ))}
-
-
-        {/* Goal Card */}
-        <Card style={styles.goalCard}>
-           <View style={styles.goalHeader}>
-              <Feather name="briefcase" size={20} color="#FFF" />
-              <Typography variant="body" weight="700" color="#FFF" style={{marginLeft: 12}}>Annual Vacation Fund</Typography>
-           </View>
-           <Typography variant="body" color="#AAA" style={{marginTop: 16, lineHeight: 22}}>
-             You're on track to reach your $12,000 goal by December! Adding $1,000 this month.
-           </Typography>
-           
-           <View style={[styles.rowBetween, {marginTop: 24}]}>
-              <Typography variant="caption" weight="700" color="#FFF">$8,400 Saved</Typography>
-              <Typography variant="caption" weight="700" color="#FFF">70%</Typography>
-           </View>
-           <View style={styles.goalProgressBg}>
-              <View style={[styles.goalProgressFill, {width: '70%'}]} />
-           </View>
-
-           <TouchableOpacity 
-            style={styles.viewProgressBtn}
-            onPress={() => showToast('Opening vacation fund details.', 'info', 'Goal')}
-           >
-              <Typography variant="body" weight="700">View Progress</Typography>
-           </TouchableOpacity>
-        </Card>
-
-        {/* Smart Insights */}
-        <Typography variant="h2" weight="700" style={{marginTop: 40, marginBottom: 20}}>Smart Insights</Typography>
-        
-        <Card style={styles.insightCard}>
-          <View style={styles.insightIconCircle}>
-            <Feather name="map-pin" size={20} color="#000" />
+        {/* Category Envelopes List */}
+        <View style={styles.sectionMargin}>
+          <View style={styles.listHeaderRow}>
+            <Text style={[styles.sectionTitle, { color: theme.MUTED }]}>
+              Category Envelopes
+            </Text>
+            <Text style={[styles.subText, { color: theme.MUTED }]}>
+              {categoriesWithSpent.length} Categories
+            </Text>
           </View>
-          <View style={{flex: 1, marginLeft: 20}}>
-            <Typography variant="h3" weight="700">Potential Savings Found</Typography>
-            <Typography variant="body" color="#666" style={{marginTop: 8, lineHeight: 22}}>
-              We noticed your Shopping expenditure is 15% higher than usual. Switching to a weekly cap could save you approximately $340 by next month. Would you like to set an automated alert?
-            </Typography>
-            <View style={styles.insightActions}>
-              <TouchableOpacity onPress={() => showToast('Smart Alert enabled.', 'success', 'Alert')}>
-                <Typography variant="body" weight="700">Enable Smart Alert</Typography>
-              </TouchableOpacity>
-              <TouchableOpacity style={{marginLeft: 24}} onPress={() => showToast('Insight dismissed.', 'info', 'Dismissed')}>
-                <Typography variant="body" color="#AAA">Dismiss</Typography>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Card>
 
+          <View style={styles.envelopesList}>
+            {categoriesWithSpent.map(cat => {
+              const pct =
+                cat.limit > 0
+                  ? Math.round((cat.spent / cat.limit) * 100)
+                  : 0;
+
+              return (
+                <View
+                  key={cat.id}
+                  style={[styles.envelopeCard, { backgroundColor: theme.CARD }]}
+                >
+                  <View style={styles.envHeaderRow}>
+                    <View
+                      style={[
+                        styles.envIconSquare,
+                        { backgroundColor: theme.MODAL },
+                      ]}
+                    >
+                      <Feather
+                        name={cat.icon || 'folder'}
+                        size={16}
+                        color={theme.ACTIVE}
+                      />
+                    </View>
+
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.envTitle, { color: theme.TEXT }]}>
+                        {cat.name}
+                      </Text>
+                      <Text style={[styles.envSubText, { color: theme.MUTED }]}>
+                        {cat.isMain ? 'Primary Envelope' : 'Flexible Cap'}
+                      </Text>
+                    </View>
+
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        setSelectedCategory(cat);
+                        setMenuVisible(true);
+                      }}
+                      style={styles.moreBtn}
+                    >
+                      <Feather
+                        name="more-vertical"
+                        size={16}
+                        color={theme.MUTED}
+                      />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.amountsRow}>
+                    <Text style={[styles.spentText, { color: theme.TEXT }]}>
+                      PKR {cat.spent.toLocaleString()}
+                    </Text>
+                    <Text style={[styles.allocatedText, { color: theme.MUTED }]}>
+                      / PKR {cat.limit.toLocaleString()}
+                    </Text>
+                  </View>
+
+                  <Track pct={pct} />
+
+                  <View style={styles.envFooterRow}>
+                    <Text
+                      style={[
+                        styles.pctBadgeText,
+                        {
+                          color:
+                            pct >= 100
+                              ? theme.RED
+                              : pct >= 80
+                              ? '#FF9500'
+                              : theme.GREEN,
+                        },
+                      ]}
+                    >
+                      {pct}% utilized
+                    </Text>
+                    <Text style={[styles.remBadgeText, { color: theme.MUTED }]}>
+                      PKR {Math.max(0, cat.limit - cat.spent).toLocaleString()}{' '}
+                      left
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* CA Recommendation Banner */}
+        <View style={styles.sectionMargin}>
+          <View
+            style={[
+              styles.caCard,
+              { backgroundColor: theme.ACTIVE },
+            ]}
+          >
+            <Text style={styles.caLabel}>CA Recommendation</Text>
+            <Text style={styles.caText}>
+              Allocating{' '}
+              <Text style={{ fontWeight: '800' }}>PKR 15,000 more</Text> into your
+              groceries envelope will prevent unexpected mid-month deficit and align
+              with FBR Section 62 savings benchmarks.
+            </Text>
+          </View>
+        </View>
       </ScrollView>
 
-      {/* Options Menu Modal */}
-      <Modal visible={menuVisible} transparent animationType="fade">
-        <TouchableWithoutFeedback onPress={() => setMenuVisible(false)}>
-          <View style={styles.modalOverlay}>
-            <View style={styles.menuContainer}>
-              <Typography variant="h3" weight="700" style={{marginBottom: 16}}>{selectedCategory?.name}</Typography>
-              
-              <TouchableOpacity 
-                style={styles.menuItem}
-                onPress={() => selectedCategory && handleEdit(selectedCategory)}
+      {/* Edit Budget Modal Sheet */}
+      <Modal
+        visible={editBudgetVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEditBudgetVisible(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setEditBudgetVisible(false)}
+        >
+          <Pressable
+            style={[styles.sheetContent, { backgroundColor: theme.CARD }]}
+            onPress={e => e.stopPropagation()}
+          >
+            <View style={styles.sheetHeader}>
+              <Text style={[styles.sheetTitle, { color: theme.TEXT }]}>
+                Edit Monthly Budget
+              </Text>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => setEditBudgetVisible(false)}
+                style={[styles.closeBtn, { backgroundColor: theme.MODAL }]}
               >
-                <Feather name="edit-2" size={20} color="#000" />
-                <Typography variant="body" weight="700" style={{marginLeft: 12}}>Edit Details</Typography>
-              </TouchableOpacity>
-
-              {!selectedCategory?.isMain && (
-                <TouchableOpacity 
-                  style={styles.menuItem}
-                  onPress={() => selectedCategory && handleDelete(selectedCategory.id)}
-                >
-                  <Feather name="trash-2" size={20} color={colors.accent.errorText} />
-                  <Typography variant="body" weight="700" color={colors.accent.errorText} style={{marginLeft: 12}}>Delete Category</Typography>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity 
-                style={[styles.menuItem, {borderBottomWidth: 0, marginTop: 8}]}
-                onPress={() => setMenuVisible(false)}
-              >
-                <Typography variant="body" color="#AAA">Cancel</Typography>
+                <Feather name="x" size={14} color={theme.MUTED} />
               </TouchableOpacity>
             </View>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
 
-      {/* Edit Total Budget Modal */}
-      <Modal visible={editBudgetVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.budgetModalContainer}>
-            <Typography variant="h2" weight="700">Set Monthly Budget</Typography>
-            <Typography variant="body" color="#666" style={{marginTop: 8, marginBottom: 24}}>
-              Specify your total spending limit for {monthName}.
-            </Typography>
+            <Text style={[styles.balSubhead, { color: theme.MUTED }]}>
+              Max available across linked accounts: PKR{' '}
+              <Text style={{ fontWeight: '700', color: theme.TEXT }}>
+                {totalAccountBalance > 0
+                  ? totalAccountBalance.toLocaleString()
+                  : '382,000'}
+              </Text>
+            </Text>
 
-            <View style={styles.amountInputContainer}>
-              <Typography variant="h2" weight="700" color="#000">$</Typography>
-              <TextInput 
-                style={styles.amountInput}
+            <View style={styles.inputContainer}>
+              <Text style={[styles.inputLabel, { color: theme.MUTED }]}>
+                Budget Cap (PKR)
+              </Text>
+              <TextInput
                 value={newBudgetInput}
                 onChangeText={setNewBudgetInput}
                 keyboardType="numeric"
-                autoFocus
-                placeholder="0"
+                style={[styles.budgetInput, { color: theme.TEXT }]}
               />
             </View>
 
-            <View style={styles.modalActions}>
-              <TouchableOpacity 
-                style={[styles.modalBtn, {backgroundColor: '#F3F4F6'}]}
-                onPress={() => setEditBudgetVisible(false)}
-              >
-                <Typography variant="body" weight="700">Cancel</Typography>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.modalBtn, {backgroundColor: '#000', marginLeft: 12}]}
-                onPress={handleUpdateTotalBudget}
-              >
-                <Typography variant="body" weight="700" color="#FFF">Update Budget</Typography>
-              </TouchableOpacity>
+            {/* Presets Row */}
+            <View style={styles.presetsRow}>
+              {[50000, 100000, 150000, 200000].map(p => (
+                <TouchableOpacity
+                  key={p}
+                  activeOpacity={0.8}
+                  onPress={() => setNewBudgetInput(p.toString())}
+                  style={[styles.presetBtn, { backgroundColor: theme.MODAL }]}
+                >
+                  <Text style={[styles.presetBtnText, { color: theme.TEXT }]}>
+                    PKR {(p / 1000).toFixed(0)}k
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
-          </View>
-        </View>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={handleUpdateTotalBudget}
+              style={[styles.saveBtn, { backgroundColor: theme.TEXT }]}
+            >
+              <Text style={[styles.saveBtnText, { color: theme.BG }]}>
+                Save Budget Cap →
+              </Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
       </Modal>
 
-    </SafeAreaView>
-  );
-};
-
-const BudgetCategory = ({category, onMenuPress}: {category: IBudgetCategory & {spent: number}, onMenuPress: () => void}) => {
-  const { name, spent, limit } = category;
-  const usageFloat = spent / limit;
-  const usagePercent = (usageFloat * 100).toFixed(1);
-  const remaining = limit - spent;
-  
-  // Color Mapping based on image
-  let barColor = '#000000';
-  if (name.includes('Food')) barColor = '#2563EB';
-  if (name.includes('Entertainment')) barColor = '#8B5CF6';
-  if (usageFloat > 1) barColor = '#EF4444'; // Red for over-budget (Shopping in image)
-
-  // Description Mapping based on image
-  let description = '';
-  if (name.includes('Housing')) description = 'Fixed monthly essentials';
-
-  return (
-    <Card style={styles.newCategoryCard}>
-      <TouchableOpacity 
-        activeOpacity={0.7} 
-        onPress={onMenuPress}
-        style={{ width: '100%' }}
+      {/* Category Options Modal */}
+      <Modal
+        visible={menuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuVisible(false)}
       >
-        {/* Header Row */}
-        <View style={styles.rowBetween}>
-          <Typography variant="h3" weight="700" style={styles.catName}>{name}</Typography>
-          <Typography variant="h3" weight="700" style={styles.amountText}>
-            ${spent.toLocaleString()} / ${limit.toLocaleString()}
-          </Typography>
-        </View>
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setMenuVisible(false)}
+        >
+          <View
+            style={[styles.menuContent, { backgroundColor: theme.CARD }]}
+          >
+            <Text style={[styles.menuTitle, { color: theme.TEXT }]}>
+              {selectedCategory?.name} Envelope
+            </Text>
 
-        {/* Description Row */}
-        {description ? (
-          <Typography variant="caption" color="#666" style={styles.catDescription}>
-            {description}
-          </Typography>
-        ) : <View style={{height: 4}} />}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() =>
+                selectedCategory && handleEditCategory(selectedCategory)
+              }
+              style={[styles.menuItem, { borderBottomColor: theme.BORDER }]}
+            >
+              <Feather name="edit-2" size={15} color={theme.TEXT} />
+              <Text style={[styles.menuItemText, { color: theme.TEXT }]}>
+                Edit Envelope
+              </Text>
+            </TouchableOpacity>
 
-        {/* Progress Bar */}
-        <View style={styles.newProgressBarContainer}>
-          <View style={[
-            styles.newProgressBarFill, 
-            { width: `${Math.min(100, usageFloat * 100)}%`, backgroundColor: barColor }
-          ]} />
-        </View>
-
-        {/* Footer Row */}
-        <View style={styles.rowBetween}>
-          <Typography variant="caption" weight="600" color="#AAA" style={styles.usageText}>
-            {usagePercent}% EXPENDED
-          </Typography>
-          <Typography variant="caption" weight="600" color="#AAA" style={styles.usageText}>
-            ${Math.abs(remaining).toLocaleString()} {remaining >= 0 ? 'REMAINING' : 'OVER'}
-          </Typography>
-        </View>
-      </TouchableOpacity>
-    </Card>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() =>
+                selectedCategory && handleDeleteCategory(selectedCategory.id)
+              }
+              style={styles.menuItem}
+            >
+              <Feather name="trash-2" size={15} color={theme.RED} />
+              <Text style={[styles.menuItemText, { color: theme.RED }]}>
+                Delete Envelope
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+    </View>
   );
 };
+
+export default BudgetPlannerScreen;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FB',
   },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 140,
+  scrollContent: {
+    paddingHorizontal: 16,
   },
-  header: {
-    marginBottom: 40,
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 4,
   },
-  budgetMeta: {
+  backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  backText: {
+    fontSize: 12,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -1.2,
+  },
+  addBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionMargin: {
+    marginBottom: 12,
+  },
+  heroCard: {
+    borderRadius: 28,
+    padding: 24,
+  },
+  heroHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  heroSubhead: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.36)',
+    letterSpacing: 1.4,
+  },
+  editIconBtn: {
+    padding: 4,
+  },
+  heroAmount: {
+    fontSize: 52,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -3,
+    lineHeight: 54,
+  },
+  heroCurrency: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.3)',
+    marginTop: 4,
+  },
+  heroStatsDividerRow: {
+    flexDirection: 'row',
+    marginTop: 22,
+    paddingTop: 18,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.07)',
+  },
+  heroStatCol: {
+    flex: 1,
+  },
+  heroStatColBordered: {
+    flex: 1,
+    paddingLeft: 14,
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(255,255,255,0.07)',
+    marginLeft: 14,
+  },
+  heroStatLabel: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.32)',
+    marginBottom: 4,
+  },
+  heroStatValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+  },
+  listHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  sectionTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+  },
+  subText: {
+    fontSize: 11,
+  },
+  envelopesList: {
+    gap: 10,
+  },
+  envelopeCard: {
+    borderRadius: 24,
+    padding: 18,
+  },
+  envHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  envIconSquare: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  envTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  envSubText: {
+    fontSize: 11,
+  },
+  moreBtn: {
+    padding: 4,
+  },
+  amountsRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+    marginBottom: 4,
+  },
+  spentText: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  allocatedText: {
+    fontSize: 12,
+  },
+  trackBackground: {
+    height: 3,
+    backgroundColor: 'rgba(128,128,128,0.18)',
+    borderRadius: 1.5,
+    overflow: 'hidden',
+    marginTop: 6,
+  },
+  trackFill: {
+    height: '100%',
+    borderRadius: 1.5,
+  },
+  envFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     marginTop: 8,
   },
-  usageBadge: {
-    backgroundColor: '#EAEBEE',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginLeft: 12,
+  pctBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 32,
+  remBadgeText: {
+    fontSize: 11,
   },
-  newCategoryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#000',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 28,
+  caCard: {
+    borderRadius: 24,
+    padding: 20,
   },
-  mergedBalanceCard: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    backgroundColor: '#FFF',
-    borderWidth: 1,
-    borderColor: '#EAEBEE',
-    shadowColor: 'transparent',
-    minWidth: 140,
+  caLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.5)',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 8,
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  mainCard: {
-    padding: 32,
-    borderRadius: 32,
-    marginBottom: 20,
-  },
-  rowBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  progressBarLarge: {
-    height: 12,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 6,
-    marginVertical: 24,
-    overflow: 'hidden',
-  },
-  progressFillLarge: {
-    height: '100%',
-    backgroundColor: '#000',
-    borderRadius: 6,
-  },
-  circleContainer: {
-    alignItems: 'center',
-    marginTop: 40,
-  },
-  circleOuter: {
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    borderWidth: 20,
-    borderColor: '#F3F4F6',
-    borderTopColor: '#000',
-    borderLeftColor: '#000',
-    borderBottomColor: '#000',
-    transform: [{rotate: '-45deg'}],
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  circleInner: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: '#FFF',
-    transform: [{rotate: '45deg'}],
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  categoryCard: {
-    padding: 24,
-    borderRadius: 32,
-    marginBottom: 16,
-  },
-  categoryIconBox: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  progressBarSmall: {
-    height: 8,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 4,
-    marginTop: 20,
-    overflow: 'hidden',
-  },
-  progressFillSmall: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  goalCard: {
-    backgroundColor: '#000',
-    padding: 32,
-    borderRadius: 32,
-    marginTop: 20,
-  },
-  goalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  goalProgressBg: {
-    height: 6,
-    backgroundColor: '#333',
-    borderRadius: 3,
-    marginTop: 12,
-    overflow: 'hidden',
-  },
-  goalProgressFill: {
-    height: '100%',
-    backgroundColor: '#FFF',
-    borderRadius: 3,
-  },
-  viewProgressBtn: {
-    backgroundColor: '#FFF',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 28,
-    alignSelf: 'flex-start',
-    marginTop: 32,
-  },
-  insightCard: {
-    flexDirection: 'row',
-    padding: 32,
-    borderRadius: 32,
-    marginBottom: 40,
-  },
-  insightIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#E8F0FE',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  insightActions: {
-    flexDirection: 'row',
-    marginTop: 24,
+  caText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#FFFFFF',
+    lineHeight: 21,
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
+    justifyContent: 'flex-end',
   },
-  menuContainer: {
+  sheetContent: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 16,
+    paddingBottom: 36,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  sheetTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  balSubhead: {
+    fontSize: 11,
+    marginBottom: 14,
+  },
+  inputContainer: {
+    marginBottom: 14,
+  },
+  inputLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  budgetInput: {
+    fontSize: 28,
+    fontWeight: '800',
+    borderBottomWidth: 2,
+    borderBottomColor: 'rgba(128,128,128,0.2)',
+    paddingVertical: 6,
+  },
+  presetsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  presetBtn: {
+    flex: 1,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  presetBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  saveBtn: {
     width: '100%',
-    backgroundColor: '#FFF',
-    borderRadius: 32,
-    padding: 32,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 10},
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 8,
+    height: 54,
+    borderRadius: 27,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  menuContent: {
+    marginHorizontal: 20,
+    marginBottom: 40,
+    borderRadius: 24,
+    padding: 20,
+  },
+  menuTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 14,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 18,
+    gap: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
   },
-  budgetModalContainer: {
-    width: '100%',
-    backgroundColor: '#FFF',
-    borderRadius: 32,
-    padding: 32,
+  menuItemText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
-  amountInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 20,
-    paddingHorizontal: 20,
-    height: 72,
-    marginBottom: 32,
-  },
-  amountInput: {
-    flex: 1,
-    fontSize: 32,
-    fontFamily: 'Inter-Bold',
-    marginLeft: 12,
-    color: '#000',
-  },
-  modalActions: {
-    flexDirection: 'row',
-  },
-  modalBtn: {
-    flex: 1,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  // New Styles for Redesign
-  newCategoryCard: {
-    paddingHorizontal: 24,
-    paddingVertical: 32,
-    borderRadius: 32,
-    marginBottom: 16,
-    backgroundColor: '#FFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  catName: {
-    fontSize: 20,
-    color: '#000',
-  },
-  amountText: {
-    fontSize: 20,
-    color: '#000',
-  },
-  catDescription: {
-    marginTop: 4,
-    marginBottom: 8,
-    fontSize: 14,
-  },
-  newProgressBarContainer: {
-    height: 10,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 5,
-    marginVertical: 16,
-    overflow: 'hidden',
-  },
-  newProgressBarFill: {
-    height: '100%',
-    borderRadius: 5,
-  },
-  usageText: {
-    fontSize: 12,
-    letterSpacing: 0.5,
-  }
 });
-
-export default BudgetPlannerScreen;

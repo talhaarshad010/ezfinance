@@ -1,378 +1,664 @@
 import React, { useState } from 'react';
-import {View, StyleSheet, ScrollView, TextInput, TouchableOpacity, Modal} from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  Modal,
+  StyleSheet,
+  StatusBar,
+  ActivityIndicator,
+} from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
-import {Typography, Card, Button, CalendarPicker} from '../../../components';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import { useAppSelector, useAppDispatch } from '../../../store/hooks';
 import { getBankById } from '../../../constants/pakistaniBanks';
 import { saveTransaction } from '../../../services/bankAccountService';
-import { addTransaction, updateAccountBalance } from '../../../store/slices/bankAccountsSlice';
-import { Image } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { CalendarPicker } from '../../../components';
 
-const AddExpenseScreen = () => {
+const CATEGORIES = [
+  { name: 'Groceries', icon: 'shopping-cart' },
+  { name: 'Food & Dining', icon: 'coffee' },
+  { name: 'Transport', icon: 'truck' },
+  { name: 'Utilities', icon: 'zap' },
+  { name: 'Housing', icon: 'home' },
+  { name: 'Shopping', icon: 'shopping-bag' },
+  { name: 'Telecom', icon: 'smartphone' },
+  { name: 'Income', icon: 'arrow-up-right' },
+  { name: 'Other', icon: 'more-horizontal' },
+];
+
+export const AddExpenseScreen = () => {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const dispatch = useAppDispatch();
   const { showToast } = useToast();
-  
+
   const { accounts } = useAppSelector(state => state.bankAccounts);
-  const budgetCategories = useAppSelector(state => state.budget.categories);
-  
-  const [activeModal, setActiveModal] = useState<'category' | 'payment' | 'date' | null>(null);
+
+  const [txType, setTxType] = useState<'expense' | 'income'>('expense');
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState(budgetCategories[0]?.name || 'Other');
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(accounts[0]?.id || null);
+  const [category, setCategory] = useState('Groceries');
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(
+    accounts[0]?.id || null,
+  );
   const [date, setDate] = useState<Date>(new Date());
   const [description, setDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
 
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'];
 
-  const selectedAccount = accounts.find(a => a.id === selectedAccountId);
-  const selectedBank = selectedAccount ? getBankById(selectedAccount.bankId) : null;
+  function handleKeypadTap(k: string) {
+    if (k === '⌫') {
+      setAmount(v => v.slice(0, -1));
+    } else if (k === '.' && amount.includes('.')) {
+      return;
+    } else {
+      setAmount(v => v + k);
+    }
+  }
+
+  function addQuickPreset(num: number) {
+    const current = parseFloat(amount || '0');
+    setAmount((current + num).toString());
+  }
 
   const handleSave = async () => {
-    if (!amount || parseFloat(amount) <= 0) {
-      showToast('Please enter a valid amount', 'error', 'Invalid Amount');
+    const numAmount = parseFloat(amount);
+    if (!amount || isNaN(numAmount) || numAmount <= 0) {
+      showToast('Please enter a valid transaction amount', 'error', 'Invalid Amount');
       return;
     }
-    if (!selectedAccountId) {
-      showToast('Please select a payment method (linked card)', 'error', 'Missing Account');
+    if (!selectedAccountId && accounts.length > 0) {
+      showToast('Please select a payment account', 'error', 'Missing Account');
       return;
     }
 
     setIsSaving(true);
     try {
-      const numAmount = parseFloat(amount);
+      const targetAccountId = selectedAccountId || 'default_acc';
       const txData = {
-        description: description || category,
+        description: description.trim() || category,
         amount: numAmount,
-        type: 'expense' as const,
+        type: txType,
         category,
         date: date.toISOString(),
         createdAt: Date.now(),
       };
 
-      await saveTransaction(selectedAccountId, txData);
-      
-      showToast('Expense recorded successfully!', 'success', 'Success');
+      await saveTransaction(targetAccountId, txData);
+
+      showToast(
+        `${txType === 'expense' ? 'Expense' : 'Income'} of PKR ${numAmount.toLocaleString()} saved!`,
+        'success',
+        'Transaction Recorded',
+      );
       navigation.goBack();
     } catch (e) {
       console.error('Save expense error:', e);
-      showToast('Failed to save expense. Please try again.', 'error', 'Error');
+      showToast('Failed to save transaction. Please try again.', 'error', 'Error');
     } finally {
       setIsSaving(false);
     }
   };
 
+  const selectedAccount = accounts.find(a => a.id === selectedAccountId);
+
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Typography variant="h1" weight="700" style={{fontSize: 28}}>Add Expense</Typography>
-        <Typography variant="body" color="#666" style={{marginTop: 8, lineHeight: 20}}>
-          Log your spending and keep your editorial ledger clean.
-        </Typography>
-      </View>
-
-      <Typography variant="caption" weight="700" color="#666" style={styles.label}>AMOUNT</Typography>
-      <View style={styles.amountBox}>
-        <Typography variant="h2" weight="500" color="#333" style={{marginRight: 8}}>PKR</Typography>
-        <TextInput 
-          placeholder="0.00"
-          placeholderTextColor="#DDD"
-          style={styles.amountInput}
-          keyboardType="numeric"
-          value={amount}
-          onChangeText={setAmount}
-        />
-      </View>
-
-      <Typography variant="caption" weight="700" color="#666" style={styles.label}>CATEGORY</Typography>
-      <TouchableOpacity 
-        style={styles.dropdownBox}
-        onPress={() => setActiveModal('category')}
-      >
-        <Typography variant="body" color="#333">{category}</Typography>
-        <Feather name="chevron-down" size={20} color="#AAA" />
-      </TouchableOpacity>
-
-      <Typography variant="caption" weight="700" color="#666" style={styles.label}>PAYMENT METHOD</Typography>
-      <TouchableOpacity 
-        style={styles.dropdownBox}
-        onPress={() => setActiveModal('payment')}
-      >
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {selectedBank?.logo ? (
-            <View style={styles.miniBankIcon}>
-              <Image source={{ uri: selectedBank.logo }} style={styles.imageFull} resizeMode="contain" />
-            </View>
-          ) : (
-            <Feather name="credit-card" size={20} color="#333" style={{ marginRight: 12 }} />
-          )}
-          <Typography variant="body" color="#333">
-            {selectedAccount ? `${selectedAccount.bankAbbreviation} (••• ${selectedAccount.accountNumber.slice(-4)})` : 'Select Card'}
-          </Typography>
-        </View>
-        <Feather name="chevron-down" size={20} color="#AAA" />
-      </TouchableOpacity>
-
-      <Typography variant="caption" weight="700" color="#666" style={styles.label}>DATE</Typography>
-      <TouchableOpacity 
-        style={styles.dropdownBox}
-        onPress={() => setActiveModal('date')}
-      >
-        <Typography variant="body" color="#333">{date.toDateString()}</Typography>
-        <Feather name="calendar" size={20} color="#333" />
-      </TouchableOpacity>
-
-      <Typography variant="caption" weight="700" color="#666" style={styles.label}>DESCRIPTION</Typography>
-      <View style={styles.textAreaBox}>
-        <TextInput 
-          placeholder="What was this expense for?"
-          placeholderTextColor="#AAA"
-          style={styles.textAreaInput}
-          multiline
-          value={description}
-          onChangeText={setDescription}
-        />
-      </View>
-
-      <TouchableOpacity 
-        style={[styles.saveBtn, isSaving && { opacity: 0.7 }]}
-        onPress={handleSave}
-        disabled={isSaving}
-      >
-        <Typography variant="body" weight="700" color="#FFF">
-          {isSaving ? 'Processing...' : 'Save Expense'}
-        </Typography>
-      </TouchableOpacity>
-
-      <Card style={styles.tipCard}>
-        <Typography variant="body" weight="700" color="#000">Quick Tip</Typography>
-        <Typography variant="caption" color="#666" style={{marginTop: 8, lineHeight: 20}}>
-          Expenses over $500 are automatically flagged for your <Typography variant="caption" weight="700" color="#000" style={{fontStyle: 'italic'}}>AI Financial Advisor</Typography> to review for potential tax deductions.
-        </Typography>
-        <View style={styles.gearIcon}>
-          <Feather name="settings" size={60} color="#EAEBEE" style={{opacity: 0.5}} />
-        </View>
-      </Card>
-
-      <Modal visible={activeModal === 'category' || activeModal === 'payment'} transparent animationType="slide">
-        <View style={styles.modalBg}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-                <Typography variant="h2">
-                    {activeModal === 'category' ? 'Select Category' : activeModal === 'payment' ? 'Select Payment Method' : 'Select Date'}
-                </Typography>
-                <TouchableOpacity onPress={() => setActiveModal(null)}>
-                    <Feather name="x" size={24} color="#000" />
-                </TouchableOpacity>
-            </View>
-            
-            {activeModal === 'category' && budgetCategories.map((c, i) => (
-                <TouchableOpacity key={i} style={styles.modalOption} onPress={() => { setCategory(c.name); setActiveModal(null); }}>
-                    <Typography variant="body" weight={category === c.name ? '700' : '500'}>{c.name}</Typography>
-                    {category === c.name && <Feather name="check" size={20} color="#000" />}
-                </TouchableOpacity>
-            ))}
-
-            {activeModal === 'payment' && (
-              accounts.length > 0 ? (
-                accounts.map((acc) => {
-                  const bank = getBankById(acc.bankId);
-                  return (
-                    <TouchableOpacity 
-                      key={acc.id} 
-                      style={styles.modalOption} 
-                      onPress={() => { setSelectedAccountId(acc.id); setActiveModal(null); }}
-                    >
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <View style={styles.modalBankIcon}>
-                          {bank?.logo && <Image source={{ uri: bank.logo }} style={styles.imageFull} resizeMode="contain" />}
-                        </View>
-                        <View>
-                          <Typography variant="body" weight={selectedAccountId === acc.id ? '700' : '500'}>
-                            {acc.bankName}
-                          </Typography>
-                          <Typography variant="caption" color="#666">
-                            PKR {acc.balance.toLocaleString()} • •••{acc.accountNumber.slice(-4)}
-                          </Typography>
-                        </View>
-                      </View>
-                      {selectedAccountId === acc.id && <Feather name="check" size={20} color="#000" />}
-                    </TouchableOpacity>
-                  );
-                })
-              ) : (
-                <View style={{ padding: 20, alignItems: 'center' }}>
-                  <Typography variant="body" color="#666">No linked cards found.</Typography>
-                  <Button 
-                    title="Add Account" 
-                    onPress={() => { setActiveModal(null); navigation.navigate('AddAccount'); }}
-                    style={{ marginTop: 16 }}
-                  />
-                </View>
-              )
-            )}
-
-          </View>
-        </View>
-      </Modal>
-
-      <CalendarPicker 
-         visible={activeModal === 'date'} 
-         onClose={() => setActiveModal(null)} 
-         onSelectDate={(d: Date) => setDate(d)} 
-         initialDate={date} 
-         maxDate={new Date()}
+    <View style={[styles.container, { backgroundColor: theme.BG }]}>
+      <StatusBar
+        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.BG}
       />
 
-      <View style={{height: 100}} />
-    </ScrollView>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 40,
+          },
+        ]}
+      >
+        {/* Top Header */}
+        <View style={styles.headerBox}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => navigation.goBack()}
+            style={styles.backBtn}
+          >
+            <Feather name="chevron-left" size={16} color={theme.MUTED} />
+            <Text style={[styles.backText, { color: theme.MUTED }]}>
+              Ledger Entry
+            </Text>
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+            Record Transaction
+          </Text>
+        </View>
+
+        {/* Transaction Type Segment Controller */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.typePillContainer, { backgroundColor: theme.CARD }]}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setTxType('expense')}
+              style={[
+                styles.typePillBtn,
+                {
+                  backgroundColor:
+                    txType === 'expense' ? theme.RED : 'transparent',
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.typePillText,
+                  {
+                    color: txType === 'expense' ? '#FFFFFF' : theme.MUTED,
+                  },
+                ]}
+              >
+                EXPENSE
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setTxType('income')}
+              style={[
+                styles.typePillBtn,
+                {
+                  backgroundColor:
+                    txType === 'income' ? theme.GREEN : 'transparent',
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.typePillText,
+                  {
+                    color: txType === 'income' ? '#FFFFFF' : theme.MUTED,
+                  },
+                ]}
+              >
+                INCOME
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Hero Amount Input Display */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.heroAmountCard, { backgroundColor: theme.HERO_BG }]}>
+            <Text style={styles.heroAmountLabel}>
+              {txType.toUpperCase()} AMOUNT (PKR)
+            </Text>
+
+            <Text
+              style={[
+                styles.heroAmountDisplay,
+                {
+                  color:
+                    txType === 'expense'
+                      ? theme.RED
+                      : theme.GREEN,
+                },
+              ]}
+            >
+              {amount || '0'}
+            </Text>
+
+            {/* Quick Amount Add Pills */}
+            <View style={styles.presetsRow}>
+              {[500, 1000, 5000, 10000].map(p => (
+                <TouchableOpacity
+                  key={p}
+                  activeOpacity={0.8}
+                  onPress={() => addQuickPreset(p)}
+                  style={styles.presetPill}
+                >
+                  <Text style={styles.presetPillText}>+{p}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+
+        {/* Custom Numeric Keypad */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.card, { backgroundColor: theme.CARD }]}>
+            <View style={styles.keypadGrid}>
+              {keys.map(k => (
+                <TouchableOpacity
+                  key={k}
+                  activeOpacity={0.7}
+                  onPress={() => handleKeypadTap(k)}
+                  style={[styles.keyBtn, { backgroundColor: theme.MODAL }]}
+                >
+                  <Text style={[styles.keyBtnText, { color: theme.TEXT }]}>
+                    {k}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+
+        {/* Category Selector Grid */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.card, { backgroundColor: theme.CARD }]}>
+            <Text style={[styles.sectionTitle, { color: theme.MUTED }]}>
+              Category
+            </Text>
+            <View style={styles.categoriesWrap}>
+              {CATEGORIES.map(cat => {
+                const isSelected = category === cat.name;
+                return (
+                  <TouchableOpacity
+                    key={cat.name}
+                    activeOpacity={0.8}
+                    onPress={() => setCategory(cat.name)}
+                    style={[
+                      styles.categoryChip,
+                      {
+                        backgroundColor: isSelected
+                          ? theme.TEXT
+                          : theme.MODAL,
+                      },
+                    ]}
+                  >
+                    <Feather
+                      name={cat.icon}
+                      size={14}
+                      color={isSelected ? theme.BG : theme.TEXT}
+                    />
+                    <Text
+                      style={[
+                        styles.categoryChipText,
+                        { color: isSelected ? theme.BG : theme.TEXT },
+                      ]}
+                    >
+                      {cat.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+
+        {/* Payment Account Selector */}
+        {accounts.length > 0 && (
+          <View style={styles.sectionMargin}>
+            <View style={[styles.card, { backgroundColor: theme.CARD }]}>
+              <Text style={[styles.sectionTitle, { color: theme.MUTED }]}>
+                Payment Account
+              </Text>
+
+              <View style={styles.accountsList}>
+                {accounts.map(acc => {
+                  const bank = getBankById(acc.bankId);
+                  const isSelected = selectedAccountId === acc.id;
+
+                  return (
+                    <TouchableOpacity
+                      key={acc.id}
+                      activeOpacity={0.8}
+                      onPress={() => setSelectedAccountId(acc.id)}
+                      style={[
+                        styles.accountRow,
+                        {
+                          backgroundColor: isSelected
+                            ? `${theme.ACTIVE}18`
+                            : theme.MODAL,
+                          borderColor: isSelected
+                            ? theme.ACTIVE
+                            : 'transparent',
+                        },
+                      ]}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.accBankTitle,
+                            {
+                              color: isSelected
+                                ? theme.ACTIVE
+                                : theme.TEXT,
+                            },
+                          ]}
+                        >
+                          {acc.bankName}
+                        </Text>
+                        <Text style={[styles.accSub, { color: theme.MUTED }]}>
+                          a/c ···· {acc.accountNumber.slice(-4) || '1234'}
+                        </Text>
+                      </View>
+
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text
+                          style={[
+                            styles.accBalance,
+                            { color: theme.TEXT },
+                          ]}
+                        >
+                          PKR {acc.balance.toLocaleString()}
+                        </Text>
+                        {isSelected && (
+                          <View
+                            style={[
+                              styles.activeDot,
+                              { backgroundColor: theme.ACTIVE },
+                            ]}
+                          />
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Details Card (Date & Notes) */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.card, { backgroundColor: theme.CARD }]}>
+            <Text style={[styles.sectionTitle, { color: theme.MUTED }]}>
+              Transaction Details
+            </Text>
+
+            {/* Date Picker Button */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setShowCalendar(true)}
+              style={[styles.dateRowBtn, { backgroundColor: theme.MODAL }]}
+            >
+              <View style={styles.dateLeftRow}>
+                <Feather name="calendar" size={16} color={theme.MUTED} />
+                <Text style={[styles.dateText, { color: theme.TEXT }]}>
+                  {date.toLocaleDateString('en-PK', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                  })}
+                </Text>
+              </View>
+              <Feather name="chevron-down" size={14} color={theme.MUTED} />
+            </TouchableOpacity>
+
+            {/* Notes TextInput */}
+            <View style={[styles.notesInputBox, { backgroundColor: theme.MODAL }]}>
+              <TextInput
+                value={description}
+                onChangeText={setDescription}
+                placeholder="Add notes / description (e.g. Carrefour grocery haul)"
+                placeholderTextColor={theme.MUTED}
+                style={[styles.notesInput, { color: theme.TEXT }]}
+              />
+            </View>
+          </View>
+        </View>
+
+        {/* Submit CTA Button */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          disabled={isSaving}
+          onPress={handleSave}
+          style={[
+            styles.submitCtaBtn,
+            {
+              backgroundColor: theme.TEXT,
+              opacity: isSaving ? 0.7 : 1,
+            },
+          ]}
+        >
+          {isSaving ? (
+            <ActivityIndicator color={theme.BG} size="small" />
+          ) : (
+            <Text style={[styles.submitCtaText, { color: theme.BG }]}>
+              Record PKR {parseFloat(amount || '0').toLocaleString()} →
+            </Text>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
+
+      {/* Calendar Picker Component */}
+      <CalendarPicker
+        visible={showCalendar}
+        onClose={() => setShowCalendar(false)}
+        initialDate={date}
+        onSelectDate={(d: Date) => {
+          setDate(d);
+          setShowCalendar(false);
+        }}
+      />
+    </View>
   );
 };
+
+export default AddExpenseScreen;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FB',
   },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
+  scrollContent: {
+    paddingHorizontal: 16,
   },
-  header: {
-    marginBottom: 32,
+  headerBox: {
+    marginBottom: 16,
+    paddingHorizontal: 4,
   },
-  label: {
-    letterSpacing: 1,
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  backText: {
+    fontSize: 12,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -1.2,
+  },
+  sectionMargin: {
     marginBottom: 12,
+  },
+  typePillContainer: {
+    flexDirection: 'row',
+    borderRadius: 100,
+    padding: 3,
+    gap: 3,
+  },
+  typePillBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  typePillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  heroAmountCard: {
+    borderRadius: 28,
+    padding: 24,
+    alignItems: 'center',
+  },
+  heroAmountLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.4)',
+    letterSpacing: 1.4,
+    marginBottom: 8,
+  },
+  heroAmountDisplay: {
+    fontSize: 50,
+    fontWeight: '800',
+    letterSpacing: -2,
+    marginBottom: 16,
+  },
+  presetsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  presetPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 100,
+  },
+  presetPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.7)',
+  },
+  card: {
+    borderRadius: 24,
+    padding: 20,
+  },
+  keypadGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'space-between',
+  },
+  keyBtn: {
+    width: '31%',
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  keyBtnText: {
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  sectionTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginBottom: 14,
+  },
+  categoriesWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 100,
+  },
+  categoryChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  accountsList: {
+    gap: 8,
+  },
+  accountRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1.5,
+  },
+  accBankTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  accSub: {
     fontSize: 11,
   },
-  amountBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#EAEBEE',
-    borderRadius: 24,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    marginBottom: 24,
+  accBalance: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 4,
   },
-  amountInput: {
-    flex: 1,
-    fontSize: 40,
-    fontFamily: 'Inter-Bold',
-    color: '#000',
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
-  dropdownBox: {
+  dateRowBtn: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 24,
-    paddingHorizontal: 20,
-    paddingVertical: 18,
-    marginBottom: 24,
+    padding: 14,
+    borderRadius: 14,
+    marginBottom: 10,
   },
-  textAreaBox: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 24,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    height: 120,
-    marginBottom: 32,
-  },
-  textAreaInput: {
-    flex: 1,
-    fontSize: 14,
-    color: '#000',
-    fontFamily: 'Inter-Medium',
-  },
-  saveBtn: {
-    backgroundColor: '#222',
-    paddingVertical: 18,
-    borderRadius: 30,
+  dateLeftRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 32,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 4,
+    gap: 10,
   },
-  tipCard: {
-    backgroundColor: '#F3F4F6',
-    padding: 24,
-    borderRadius: 24,
-    overflow: 'hidden',
+  dateText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
-  gearIcon: {
-    position: 'absolute',
-    right: -10,
-    bottom: -10,
+  notesInputBox: {
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
-  modalBg: {
+  notesInput: {
+    fontSize: 13,
+    padding: 0,
+  },
+  submitCtaBtn: {
+    width: '100%',
+    height: 54,
+    borderRadius: 27,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  submitCtaText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#FFF',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    padding: 32,
-    paddingBottom: 40,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalOption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  dateCell: {
-    width: 48,
-    height: 48,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 24,
     justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-    marginBottom: 12,
+    padding: 20,
   },
-  miniBankIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#FFF',
-    marginRight: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#EEE',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalBankIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F9F9F9',
-    marginRight: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#F0F0F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  imageFull: {
+  calendarModalContent: {
     width: '100%',
-    height: '100%',
-  }
+    borderRadius: 24,
+    padding: 20,
+  },
+  closeModalBtn: {
+    marginTop: 16,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeModalText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
 });
-
-export default AddExpenseScreen;

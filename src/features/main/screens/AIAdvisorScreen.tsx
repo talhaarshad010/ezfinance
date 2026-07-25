@@ -1,294 +1,629 @@
-import React, { useState } from 'react';
-import {View, StyleSheet, ScrollView, TouchableOpacity, TextInput} from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  Modal,
+  Pressable,
+  StyleSheet,
+  StatusBar,
+  KeyboardAvoidingView,
+  Platform,
+  Animated,
+} from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
-import {Typography} from '../../../components';
-import {colors} from '../../../theme/colors';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 
-const AIAdvisorScreen = () => {
-  const [showAttachMenu, setShowAttachMenu] = useState(false);
+interface Msg {
+  id: number;
+  role: 'user' | 'ai';
+  text: string;
+}
+
+const INIT: Msg[] = [
+  {
+    id: 0,
+    role: 'ai',
+    text: 'Assalam-o-Alaikum, Shahrukh. I have your salary profile, FBR 2024 slab data, and expense patterns loaded. Ask me anything about taxes, investments, or budget planning.',
+  },
+  {
+    id: 1,
+    role: 'user',
+    text: 'How much tax will I owe this month on my PKR 1,50,000 salary?',
+  },
+  {
+    id: 2,
+    role: 'ai',
+    text: `Under Finance Act 2024 slab rates for salaried individuals:
+
+Annual income: PKR 18,00,000
+• First PKR 6,00,000 — exempt
+• PKR 6,00,001–12,00,000 — 5% → PKR 30,000
+• PKR 12,00,001–18,00,000 — 15% → PKR 90,000
+
+Total annual WHT: PKR 1,20,000
+Monthly WHT: PKR 10,000
+Effective rate: 6.67%
+
+Investing PKR 1,70,000 more in SECP-approved funds reduces this by PKR 40,000 via Section 62 credit.`,
+  },
+];
+
+const QUICK = [
+  'Generate full tax estimate',
+  'Optimize savings rate',
+  'Calculate Zakat on wealth',
+  'Best AMC for Shariah compliance',
+  'KSE-100 entry points',
+];
+
+const MEMORY = [
+  { k: 'Salary', v: 'PKR 1,50,000 / mo · HBL' },
+  { k: 'Employer', v: 'Pakistan Software Export Board' },
+  { k: 'Tax Profile', v: 'Salaried · FBR Registered' },
+  { k: 'Risk Score', v: 'Moderate · 5/10' },
+  { k: 'City', v: 'Lahore, Punjab' },
+  { k: 'Dependents', v: '2 (Spouse + 1 child)' },
+  { k: 'Goals', v: 'House in 5 yr · 6-mo emergency' },
+  { k: 'Sec 62 Used', v: 'PKR 30,000 this FY' },
+];
+
+function MemorySheet({ onClose }: { onClose: () => void }) {
+  const { theme } = useTheme();
   const { showToast } = useToast();
+
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
-        {/* Header Intro */}
-        <View style={styles.introBox}>
-          <Typography variant="h1" weight="700" style={{fontSize: 28}}>AI Financial Advisor</Typography>
-          <Typography variant="body" color="#666" style={{marginTop: 8}}>
-            Your editorial guide to wealth management. Ask me about spending patterns, portfolio optimization, or budget planning.
-          </Typography>
-        </View>
+    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable
+          style={[styles.sheetContent, { backgroundColor: theme.CARD }]}
+          onPress={e => e.stopPropagation()}
+        >
+          <View style={styles.sheetHeader}>
+            <View>
+              <Text style={[styles.sheetTitle, { color: theme.TEXT }]}>
+                Memory Bank
+              </Text>
+              <Text style={[styles.sheetSub, { color: theme.MUTED }]}>
+                What your CA knows about you
+              </Text>
+            </View>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={onClose}
+              style={[styles.closeBtn, { backgroundColor: theme.MODAL }]}
+            >
+              <Feather name="x" size={14} color={theme.MUTED} />
+            </TouchableOpacity>
+          </View>
 
-        {/* Message 1: AI */}
-        <View style={styles.messageRowLeft}>
-          <View style={styles.aiAvatar}><Feather name="cpu" size={16} color="#FFF" /></View>
-          <View>
-             <View style={styles.bubbleLeft}>
-               <Typography variant="body" style={styles.msgText}>
-                 Good morning. I've analyzed your spending for November. You've successfully reduced "Dining Out" by 14%, which puts you $240 ahead of your savings target.
-               </Typography>
-             </View>
-             <Typography variant="caption" color="#AAA" style={styles.timestampLeft}>EZAI • 09:12 AM</Typography>
+          <ScrollView style={{ maxHeight: 380 }}>
+            {MEMORY.map(m => (
+              <View
+                key={m.k}
+                style={[
+                  styles.memoryRow,
+                  { borderTopColor: theme.BORDER },
+                ]}
+              >
+                <Text style={[styles.memoryKey, { color: theme.MUTED }]}>
+                  {m.k}
+                </Text>
+                <View style={styles.memoryValWrap}>
+                  <Text
+                    style={[styles.memoryVal, { color: theme.TEXT }]}
+                    numberOfLines={2}
+                  >
+                    {m.v}
+                  </Text>
+                  <Feather
+                    name="chevron-right"
+                    size={13}
+                    color={theme.MUTED}
+                  />
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() =>
+              showToast(
+                'Add Context dialog opened.',
+                'info',
+                'Memory Bank',
+              )
+            }
+            style={[styles.addContextBtn, { borderColor: theme.BORDER }]}
+          >
+            <Text style={[styles.addContextText, { color: theme.MUTED }]}>
+              + Add Context
+            </Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function TypingDots() {
+  const { theme } = useTheme();
+  const opacity1 = useRef(new Animated.Value(0.3)).current;
+  const opacity2 = useRef(new Animated.Value(0.3)).current;
+  const opacity3 = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    const createAnim = (anim: Animated.Value, delay: number) => {
+      return Animated.sequence([
+        Animated.delay(delay),
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(anim, {
+              toValue: 1,
+              duration: 400,
+              useNativeDriver: true,
+            }),
+            Animated.timing(anim, {
+              toValue: 0.3,
+              duration: 400,
+              useNativeDriver: true,
+            }),
+          ]),
+        ),
+      ]);
+    };
+
+    const a1 = createAnim(opacity1, 0);
+    const a2 = createAnim(opacity2, 200);
+    const a3 = createAnim(opacity3, 400);
+
+    a1.start();
+    a2.start();
+    a3.start();
+
+    return () => {
+      a1.stop();
+      a2.stop();
+      a3.stop();
+    };
+  }, [opacity1, opacity2, opacity3]);
+
+  return (
+    <View style={styles.typingRow}>
+      <View
+        style={[
+          styles.caAvatarBadge,
+          { backgroundColor: theme.ACTIVE },
+        ]}
+      >
+        <Feather name="cpu" size={10} color="#FFFFFF" />
+      </View>
+      <View style={[styles.typingBubble, { backgroundColor: theme.CARD }]}>
+        <View style={styles.dotsContainer}>
+          <Animated.View
+            style={[
+              styles.dot,
+              { backgroundColor: theme.MUTED, opacity: opacity1 },
+            ]}
+          />
+          <Animated.View
+            style={[
+              styles.dot,
+              { backgroundColor: theme.MUTED, opacity: opacity2 },
+            ]}
+          />
+          <Animated.View
+            style={[
+              styles.dot,
+              { backgroundColor: theme.MUTED, opacity: opacity3 },
+            ]}
+          />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+export const AIAdvisorScreen = () => {
+  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
+
+  const [msgs, setMsgs] = useState<Msg[]>(INIT);
+  const [input, setInput] = useState('');
+  const [typing, setTyping] = useState(false);
+  const [showMem, setShowMem] = useState(false);
+
+  const scrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  }, [msgs, typing]);
+
+  function send(text?: string) {
+    const q = (text ?? input).trim();
+    if (!q) return;
+
+    const userMsg: Msg = { id: Date.now(), role: 'user', text: q };
+    setMsgs(m => [...m, userMsg]);
+    setInput('');
+    setTyping(true);
+
+    setTimeout(() => {
+      setTyping(false);
+      const aiReply: Msg = {
+        id: Date.now() + 1,
+        role: 'ai',
+        text:
+          'Analyzing your financial profile and the latest FBR regulations — based on your monthly income, here is the breakdown and tax optimization strategy.',
+      };
+      setMsgs(m => [...m, aiReply]);
+    }, 1200);
+  }
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.BG }]}>
+      <StatusBar
+        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.BG}
+      />
+
+      <KeyboardAvoidingView
+        style={styles.keyboardContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        {/* Top Header */}
+        <View style={[styles.headerBox, { paddingTop: insets.top + 12 }]}>
+          <View style={styles.headerTopRow}>
+            <View>
+              <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+                Personal CA
+              </Text>
+              <Text style={[styles.headerSub, { color: theme.MUTED }]}>
+                AI Chartered Accountant · Pakistan
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setShowMem(true)}
+              style={[styles.memoryBtn, { backgroundColor: theme.TEXT }]}
+            >
+              <Feather name="cpu" size={13} color={theme.BG} />
+              <Text style={[styles.memoryBtnText, { color: theme.BG }]}>
+                Memory
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Message 2: User */}
-        <View style={styles.messageRowRight}>
-          <View>
-             <View style={styles.bubbleRight}>
-               <Typography variant="body" color="#FFF" style={styles.msgText}>
-                 That's great. Where should I allocate that extra $240 for the best long-term growth?
-               </Typography>
-             </View>
-             <Typography variant="caption" color="#AAA" style={styles.timestampRight}>YOU • 09:14 AM</Typography>
-          </View>
-        </View>
-
-        {/* Message 3: AI with Cards */}
-        <View style={styles.messageRowLeft}>
-          <View style={styles.aiAvatar}><Feather name="cpu" size={16} color="#FFF" /></View>
-          <View style={{flex: 1}}>
-             <View style={styles.bubbleLeft}>
-               <Typography variant="body" style={styles.msgText}>
-                 Based on your risk profile, I recommend splitting the surplus:
-               </Typography>
-               
-               {/* Suggestion Cards */}
-               <View style={styles.suggestionCard}>
-                 <View style={styles.dotLabel}><View style={[styles.dot, {backgroundColor: '#0047AB'}]} /><Typography variant="caption" weight="700" color="#666">GROWTH ETF (70%)</Typography></View>
-                 <Typography variant="h2" weight="700" style={{marginTop: 8}}>$168</Typography>
-                 <Typography variant="caption" color="#666">Projected 8.2% APY</Typography>
-               </View>
-
-               <View style={styles.suggestionCard}>
-                 <View style={styles.dotLabel}><View style={[styles.dot, {backgroundColor: '#000'}]} /><Typography variant="caption" weight="700" color="#666">EMERGENCY FUND (30%)</Typography></View>
-                 <Typography variant="h2" weight="700" style={{marginTop: 8}}>$72</Typography>
-                 <Typography variant="caption" color="#666">High-Yield Savings</Typography>
-               </View>
-
-               <View style={styles.quoteBox}>
-                  <Typography variant="body" style={{fontStyle: 'italic'}}>"Consistency in small allocations builds the foundation for compound authority."</Typography>
-               </View>
-
-             </View>
-             <Typography variant="caption" color="#AAA" style={styles.timestampLeft}>EZAI • 09:15 AM</Typography>
-          </View>
-        </View>
-
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-             <TouchableOpacity 
-                style={styles.chip}
-                onPress={() => showToast('Executing based on AI recommendation.', 'success', 'Action')}
-             >
-                <Typography variant="caption" weight="700">Execute this split</Typography>
-             </TouchableOpacity>
-             <TouchableOpacity 
-                style={styles.chip}
-                onPress={() => showToast('Generating detailed risk profile report.', 'info', 'Risk Analysis')}
-             >
-                <Typography variant="caption" weight="700">Show risk analysis</Typography>
-             </TouchableOpacity>
-             <TouchableOpacity 
-                style={styles.chip}
-                onPress={() => showToast('Searching for comparable allocation strategies.', 'info', 'Alternatives')}
-             >
-                <Typography variant="caption" weight="700">Other options?</Typography>
-             </TouchableOpacity>
+        {/* Quick Suggestion Pills Horizontal Row */}
+        <View style={styles.quickRowWrap}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickContentContainer}
+          >
+            {QUICK.map(q => (
+              <TouchableOpacity
+                key={q}
+                activeOpacity={0.8}
+                onPress={() => send(q)}
+                style={[styles.quickPill, { backgroundColor: theme.CARD }]}
+              >
+                <Text style={[styles.quickPillText, { color: theme.TEXT }]}>
+                  {q}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </ScrollView>
         </View>
-        
-    </ScrollView>
 
-      {/* Input Area */}
-      {/* Inside Input Area container we conditionally render absolute popup */}
-      <View style={styles.inputContainer}>
-        {showAttachMenu && (
-          <View style={styles.attachMenu}>
-             <TouchableOpacity style={styles.attachOption} onPress={() => [showToast('Image upload opening.', 'info', 'Upload'), setShowAttachMenu(false)]}>
-               <Feather name="image" size={18} color="#000" />
-               <Typography variant="caption" weight="700" style={{marginLeft: 12}}>Image</Typography>
-             </TouchableOpacity>
-             <TouchableOpacity style={styles.attachOption} onPress={() => [showToast('Video upload opening.', 'info', 'Upload'), setShowAttachMenu(false)]}>
-               <Feather name="video" size={18} color="#000" />
-               <Typography variant="caption" weight="700" style={{marginLeft: 12}}>Video</Typography>
-             </TouchableOpacity>
-             <TouchableOpacity style={styles.attachOption} onPress={() => [showToast('Document upload opening.', 'info', 'Upload'), setShowAttachMenu(false)]}>
-               <Feather name="file-text" size={18} color="#000" />
-               <Typography variant="caption" weight="700" style={{marginLeft: 12}}>Document</Typography>
-             </TouchableOpacity>
+        {/* Chat Message Thread */}
+        <ScrollView
+          ref={scrollRef}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.chatScrollContent}
+        >
+          {msgs.map(msg => {
+            const isUser = msg.role === 'user';
+            return (
+              <View
+                key={msg.id}
+                style={[
+                  styles.msgWrapper,
+                  { alignItems: isUser ? 'flex-end' : 'flex-start' },
+                ]}
+              >
+                {!isUser && (
+                  <View style={styles.aiBadgeHeader}>
+                    <View
+                      style={[
+                        styles.caAvatarBadge,
+                        { backgroundColor: theme.ACTIVE },
+                      ]}
+                    >
+                      <Feather name="cpu" size={10} color="#FFFFFF" />
+                    </View>
+                    <Text style={[styles.aiBadgeText, { color: theme.MUTED }]}>
+                      CA · ezFinance
+                    </Text>
+                  </View>
+                )}
+
+                <View
+                  style={[
+                    styles.msgBubble,
+                    {
+                      backgroundColor: isUser ? theme.TEXT : theme.CARD,
+                      borderBottomRightRadius: isUser ? 4 : 20,
+                      borderBottomLeftRadius: isUser ? 20 : 4,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.msgText,
+                      { color: isUser ? theme.BG : theme.TEXT },
+                    ]}
+                  >
+                    {msg.text}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+
+          {typing && <TypingDots />}
+        </ScrollView>
+
+        {/* Bottom Input Field */}
+        <View style={[styles.inputBox, { paddingBottom: insets.bottom + 80 }]}>
+          <View
+            style={[
+              styles.inputInnerRow,
+              { borderBottomColor: theme.TEXT },
+            ]}
+          >
+            <TextInput
+              value={input}
+              onChangeText={setInput}
+              onSubmitEditing={() => send()}
+              placeholder="Ask your CA…"
+              placeholderTextColor={theme.MUTED}
+              style={[styles.textInput, { color: theme.TEXT }]}
+            />
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => send()}
+              style={[
+                styles.sendBtn,
+                {
+                  backgroundColor: input.trim() ? theme.TEXT : theme.MODAL,
+                },
+              ]}
+            >
+              <Feather
+                name="send"
+                size={15}
+                color={input.trim() ? theme.BG : theme.MUTED}
+              />
+            </TouchableOpacity>
           </View>
-        )}
-        <TouchableOpacity 
-            style={styles.attachBtn}
-            onPress={() => setShowAttachMenu(!showAttachMenu)}
-        >
-          <Feather name="paperclip" size={20} color="#666" />
-        </TouchableOpacity>
-        <TextInput 
-          placeholder="Ask EZFinance anything..."
-          style={styles.textInput}
-          placeholderTextColor="#AAA"
-          onFocus={() => setShowAttachMenu(false)}
-        />
-        <TouchableOpacity 
-            style={styles.sendBtn}
-            onPress={() => showToast('Sending your message to EZAI...', 'info', 'AI Response')}
-        >
-          <Feather name="arrow-up" size={20} color="#FFF" />
-        </TouchableOpacity>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
+
+      {/* Memory Bank Sheet Modal */}
+      {showMem && <MemorySheet onClose={() => setShowMem(false)} />}
     </View>
   );
 };
 
+export default AIAdvisorScreen;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FB',
   },
-  scrollContent: {
+  keyboardContainer: {
+    flex: 1,
+  },
+  headerBox: {
     paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 140,
+    paddingBottom: 10,
   },
-  introBox: {
-    marginBottom: 32,
-  },
-  messageRowLeft: {
+  headerTopRow: {
     flexDirection: 'row',
-    marginBottom: 24,
+    justifyContent: 'space-between',
     alignItems: 'flex-start',
-    paddingRight: 40,
   },
-  messageRowRight: {
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.8,
+  },
+  headerSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  memoryBtn: {
     flexDirection: 'row',
-    marginBottom: 24,
-    justifyContent: 'flex-end',
-    paddingLeft: 40,
-  },
-  aiAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#000',
-    justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 100,
   },
-  bubbleLeft: {
-    backgroundColor: '#FFF',
-    padding: 20,
-    borderRadius: 24,
-    borderTopLeftRadius: 4,
+  memoryBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
-  bubbleRight: {
-    backgroundColor: '#000',
-    padding: 20,
-    borderRadius: 24,
-    borderTopRightRadius: 4,
+  quickRowWrap: {
+    paddingBottom: 12,
+  },
+  quickContentContainer: {
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  quickPill: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 100,
+  },
+  quickPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  chatScrollContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  msgWrapper: {
+    marginBottom: 18,
+  },
+  aiBadgeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  caAvatarBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  msgBubble: {
+    maxWidth: '86%',
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
   },
   msgText: {
-    lineHeight: 24,
+    fontSize: 14,
+    lineHeight: 21,
   },
-  timestampLeft: {
-    marginTop: 8,
-    marginLeft: 8,
-    letterSpacing: 1,
-  },
-  timestampRight: {
-    marginTop: 8,
-    marginRight: 8,
-    textAlign: 'right',
-    letterSpacing: 1,
-  },
-  suggestionCard: {
-    backgroundColor: '#F5F5F5',
-    padding: 16,
-    borderRadius: 12,
-    marginTop: 16,
-  },
-  dotLabel: {
+  typingRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    marginBottom: 18,
+  },
+  typingBubble: {
+    borderRadius: 20,
+    borderBottomLeftRadius: 4,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+  },
+  dotsContainer: {
+    flexDirection: 'row',
+    gap: 4,
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
   },
-  quoteBox: {
-    borderLeftWidth: 3,
-    borderLeftColor: '#000',
-    paddingLeft: 12,
-    marginTop: 20,
-    marginBottom: 8,
+  inputBox: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
   },
-  quickActions: {
-    marginTop: 8,
-  },
-  chip: {
-    backgroundColor: '#EAEAEA',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  inputContainer: {
+  inputInnerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF',
-    marginHorizontal: 20,
-    marginBottom: 120,
-    padding: 8,
-    borderRadius: 30,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  attachBtn: {
-    padding: 12,
+    gap: 10,
+    borderBottomWidth: 2,
+    paddingBottom: 10,
   },
   textInput: {
     flex: 1,
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#000',
+    fontSize: 15,
+    padding: 0,
   },
   sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#000',
-    justifyContent: 'center',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
-    marginRight: 4,
+    justifyContent: 'center',
   },
-  attachMenu: {
-    position: 'absolute',
-    bottom: 60,
-    left: 10,
-    backgroundColor: '#FFF',
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  sheetContent: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingBottom: 36,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 18,
+  },
+  sheetTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  sheetSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
     borderRadius: 16,
-    padding: 8,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: -4},
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 5,
-    width: 150,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  attachOption: {
+  memoryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderTopWidth: 1,
+  },
+  memoryKey: {
+    fontSize: 12,
+  },
+  memoryValWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-  }
+    gap: 8,
+  },
+  memoryVal: {
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'right',
+    maxWidth: 180,
+  },
+  addContextBtn: {
+    width: '100%',
+    marginTop: 14,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addContextText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
 });
-
-export default AIAdvisorScreen;

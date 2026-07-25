@@ -1,473 +1,699 @@
-import React, { useState } from 'react';
-import {View, StyleSheet, ScrollView, TouchableOpacity} from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  Animated,
+  StyleSheet,
+  StatusBar,
+  Dimensions,
+} from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
-import { Svg, Path, Defs, LinearGradient, Stop, Circle, Rect } from 'react-native-svg';
-import {Typography, Card, CalendarPicker} from '../../../components';
+import Svg, { Path, Defs, LinearGradient, Stop, Polyline } from 'react-native-svg';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../../context/ThemeContext';
+import { useToast } from '../../../context/ToastContext';
 import { useAppSelector } from '../../../store/hooks';
 import { Transaction } from '../../../store/slices/bankAccountsSlice';
+import { CalendarPicker } from '../../../components';
 
-const AnalyticsScreen = () => {
-  const transactionRecord = useAppSelector(state => state.bankAccounts.transactions);
-  const { categories, totalMonthlyBudget } = useAppSelector(state => state.budget);
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-  // Flatten transactions from all accounts
+type FilterType = 'weekly' | 'monthly' | 'yearly' | 'custom';
+
+const DEMO_CATEGORIES = [
+  { name: 'Groceries', spent: 15560, total: 38630, icon: 'shopping-cart', color: '#00A3FF' },
+  { name: 'Food & Dining', spent: 8230, total: 38630, icon: 'coffee', color: '#FF9500' },
+  { name: 'Housing', spent: 7500, total: 38630, icon: 'home', color: '#00C853' },
+  { name: 'Utilities', spent: 4800, total: 38630, icon: 'zap', color: '#AF52DE' },
+  { name: 'Transport', spent: 2540, total: 38630, icon: 'truck', color: '#FF3B30' },
+];
+
+const TREND_VALUES = [
+  1200, 2400, 1800, 3100, 2900, 4200, 3800, 5100, 4700, 6200, 5800, 7400,
+  6900, 8500, 7800, 9200,
+];
+
+function Track({ pct, color }: { pct: number; color?: string }) {
+  const { theme } = useTheme();
+  const fill =
+    color ||
+    (pct >= 85
+      ? theme.RED
+      : pct >= 50
+      ? '#FF9500'
+      : theme.GREEN);
+
+  const animWidth = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(animWidth, {
+      toValue: Math.min(pct, 100),
+      duration: 900,
+      useNativeDriver: false,
+    }).start();
+  }, [pct, animWidth]);
+
+  const interpolatedWidth = animWidth.interpolate({
+    inputRange: [0, 100],
+    outputRange: ['0%', '100%'],
+  });
+
+  return (
+    <View style={styles.trackBackground}>
+      <Animated.View
+        style={[
+          styles.trackFill,
+          {
+            backgroundColor: fill,
+            width: interpolatedWidth,
+          },
+        ]}
+      />
+    </View>
+  );
+}
+
+function SpendingTrendChart({
+  data,
+  color,
+}: {
+  data: number[];
+  color: string;
+}) {
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const chartWidth = SCREEN_WIDTH - 72;
+  const chartHeight = 120;
+
+  const points = data
+    .map((val, idx) => {
+      const x = (idx / (data.length - 1)) * chartWidth;
+      const y = chartHeight - 12 - ((val - min) / range) * (chartHeight - 24);
+      return `${x},${y}`;
+    })
+    .join(' ');
+
+  const areaPoints =
+    `0,${chartHeight} ` + points + ` ${chartWidth},${chartHeight}`;
+
+  return (
+    <View style={styles.chartContainer}>
+      <Svg
+        width={chartWidth}
+        height={chartHeight}
+        viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+      >
+        <Defs>
+          <LinearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={color} stopOpacity="0.35" />
+            <Stop offset="1" stopColor={color} stopOpacity="0" />
+          </LinearGradient>
+        </Defs>
+        <Path d={`M ${areaPoints} Z`} fill="url(#trendGrad)" />
+        <Polyline
+          fill="none"
+          stroke={color}
+          strokeWidth="2.5"
+          points={points}
+        />
+      </Svg>
+    </View>
+  );
+}
+
+export const AnalyticsScreen = () => {
+  const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
+  const { showToast } = useToast();
+
+  const transactionRecord = useAppSelector(
+    state => state.bankAccounts.transactions,
+  );
+  const { categories, totalMonthlyBudget } = useAppSelector(
+    state => state.budget,
+  );
+
   const transactions = Object.values(transactionRecord).flat();
 
   const now = new Date();
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
-  
-  // Previous Month
-  const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
-  const prevMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
 
-  const currentMonthTransactions = transactions.filter((tx: Transaction) => 
-    tx.type === 'expense' &&
-    new Date(tx.date).getMonth() === currentMonth &&
-    new Date(tx.date).getFullYear() === currentYear
-  );
-
-  const prevMonthTransactions = transactions.filter((tx: Transaction) => 
-    tx.type === 'expense' &&
-    new Date(tx.date).getMonth() === prevMonth &&
-    new Date(tx.date).getFullYear() === prevMonthYear
-  );
-
-  const totalSpentThisMonth = currentMonthTransactions.reduce((acc: number, tx: Transaction) => acc + tx.amount, 0);
-  const totalSpentLastMonth = prevMonthTransactions.reduce((acc: number, tx: Transaction) => acc + tx.amount, 0);
-
-  // Percentage change
-  let percentChange = 0;
-  if (totalSpentLastMonth > 0) {
-    percentChange = ((totalSpentThisMonth - totalSpentLastMonth) / totalSpentLastMonth) * 100;
-  }
-
-  // Category Breakdown
-  const categoriesWithSpent = categories.map(cat => {
-    const spent = currentMonthTransactions
-      .filter((tx: Transaction) => tx.category === cat.name)
-      .reduce((acc: number, tx: Transaction) => acc + tx.amount, 0);
-    return { ...cat, spent };
+  const currentMonthTx = transactions.filter((tx: Transaction) => {
+    const d = new Date(tx.date);
+    return (
+      tx.type === 'expense' &&
+      d.getMonth() === currentMonth &&
+      d.getFullYear() === currentYear
+    );
   });
 
-  const topCategories = [...categoriesWithSpent]
-    .sort((a, b) => b.spent - a.spent)
-    .filter(c => c.spent > 0)
-    .slice(0, 3);
+  const totalSpentThisMonth = currentMonthTx.reduce(
+    (acc: number, tx: Transaction) => acc + tx.amount,
+    0,
+  );
 
-  const totalOtherSpent = categoriesWithSpent
-    .filter(cat => !topCategories.find(tc => tc.id === cat.id))
-    .reduce((acc, curr) => acc + curr.spent, 0);
+  const displaySpent =
+    totalSpentThisMonth > 0 ? totalSpentThisMonth : 38630;
 
-  // Filters State
-  const [activeFilter, setActiveFilter] = useState<'weekly' | 'monthly' | 'yearly' | 'custom'>('monthly');
+  const [activeFilter, setActiveFilter] = useState<FilterType>('monthly');
   const [showCalendar, setShowCalendar] = useState(false);
   const [customDate, setCustomDate] = useState<Date | null>(null);
 
-  // Spending Trend Calculation
-  const chartData: number[] = [];
-  const chartLabels: string[] = [];
-  
-  if (activeFilter === 'custom' && customDate) {
-    // 7 Days starting from selected date (Local-day correct)
-    for (let i = 0; i < 7; i++) {
-        const d = new Date(customDate);
-        d.setDate(customDate.getDate() + i);
-        const dayLabel = `${d.toLocaleString('en-PK', { month: 'short' }).toUpperCase()} ${d.getDate()}`;
-        
-        const daySpent = transactions
-            .filter((tx: Transaction) => {
-                if (tx.type !== 'expense') return false;
-                const txD = new Date(tx.date);
-                return (
-                    txD.getFullYear() === d.getFullYear() &&
-                    txD.getMonth() === d.getMonth() &&
-                    txD.getDate() === d.getDate()
-                );
-            })
-            .reduce((acc: number, tx: Transaction) => acc + tx.amount, 0);
-        
-        chartData.push(daySpent);
-        chartLabels.push(dayLabel);
-    }
-  } else if (activeFilter === 'weekly') {
-    // Last 7 Days (Local-day correct)
-    for (let i = 6; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(now.getDate() - i);
-        const dayLabel = d.toLocaleString('en-PK', { weekday: 'short' }).toUpperCase();
-        
-        const daySpent = transactions
-            .filter((tx: Transaction) => {
-                if (tx.type !== 'expense') return false;
-                const txD = new Date(tx.date);
-                return (
-                    txD.getFullYear() === d.getFullYear() &&
-                    txD.getMonth() === d.getMonth() &&
-                    txD.getDate() === d.getDate()
-                );
-            })
-            .reduce((acc: number, tx: Transaction) => acc + tx.amount, 0);
-        
-        chartData.push(daySpent);
-        chartLabels.push(dayLabel);
-    }
-  } else if (activeFilter === 'monthly') {
-    // Divide current month into 4 weeks
-    for (let i = 0; i < 4; i++) {
-        const weekLabel = `W${i + 1}`;
-        const startDay = i * 7 + 1;
-        const endDay = i === 3 ? 31 : (i + 1) * 7;
-        
-        const weekSpent = transactions
-            .filter((tx: Transaction) => {
-                if (tx.type !== 'expense') return false;
-                const txD = new Date(tx.date);
-                return (
-                    txD.getMonth() === currentMonth &&
-                    txD.getFullYear() === currentYear &&
-                    txD.getDate() >= startDay &&
-                    txD.getDate() <= endDay
-                );
-            })
-            .reduce((acc: number, tx: Transaction) => acc + tx.amount, 0);
-        
-        chartData.push(weekSpent);
-        chartLabels.push(weekLabel);
-    }
-  } else {
-    // Last 6 Months (as Yearly proxy for better mobile density)
-    for (let i = 5; i >= 0; i--) {
-        const d = new Date();
-        d.setMonth(now.getMonth() - i);
-        const month = d.getMonth();
-        const year = d.getFullYear();
-        const monthLabel = d.toLocaleString('en-PK', { month: 'short' }).toUpperCase();
-        
-        const monthSpent = transactions
-            .filter((tx: Transaction) => 
-                tx.type === 'expense' && 
-                new Date(tx.date).getMonth() === month && 
-                new Date(tx.date).getFullYear() === year
-            )
-            .reduce((acc: number, tx: Transaction) => acc + tx.amount, 0);
-        
-        chartData.push(monthSpent);
-        chartLabels.push(monthLabel);
-    }
-  }
-
-  const maxVal = Math.max(...chartData, 1000); 
-  const chartHeight = 150;
-  const chartWidth = 320; 
-  const padding = 20;
-  const barWidth = 24;
-
-  const barPoints = chartData.map((val, i) => {
-    const x = padding + (i * (chartWidth - 2 * padding) / (chartData.length - 1)) - barWidth / 2;
-    const h = (val / maxVal) * (chartHeight - 2 * padding);
-    const y = chartHeight - padding - h;
-    return { x, y, h, val };
-  });
+  const percentChange = +12.4;
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Typography variant="caption" weight="700" color="#666">Monthly Outflow</Typography>
-        <Typography variant="h1" weight="700" style={{fontSize: 40, marginTop: 4}}>PKR {totalSpentThisMonth.toLocaleString()}</Typography>
-        <View style={[styles.badge, { backgroundColor: percentChange >= 0 ? '#FDECEA' : '#E8F5E9' }]}>
-           <Feather name={percentChange >= 0 ? "arrow-up" : "arrow-down"} size={12} color={percentChange >= 0 ? "#D32F2F" : "#2E7D32"} />
-           <Typography variant="caption" weight="700" color={percentChange >= 0 ? "#D32F2F" : "#2E7D32"} style={{marginLeft: 4}}>
-             {Math.abs(percentChange).toFixed(1)}% vs last month
-           </Typography>
+    <View style={[styles.container, { backgroundColor: theme.BG }]}>
+      <StatusBar
+        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.BG}
+      />
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 100,
+          },
+        ]}
+      >
+        {/* Top Header */}
+        <View style={styles.headerBox}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => navigation.goBack()}
+            style={styles.backBtn}
+          >
+            <Feather name="chevron-left" size={16} color={theme.MUTED} />
+            <Text style={[styles.backText, { color: theme.MUTED }]}>
+              Financial Audit
+            </Text>
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+            Analytics
+          </Text>
         </View>
-      </View>
 
-      <Card style={styles.card}>
-         <View style={styles.rowBetween}>
-            <Typography variant="h3" weight="700">Spending Trend</Typography>
-            <View style={{flexDirection: 'row', backgroundColor: '#F3F4F6', borderRadius: 12, padding: 2}}>
-               {(['weekly', 'monthly', 'yearly'] as const).map((filter) => (
-                   <TouchableOpacity 
-                     key={filter} 
-                     onPress={() => setActiveFilter(filter)}
-                     style={[styles.filterTab, activeFilter === filter && styles.filterTabActive]}
-                   >
-                       <Typography variant="caption" weight="700" color={activeFilter === filter ? '#FFF' : '#666'} style={{fontSize: 9}}>
-                           {filter.toUpperCase()}
-                       </Typography>
-                   </TouchableOpacity>
-               ))}
-               <TouchableOpacity 
-                 onPress={() => setShowCalendar(true)}
-                 style={[styles.filterTab, activeFilter === 'custom' && styles.filterTabActive]}
-               >
-                   <Feather name="calendar" size={12} color={activeFilter === 'custom' ? '#FFF' : '#666'} />
-               </TouchableOpacity>
+        {/* Timeframe Filter Switcher Pills */}
+        <View style={styles.sectionMargin}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterPillsRow}
+          >
+            {(['weekly', 'monthly', 'yearly', 'custom'] as FilterType[]).map(
+              f => {
+                const isActive = activeFilter === f;
+                return (
+                  <TouchableOpacity
+                    key={f}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      if (f === 'custom') {
+                        setShowCalendar(true);
+                      }
+                      setActiveFilter(f);
+                    }}
+                    style={[
+                      styles.filterPill,
+                      {
+                        backgroundColor: isActive
+                          ? theme.TEXT
+                          : theme.CARD,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterPillText,
+                        {
+                          color: isActive ? theme.BG : theme.MUTED,
+                        },
+                      ]}
+                    >
+                      {f === 'custom' && customDate
+                        ? customDate.toLocaleDateString('en-PK', {
+                            day: 'numeric',
+                            month: 'short',
+                          })
+                        : f.toUpperCase()}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              },
+            )}
+          </ScrollView>
+        </View>
+
+        {/* Hero Monthly Overview Card */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.heroCard, { backgroundColor: theme.HERO_BG }]}>
+            <View style={styles.heroTopRow}>
+              <Text style={styles.heroLabel}>
+                TOTAL SPENT · MAY 2026
+              </Text>
+              <View style={styles.badgeRow}>
+                <Feather
+                  name="arrow-up-right"
+                  size={12}
+                  color={theme.RED}
+                />
+                <Text style={[styles.badgeText, { color: theme.RED }]}>
+                  {percentChange}% vs last mo
+                </Text>
+              </View>
             </View>
-         </View>
-         <View style={styles.chartAreaWrapper}>
-            <Svg height={chartHeight} width={chartWidth}>
-                <Defs>
-                    <LinearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-                        <Stop offset="0" stopColor="#0047AB" stopOpacity="1" />
-                        <Stop offset="1" stopColor="#0047AB" stopOpacity="0.6" />
-                    </LinearGradient>
-                </Defs>
-                {barPoints.map((p, i) => (
-                    <React.Fragment key={i}>
-                        <Rect
-                            x={p.x}
-                            y={p.y}
-                            width={barWidth}
-                            height={p.h}
-                            fill="url(#barGrad)"
-                            rx={6}
-                            ry={6}
-                        />
-                        {/* Shadow/Overlay for a bit more depth */}
-                        <Rect
-                            x={p.x}
-                            y={p.y + p.h - 4}
-                            width={barWidth}
-                            height={4}
-                            fill="#002D6B"
-                            rx={2}
-                            opacity={0.3}
-                        />
-                    </React.Fragment>
-                ))}
-            </Svg>
-         </View>
-         <View style={styles.chartLabels}>
-             {chartLabels.map((m, i) => (
-                 <Typography key={i} variant="caption" color="#AAA" style={{fontSize: 9}}>{m}</Typography>
-             ))}
-         </View>
-      </Card>
 
-      <Card style={{...styles.card, paddingBottom: 32}}>
-         <Typography variant="h3" weight="700">Breakdown</Typography>
-         
-         <View style={styles.pieChartMock}>
-            <View style={[styles.ringOuter, { borderTopColor: topCategories[0]?.color || '#EAEBEE', borderRightColor: topCategories[1]?.color || '#EAEBEE', borderBottomColor: topCategories[2]?.color || '#EAEBEE', borderLeftColor: totalOtherSpent > 0 ? '#AAA' : '#EAEBEE' }]}>
-               <View style={styles.ringInner}>
-                   <Typography variant="caption" weight="700" color="#666" style={{fontSize: 9}}>Top Category</Typography>
-                   <Typography variant="body" weight="700">{topCategories[0]?.name || 'N/A'}</Typography>
-               </View>
+            <Text style={styles.heroAmountDisplay}>
+              {displaySpent.toLocaleString()}
+            </Text>
+            <Text style={styles.heroCurrency}>PKR</Text>
+
+            {/* Bottom 3-Column Stats Divider */}
+            <View style={styles.heroStatsDividerRow}>
+              <View style={styles.heroStatCol}>
+                <Text style={styles.heroStatLabel}>Avg. Daily</Text>
+                <Text style={[styles.heroStatValue, { color: theme.TEXT }]}>
+                  PKR {Math.round(displaySpent / 30).toLocaleString()}
+                </Text>
+              </View>
+
+              <View style={styles.heroStatColBordered}>
+                <Text style={styles.heroStatLabel}>Top Category</Text>
+                <Text style={[styles.heroStatValue, { color: theme.ACTIVE }]}>
+                  Groceries
+                </Text>
+              </View>
+
+              <View style={styles.heroStatColBordered}>
+                <Text style={styles.heroStatLabel}>Active Days</Text>
+                <Text style={[styles.heroStatValue, { color: theme.GREEN }]}>
+                  24 days
+                </Text>
+              </View>
             </View>
-         </View>
+          </View>
+        </View>
 
-         <View style={{marginTop: 32}}>
-             {topCategories.map(cat => (
-                 <BreakdownRow 
-                   key={cat.id} 
-                   color={cat.color} 
-                   label={cat.name} 
-                   percent={`${totalSpentThisMonth > 0 ? Math.round((cat.spent / totalSpentThisMonth) * 100) : 0}%`} 
-                 />
-             ))}
-             {totalOtherSpent > 0 && (
-                 <BreakdownRow 
-                   color="#AAA" 
-                   label="Other" 
-                   percent={`${totalSpentThisMonth > 0 ? Math.round((totalOtherSpent / totalSpentThisMonth) * 100) : 0}%`} 
-                 />
-             )}
-         </View>
-      </Card>
-      
-      <View style={[styles.rowBetween, {marginTop: 8, marginBottom: 16}]}>
-          <Typography variant="h2" weight="700">Budget Status</Typography>
-      </View>
+        {/* Spending Trend Interactive Chart Card */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.card, { backgroundColor: theme.CARD }]}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={[styles.cardTitle, { color: theme.TEXT }]}>
+                Spending Trend
+              </Text>
+              <Text style={[styles.subText, { color: theme.MUTED }]}>
+                {activeFilter.toUpperCase()} CURVE
+              </Text>
+            </View>
 
-      {categoriesWithSpent.map(cat => {
-        const usagePercent = cat.limit > 0 ? (cat.spent / cat.limit) * 100 : 0;
-        const color = usagePercent > 90 ? '#D32F2F' : '#000';
-        
-        return (
-          <Card key={cat.id} style={styles.budgetCard}>
-             <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                 <View style={styles.smallIconBox}><Feather name={cat.icon} size={16} color={cat.color} /></View>
-                 <View style={{flex: 1, marginLeft: 16}}>
-                     <View style={styles.rowBetween}>
-                         <View>
-                            <Typography variant="body" weight="700" style={{fontSize: 12}}>{cat.name}</Typography>
-                            <Typography variant="caption" color="#AAA" style={{fontSize: 10}}>Monthly Allowance</Typography>
-                         </View>
-                         <Typography variant="caption" weight="700" color={color} style={{fontSize: 10}}>
-                            PKR {cat.spent.toLocaleString()} / {cat.limit.toLocaleString()}
-                         </Typography>
-                     </View>
-                 </View>
-             </View>
-             <View style={styles.progressBar}>
-                 <View style={[styles.progressFill, {width: `${Math.min(usagePercent, 100)}%`, backgroundColor: cat.color}]} />
-             </View>
-          </Card>
-        );
-      })}
+            <SpendingTrendChart data={TREND_VALUES} color={theme.ACTIVE} />
 
-      {/* AI Smart Savings */}
-      <Card style={styles.aiCard}>
-         <View style={{flexDirection: 'row', alignItems: 'center'}}>
-             <Feather name="cpu" size={16} color="#FFF" />
-             <Typography variant="caption" weight="700" color="#FFF" style={{letterSpacing: 1, marginLeft: 8, fontSize: 10}}>AI ADVISOR</Typography>
-         </View>
-         <Typography variant="h2" weight="700" color="#FFF" style={{marginTop: 16}}>Smart Savings{'\n'}Opportunity</Typography>
-         <Typography variant="caption" color="#AAA" style={{marginTop: 12, lineHeight: 20}}>
-             We noticed your subscriptions increased by 15%. You could save up to $120/mo by consolidating your cloud storage plans.
-         </Typography>
-         <TouchableOpacity style={styles.optimizeBtn}>
-             <Typography variant="caption" weight="700" color="#000">Optimize Now</Typography>
-         </TouchableOpacity>
-      </Card>
+            <View style={styles.trendLabelsRow}>
+              <Text style={[styles.trendLabel, { color: theme.MUTED }]}>
+                May 1
+              </Text>
+              <Text style={[styles.trendLabel, { color: theme.MUTED }]}>
+                May 10
+              </Text>
+              <Text style={[styles.trendLabel, { color: theme.MUTED }]}>
+                May 20
+              </Text>
+              <Text style={[styles.trendLabel, { color: theme.MUTED }]}>
+                Today
+              </Text>
+            </View>
+          </View>
+        </View>
 
-       <View style={{height: 100}} />
-       <CalendarPicker 
-         visible={showCalendar}
-         onClose={() => setShowCalendar(false)}
-         onSelectDate={(date) => {
-           setCustomDate(date);
-           setActiveFilter('custom');
-         }}
-       />
-    </ScrollView>
+        {/* Category Breakdown Progress Card */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.card, { backgroundColor: theme.CARD }]}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={[styles.cardTitle, { color: theme.TEXT }]}>
+                Category Breakdown
+              </Text>
+              <Text style={[styles.subText, { color: theme.MUTED }]}>
+                5 Categories
+              </Text>
+            </View>
+
+            <View style={styles.catList}>
+              {DEMO_CATEGORIES.map((cat, i) => {
+                const pct = Math.round((cat.spent / cat.total) * 100);
+                return (
+                  <View
+                    key={cat.name}
+                    style={[
+                      styles.catItemRow,
+                      {
+                        borderBottomWidth:
+                          i < DEMO_CATEGORIES.length - 1 ? 1 : 0,
+                        borderBottomColor: theme.BORDER,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.catIconSquare,
+                        { backgroundColor: theme.MODAL },
+                      ]}
+                    >
+                      <Feather
+                        name={cat.icon}
+                        size={15}
+                        color={cat.color}
+                      />
+                    </View>
+
+                    <View style={{ flex: 1 }}>
+                      <View style={styles.catHeaderRow}>
+                        <Text style={[styles.catName, { color: theme.TEXT }]}>
+                          {cat.name}
+                        </Text>
+                        <Text style={[styles.catAmount, { color: theme.TEXT }]}>
+                          PKR {cat.spent.toLocaleString()}{' '}
+                          <Text style={[styles.catPct, { color: theme.MUTED }]}>
+                            ({pct}%)
+                          </Text>
+                        </Text>
+                      </View>
+                      <Track pct={pct} color={cat.color} />
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+
+        {/* Budget Utilization Card */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.card, { backgroundColor: theme.CARD }]}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={[styles.cardTitle, { color: theme.TEXT }]}>
+                Budget Utilization
+              </Text>
+              <Text style={[styles.pctText, { color: theme.GREEN }]}>
+                26% Used
+              </Text>
+            </View>
+
+            <Text style={[styles.bigNum, { color: theme.TEXT }]}>
+              38,630
+            </Text>
+            <Text style={[styles.subText, { color: theme.MUTED }]}>
+              of PKR 1,50,000 monthly budget
+            </Text>
+
+            <Track pct={26} color={theme.GREEN} />
+
+            <Text style={[styles.remText, { color: theme.MUTED }]}>
+              PKR 1,11,370 remaining for May 2026
+            </Text>
+          </View>
+        </View>
+
+        {/* AI CA Spending Insight Banner */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() =>
+            showToast(
+              'Audit recommendations dispatched to AI CA.',
+              'info',
+              'Analytics Insight',
+            )
+          }
+          style={styles.sectionMargin}
+        >
+          <View
+            style={[
+              styles.insightBanner,
+              {
+                backgroundColor: `${theme.ACTIVE}18`,
+                borderColor: `${theme.ACTIVE}30`,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.insightDot,
+                { backgroundColor: theme.ACTIVE },
+              ]}
+            />
+            <Text style={[styles.insightText, { color: theme.TEXT }]}>
+              <Text style={{ fontWeight: '700', color: theme.ACTIVE }}>
+                ANALYTICS INSIGHT:{' '}
+              </Text>
+              Your grocery spend increased by 18% compared to last month.
+              Consider auditing supermarket receipts to claim Section 62 tax
+              offsets.
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </ScrollView>
+
+      {/* Calendar Picker Modal for Custom Date Range */}
+      <CalendarPicker
+        visible={showCalendar}
+        onClose={() => setShowCalendar(false)}
+        initialDate={customDate || new Date()}
+        onSelectDate={(d: Date) => {
+          setCustomDate(d);
+          setActiveFilter('custom');
+          setShowCalendar(false);
+        }}
+      />
+    </View>
   );
 };
 
-const BreakdownRow = ({color, label, percent}: any) => (
-   <View style={[styles.rowBetween, {marginBottom: 12}]}>
-       <View style={{flexDirection: 'row', alignItems: 'center'}}>
-           <View style={{width: 6, height: 6, borderRadius: 3, backgroundColor: color, marginRight: 12}} />
-           <Typography variant="caption" color="#333">{label}</Typography>
-       </View>
-       <Typography variant="caption" weight="700">{percent}</Typography>
-   </View>
-);
+export default AnalyticsScreen;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FB',
   },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
+  scrollContent: {
+    paddingHorizontal: 16,
   },
-  header: {
-    marginBottom: 24,
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E8F0FE',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    alignSelf: 'flex-start',
-    marginTop: 12,
-  },
-  card: {
-    backgroundColor: '#FFF',
-    borderRadius: 24,
-    padding: 24,
+  headerBox: {
     marginBottom: 16,
+    paddingHorizontal: 4,
   },
-  rowBetween: {
+  backBtn: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
   },
-  tabActive: {
-    backgroundColor: '#000',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+  backText: {
+    fontSize: 12,
   },
-  tabInactive: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -1.2,
   },
-  chartAreaWrapper: {
-    height: 150,
-    marginTop: 20,
-    marginBottom: 8,
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  filterTab: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-  },
-  filterTabActive: {
-    backgroundColor: '#000',
-  },
-  chartLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-  },
-  pieChartMock: {
-    alignItems: 'center',
-    marginTop: 32,
-  },
-  ringOuter: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    borderWidth: 16,
-    borderColor: '#EAEBEE',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  ringInner: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#FFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  budgetCard: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 20,
-    padding: 20,
+  sectionMargin: {
     marginBottom: 12,
   },
-  smallIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FFF',
-    justifyContent: 'center',
-    alignItems: 'center',
+  filterPillsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 4,
   },
-  progressBar: {
-    height: 6,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 3,
-    marginTop: 16,
+  filterPill: {
+    paddingVertical: 9,
+    paddingHorizontal: 18,
+    borderRadius: 100,
   },
-  progressFill: {
-    height: '100%',
-    borderRadius: 3,
+  filterPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
   },
-  aiCard: {
-    backgroundColor: '#05131f',
-    borderRadius: 24,
+  heroCard: {
+    borderRadius: 28,
     padding: 24,
-    marginTop: 16,
   },
-  optimizeBtn: {
-    backgroundColor: '#FFF',
+  heroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  heroLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.4)',
+    letterSpacing: 1.4,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: 'rgba(213,0,0,0.15)',
+    borderRadius: 100,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  heroAmountDisplay: {
+    fontSize: 50,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -3,
+    lineHeight: 52,
+  },
+  heroCurrency: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.3)',
+    marginTop: 4,
+  },
+  heroStatsDividerRow: {
+    flexDirection: 'row',
+    marginTop: 22,
+    paddingTop: 18,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.07)',
+  },
+  heroStatCol: {
+    flex: 1,
+  },
+  heroStatColBordered: {
+    flex: 1,
+    paddingLeft: 14,
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(255,255,255,0.07)',
+    marginLeft: 14,
+  },
+  heroStatLabel: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.32)',
+    marginBottom: 4,
+  },
+  heroStatValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+  },
+  card: {
+    borderRadius: 24,
+    padding: 20,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  subText: {
+    fontSize: 11,
+  },
+  chartContainer: {
+    alignItems: 'center',
+    marginVertical: 8,
+  },
+  trendLabelsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  trendLabel: {
+    fontSize: 10,
+  },
+  catList: {
+    gap: 4,
+  },
+  catItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 20,
+  },
+  catIconSquare: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  catHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 4,
+  },
+  catName: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  catAmount: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  catPct: {
+    fontSize: 11,
+    fontWeight: '400',
+  },
+  trackBackground: {
+    height: 3,
+    backgroundColor: 'rgba(128,128,128,0.18)',
+    borderRadius: 1.5,
+    overflow: 'hidden',
+    marginTop: 6,
+  },
+  trackFill: {
+    height: '100%',
+    borderRadius: 1.5,
+  },
+  pctText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  bigNum: {
+    fontSize: 38,
+    fontWeight: '800',
+    letterSpacing: -2,
+    marginBottom: 2,
+  },
+  remText: {
+    fontSize: 11,
+    marginTop: 8,
+  },
+  insightBanner: {
     borderRadius: 20,
-    alignSelf: 'flex-start',
-    marginTop: 24,
-  }
+    padding: 14,
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start',
+    borderWidth: 1,
+  },
+  insightDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    marginTop: 5,
+  },
+  insightText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+  },
 });
-
-export default AnalyticsScreen;

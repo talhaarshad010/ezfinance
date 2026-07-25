@@ -1,224 +1,458 @@
-import React from 'react';
-import {View, StyleSheet, ScrollView, TouchableOpacity} from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  StatusBar,
+} from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
-import {Typography, Card} from '../../../components';
-import {colors} from '../../../theme/colors';
-import {useAppSelector} from '../../../store/hooks';
-import {Image} from 'react-native';
-import {useNavigation} from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../../context/ThemeContext';
+import { useToast } from '../../../context/ToastContext';
 
-const NotificationsScreen = () => {
-  const profile = useAppSelector(state => state.user.profile);
+type FilterType = 'all' | 'unread' | 'transactions' | 'markets' | 'ai';
+
+interface NotificationItem {
+  id: string;
+  tag: string;
+  tagColor: string;
+  icon: string;
+  time: string;
+  title: string;
+  description: string;
+  unread: boolean;
+  highlightText?: string;
+  actionText: string;
+  screenTarget?: string;
+}
+
+const INITIAL_NOTIFICATIONS: NotificationItem[] = [
+  {
+    id: '1',
+    tag: 'EXPENSE ALERT',
+    tagColor: '#FF9500',
+    icon: 'credit-card',
+    time: '2m ago',
+    title: 'Subscription Renewal — Adobe CC',
+    description:
+      'Your monthly Creative Cloud subscription of $52.99 (~PKR 14,800) will be debited tomorrow from Meezan Bank.',
+    unread: true,
+    actionText: 'Manage Subscription',
+    screenTarget: 'Expenses',
+  },
+  {
+    id: '2',
+    tag: 'MARKET ALERT',
+    tagColor: '#00A3FF',
+    icon: 'trending-up',
+    time: '1h ago',
+    title: 'KSE-100 & NVDA Target Surpassed',
+    description:
+      'KSE-100 Index surged past 78,400 points (+0.84%). NVDA reached your target price of $900.00.',
+    unread: true,
+    highlightText: '+4.2% Volatility spike detected',
+    actionText: 'Open Trade Terminal',
+    screenTarget: 'StockMarket',
+  },
+  {
+    id: '3',
+    tag: 'PORTFOLIO INSIGHT',
+    tagColor: '#00C853',
+    icon: 'cpu',
+    time: '4h ago',
+    title: 'AI Advisor Diversification Strategy',
+    description:
+      'AI CA suggests rebalancing. Your Tech sector exposure is currently 62%. Consider reallocating 10% into PSX defensive equities.',
+    unread: false,
+    actionText: 'Review Strategy',
+    screenTarget: 'AIAdvisor',
+  },
+  {
+    id: '4',
+    tag: 'SYSTEM WARNING',
+    tagColor: '#FF3B30',
+    icon: 'bell',
+    time: '1d ago',
+    title: 'Groceries Budget Envelope 92% Utilized',
+    description:
+      'You have spent PKR 15,560 of your PKR 17,000 grocery allocation for May 2026. Only PKR 1,440 remaining.',
+    unread: false,
+    actionText: 'Adjust Envelope Cap',
+    screenTarget: 'BudgetPlanner',
+  },
+];
+
+export const NotificationsScreen = () => {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
+  const { showToast } = useToast();
 
-  const getInitials = () => {
-    if (!profile?.name) return '?';
-    return profile.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  const [filter, setFilter] = useState<FilterType>('all');
+  const [notifications, setNotifications] = useState<NotificationItem[]>(
+    INITIAL_NOTIFICATIONS,
+  );
+
+  const handleMarkAllRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
+    showToast('All notifications marked as read', 'success', 'Cleared');
   };
 
+  const filteredList = notifications.filter(n => {
+    if (filter === 'unread') return n.unread;
+    if (filter === 'transactions') return n.tag.includes('EXPENSE');
+    if (filter === 'markets') return n.tag.includes('MARKET');
+    if (filter === 'ai') return n.tag.includes('INSIGHT');
+    return true;
+  });
+
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-      
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Typography variant="h1" weight="700" style={{fontSize: 28}}>Notifications</Typography>
-          <Typography variant="body" color="#666" style={{marginTop: 4}}>
-            Stay updated with your finances.
-          </Typography>
+    <View style={[styles.container, { backgroundColor: theme.BG }]}>
+      <StatusBar
+        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.BG}
+      />
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 100,
+          },
+        ]}
+      >
+        {/* Top Header */}
+        <View style={styles.headerRow}>
+          <View>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => navigation.goBack()}
+              style={styles.backBtn}
+            >
+              <Feather name="chevron-left" size={16} color={theme.MUTED} />
+              <Text style={[styles.backText, { color: theme.MUTED }]}>
+                Live Feed & Activity
+              </Text>
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+              Notifications
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={handleMarkAllRead}
+            style={[styles.readAllBtn, { backgroundColor: theme.CARD }]}
+          >
+            <Feather name="check-circle" size={14} color={theme.ACTIVE} />
+            <Text style={[styles.readAllText, { color: theme.TEXT }]}>
+              Clear
+            </Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity 
-          style={styles.avatarContainer}
-          onPress={() => navigation.navigate('EditProfile')}
-        >
-          {profile?.photoURL ? (
-            <Image source={{ uri: profile.photoURL }} style={styles.avatar} />
+
+        {/* Filter Pills Row */}
+        <View style={styles.sectionMargin}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.pillsRow}
+          >
+            {[
+              { id: 'all', label: `All (${notifications.length})` },
+              {
+                id: 'unread',
+                label: `Unread (${notifications.filter(n => n.unread).length})`,
+              },
+              { id: 'transactions', label: 'Transactions' },
+              { id: 'markets', label: 'Markets' },
+              { id: 'ai', label: 'AI Insights' },
+            ].map(p => {
+              const isActive = filter === p.id;
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  activeOpacity={0.8}
+                  onPress={() => setFilter(p.id as FilterType)}
+                  style={[
+                    styles.filterPill,
+                    {
+                      backgroundColor: isActive
+                        ? theme.TEXT
+                        : theme.CARD,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterPillText,
+                      {
+                        color: isActive ? theme.BG : theme.MUTED,
+                      },
+                    ]}
+                  >
+                    {p.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        {/* Notifications List */}
+        <View style={styles.sectionMargin}>
+          {filteredList.length === 0 ? (
+            <View style={[styles.emptyCard, { backgroundColor: theme.CARD }]}>
+              <Feather name="bell-off" size={24} color={theme.MUTED} />
+              <Text style={[styles.emptyTitle, { color: theme.TEXT }]}>
+                No Notifications Found
+              </Text>
+              <Text style={[styles.emptySub, { color: theme.MUTED }]}>
+                You are all caught up! Check back later for financial alerts.
+              </Text>
+            </View>
           ) : (
-            <View style={styles.avatarMock}>
-              <Typography variant="body" weight="700" color="#FFF">
-                {getInitials()}
-              </Typography>
+            <View style={styles.listWrap}>
+              {filteredList.map(item => (
+                <View
+                  key={item.id}
+                  style={[
+                    styles.notificationCard,
+                    {
+                      backgroundColor: theme.CARD,
+                      borderColor: item.unread ? theme.ACTIVE : 'transparent',
+                      borderWidth: item.unread ? 1.5 : 0,
+                    },
+                  ]}
+                >
+                  <View style={styles.cardHeaderRow}>
+                    <View
+                      style={[
+                        styles.iconSquare,
+                        { backgroundColor: theme.MODAL },
+                      ]}
+                    >
+                      <Feather
+                        name={item.icon}
+                        size={16}
+                        color={item.tagColor}
+                      />
+                    </View>
+
+                    <View style={{ flex: 1 }}>
+                      <View style={styles.tagTimeRow}>
+                        <Text
+                          style={[
+                            styles.tagText,
+                            { color: item.tagColor },
+                          ]}
+                        >
+                          {item.tag}
+                        </Text>
+                        <Text style={[styles.timeText, { color: theme.MUTED }]}>
+                          {item.time}
+                        </Text>
+                      </View>
+                      <Text style={[styles.cardTitle, { color: theme.TEXT }]}>
+                        {item.title}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text
+                    style={[styles.cardDescription, { color: theme.MUTED }]}
+                  >
+                    {item.description}
+                  </Text>
+
+                  {item.highlightText && (
+                    <View
+                      style={[
+                        styles.highlightBox,
+                        { backgroundColor: `${theme.ACTIVE}14` },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.highlightText,
+                          { color: theme.ACTIVE },
+                        ]}
+                      >
+                        {item.highlightText}
+                      </Text>
+                    </View>
+                  )}
+
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      if (item.screenTarget) {
+                        navigation.navigate(item.screenTarget);
+                      } else {
+                        showToast(
+                          `Action dispatched for ${item.title}`,
+                          'info',
+                          'Notification',
+                        );
+                      }
+                    }}
+                    style={[
+                      styles.actionPillBtn,
+                      { backgroundColor: theme.MODAL },
+                    ]}
+                  >
+                    <Text style={[styles.actionPillText, { color: theme.TEXT }]}>
+                      {item.actionText} →
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
             </View>
           )}
-          <View style={styles.activeDot} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Alert 1 */}
-      <Card style={styles.alertCard}>
-        <View style={styles.iconBox}><Feather name="credit-card" size={16} color="#000" /></View>
-        <View style={styles.rowBetween}>
-           <Typography variant="caption" weight="700" color="#AAA" style={styles.tag}>EXPENSE ALERT</Typography>
-           <Typography variant="caption" color="#AAA">2m ago</Typography>
         </View>
-        <Typography variant="body" weight="700" style={styles.title}>Subscription Renewal</Typography>
-        <Typography variant="body" color="#666" style={styles.desc}>
-          Your monthly Creative Cloud subscription of <Typography variant="body" weight="700">$52.99</Typography> will be debited tomorrow. Ensure your balance covers this transaction.
-        </Typography>
-        <TouchableOpacity style={styles.actionBtn}>
-           <Typography variant="caption" weight="700">Manage</Typography>
-        </TouchableOpacity>
-      </Card>
-
-      {/* Alert 2 */}
-      <Card style={styles.alertCard}>
-        <View style={[styles.iconBox, {backgroundColor: '#E8F0FE'}]}><Feather name="trending-up" size={16} color="#0047AB" /></View>
-        <View style={styles.rowBetween}>
-           <Typography variant="caption" weight="700" color="#0047AB" style={styles.tag}>MARKET ALERT</Typography>
-           <Typography variant="caption" color="#AAA">1h ago</Typography>
-        </View>
-        <Typography variant="body" weight="700" style={styles.title}>NVIDIA Corp (NVDA){'\n'}Target Hit</Typography>
-        <Typography variant="body" color="#666" style={styles.desc}>
-          NVDA has surpassed your price target of <Typography variant="body" weight="700">$900.00</Typography>. Current market sentiment remains strongly bullish.
-        </Typography>
-        <View style={styles.infoBox}>
-           <Typography variant="caption" color="#0047AB">+4.2% Volatility spike detected</Typography>
-        </View>
-        <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#000', borderColor: '#000'}]}>
-           <Typography variant="caption" weight="700" color="#FFF">Trade</Typography>
-        </TouchableOpacity>
-      </Card>
-
-      {/* Alert 3 */}
-      <Card style={styles.alertCard}>
-        <View style={[styles.iconBox, {backgroundColor: '#000'}]}><Feather name="cpu" size={16} color="#FFF" /></View>
-        <View style={styles.rowBetween}>
-           <Typography variant="caption" weight="700" color="#666" style={styles.tag}>PORTFOLIO INSIGHTS</Typography>
-           <Typography variant="caption" color="#AAA">4h ago</Typography>
-        </View>
-        <Typography variant="body" weight="700" style={styles.title}>Diversification Strategy</Typography>
-        <Typography variant="body" color="#666" style={styles.desc}>
-          AI Advisor suggests rebalancing. Your Tech sector exposure is currently 62%. Consider diversifying into Defensive sectors to mitigate risk.
-        </Typography>
-        <TouchableOpacity style={styles.actionBtn}>
-           <Typography variant="caption" weight="700">Review</Typography>
-        </TouchableOpacity>
-      </Card>
-
-      {/* Alert 4 */}
-      <Card style={styles.alertCard}>
-        <View style={[styles.iconBox, {backgroundColor: '#FFEBEE'}]}><Feather name="bell" size={16} color={colors.accent.errorText} /></View>
-        <View style={styles.rowBetween}>
-           <Typography variant="caption" weight="700" color={colors.accent.errorText} style={styles.tag}>CRITICAL ALERT</Typography>
-           <Typography variant="caption" color="#AAA">Yesterday</Typography>
-        </View>
-        <Typography variant="body" weight="700" style={styles.title}>Unusual Login Attempt</Typography>
-        <Typography variant="body" color="#666" style={styles.desc}>
-          A login attempt was blocked from an unrecognized device in Paris, France. Security measures were successfully applied.
-        </Typography>
-        <TouchableOpacity style={[styles.actionBtn, {borderColor: '#FFCDD2'}]}>
-           <Typography variant="caption" weight="700" color={colors.accent.errorText}>View Security</Typography>
-        </TouchableOpacity>
-      </Card>
-
-      <TouchableOpacity style={styles.viewHistory}>
-        <Typography variant="body" weight="700" color="#999" style={{letterSpacing: 2}}>VIEW ALL HISTORY</Typography>
-        <Feather name="arrow-right" size={16} color="#999" style={{marginLeft: 8}} />
-      </TouchableOpacity>
-
-      <View style={{height: 100}} />
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 };
+
+export default NotificationsScreen;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FB',
   },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
+  scrollContent: {
+    paddingHorizontal: 16,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 32,
-    marginTop: 8,
-  },
-  avatarContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    position: 'relative',
-    marginLeft: 16,
-  },
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-  },
-  avatarMock: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  activeDot: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#4CAF50',
-    borderWidth: 2,
-    borderColor: '#F8F9FB',
-  },
-  alertCard: {
-    padding: 24,
-    backgroundColor: '#FFF',
-    marginBottom: 16,
-    borderRadius: 24,
-  },
-  iconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  rowBetween: {
+  headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 4,
   },
-  tag: {
-    letterSpacing: 1,
-  },
-  title: {
-    fontSize: 20,
-    marginTop: 12,
-  },
-  desc: {
-    marginTop: 12,
-    lineHeight: 22,
-  },
-  infoBox: {
-    backgroundColor: '#F0F4FA',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 16,
-  },
-  actionBtn: {
-    alignSelf: 'flex-end',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginTop: 20,
-  },
-  viewHistory: {
+  backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  backText: {
+    fontSize: 12,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -1.2,
+  },
+  readAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 100,
+  },
+  readAllText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  sectionMargin: {
+    marginBottom: 12,
+  },
+  pillsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  filterPill: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 100,
+  },
+  filterPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  listWrap: {
+    gap: 12,
+  },
+  emptyCard: {
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    gap: 8,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  emptySub: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  notificationCard: {
+    borderRadius: 24,
+    padding: 18,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  iconSquare: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
-    marginBottom: 32,
-  }
+    marginRight: 12,
+  },
+  tagTimeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  tagText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  timeText: {
+    fontSize: 10,
+  },
+  cardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  cardDescription: {
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  highlightBox: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  highlightText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  actionPillBtn: {
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
 });
-
-export default NotificationsScreen;

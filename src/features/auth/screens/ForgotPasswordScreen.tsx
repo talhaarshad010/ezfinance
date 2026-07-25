@@ -1,44 +1,50 @@
 import React, { useState } from 'react';
 import {
   View,
-  StyleSheet,
-  TouchableOpacity,
+  Text,
   ScrollView,
+  TouchableOpacity,
+  TextInput,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
+  StyleSheet,
   StatusBar,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
-import { Typography, Input, Button, Card, Logo } from '../../../components';
-import { colors } from '../../../theme/colors';
-import { forgotPassword } from '../../../services/authService';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
+import { forgotPassword } from '../../../services/authService';
+import Logo from '../../../components/Logo';
 
-const ForgotPasswordScreen = () => {
+export const ForgotPasswordScreen = () => {
   const navigation = useNavigation<any>();
-  const [email, setEmail] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const { showToast } = useToast();
 
+  const [email, setEmail] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
   const handleReset = async () => {
-    if (!email) {
+    if (!email.trim()) {
       showToast('Please enter your email address', 'error');
       return;
     }
 
     setIsLoading(true);
     try {
-      await forgotPassword(email);
-      showToast('Password reset email sent!', 'success');
+      await forgotPassword(email.trim());
+      showToast('Password reset email sent! Check your inbox.', 'success');
       navigation.navigate('Login');
     } catch (error: any) {
       let errorMessage = 'An error occurred. Please try again.';
       if (error.code === 'auth/user-not-found') {
-        errorMessage = 'No user found with this email.';
+        errorMessage = 'No account found with this email address.';
       } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Invalid email address.';
+        errorMessage = 'Invalid email address format.';
       }
       showToast(errorMessage, 'error');
     } finally {
@@ -47,132 +53,238 @@ const ForgotPasswordScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F9F9F9" translucent />
+    <View style={[styles.container, { backgroundColor: theme.BG }]}>
+      <StatusBar
+        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.BG}
+      />
+
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-              <Feather name="arrow-left" size={24} color="#000" />
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingTop: insets.top + 16,
+              paddingBottom: insets.bottom + 40,
+            },
+          ]}
+        >
+          {/* Header Row */}
+          <View style={styles.headerRow}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => navigation.goBack()}
+              style={[styles.backBtn, { backgroundColor: theme.CARD }]}
+            >
+              <Feather name="chevron-left" size={20} color={theme.TEXT} />
             </TouchableOpacity>
-            <Logo size={32} />
+
+            <Logo size={48} />
           </View>
 
-          <View style={styles.titleSection}>
-            <Typography variant="h1" weight="700" style={styles.title}>
-              Recover{"\n"}Password
-            </Typography>
-            <Typography variant="body" color="#666" style={styles.subtitle}>
-              Enter your email address and we'll send you a link to reset your password.
-            </Typography>
+          {/* Hero Headline */}
+          <View style={styles.sectionMargin}>
+            <Text style={[styles.heroTag, { color: theme.ACTIVE }]}>
+              ACCOUNT RECOVERY
+            </Text>
+            <Text style={[styles.heroTitle, { color: theme.TEXT }]}>
+              Recover{'\n'}Password
+            </Text>
+            <Text style={[styles.heroSubtitle, { color: theme.MUTED }]}>
+              Enter your registered email address and we'll send a secure link to reset your vault password.
+            </Text>
           </View>
 
           {/* Form Card */}
-          <Card style={styles.formCard}>
-            <View style={styles.form}>
-              <Input
-                label="EMAIL ADDRESS"
-                placeholder="name@example.com"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
+          <View style={styles.sectionMargin}>
+            <View style={[styles.formCard, { backgroundColor: theme.CARD }]}>
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
+                  EMAIL ADDRESS
+                </Text>
+                <View
+                  style={[
+                    styles.inputInnerRow,
+                    { backgroundColor: theme.MODAL },
+                  ]}
+                >
+                  <Feather name="mail" size={18} color={theme.MUTED} />
+                  <TextInput
+                    style={[styles.textInput, { color: theme.TEXT }]}
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="name@example.com"
+                    placeholderTextColor={theme.MUTED}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                </View>
+              </View>
 
-              <Button
-                title="Send Reset Link"
+              <TouchableOpacity
+                activeOpacity={0.8}
                 onPress={handleReset}
-                style={styles.resetButton}
-                isLoading={isLoading}
-              />
+                disabled={isLoading}
+                style={[styles.submitBtn, { backgroundColor: theme.TEXT }]}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color={theme.BG} />
+                ) : (
+                  <Text style={[styles.submitText, { color: theme.BG }]}>
+                    Send Reset Link →
+                  </Text>
+                )}
+              </TouchableOpacity>
             </View>
-          </Card>
+          </View>
 
-          {/* Footer */}
-          <View style={styles.footer}>
-            <Typography variant="body" color="#666">
+          {/* Info Banner */}
+          <View style={styles.sectionMargin}>
+            <View
+              style={[
+                styles.infoCard,
+                { backgroundColor: `${theme.ACTIVE}12` },
+              ]}
+            >
+              <Feather name="shield" size={18} color={theme.ACTIVE} />
+              <Text style={[styles.infoText, { color: theme.MUTED }]}>
+                A password reset link will be dispatched to your email. Ensure to check both inbox & spam folders.
+              </Text>
+            </View>
+          </View>
+
+          {/* Footer Link */}
+          <View style={styles.footerRow}>
+            <Text style={[styles.footerText, { color: theme.MUTED }]}>
               Remember your password?
-            </Typography>
-            <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-              <Typography variant="body" weight="700" style={styles.loginLink}>
+            </Text>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('Login')}
+            >
+              <Text style={[styles.loginLink, { color: theme.TEXT }]}>
                 Log In
-              </Typography>
+              </Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 };
+
+export default ForgotPasswordScreen;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9F9F9',
   },
   scrollContent: {
-    paddingBottom: 40,
+    paddingHorizontal: 16,
   },
-  header: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingTop: 16,
+    marginBottom: 24,
+    paddingHorizontal: 4,
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionMargin: {
     marginBottom: 20,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
+  heroTag: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    paddingHorizontal: 4,
   },
-  titleSection: {
-    paddingHorizontal: 24,
-    marginBottom: 40,
+  heroTitle: {
+    fontSize: 40,
+    fontWeight: '800',
+    letterSpacing: -1.8,
+    lineHeight: 46,
+    marginBottom: 8,
+    paddingHorizontal: 4,
   },
-  title: {
-    fontSize: 42,
-    lineHeight: 48,
-    marginBottom: 12,
-  },
-  subtitle: {
-    fontSize: 16,
-    lineHeight: 24,
+  heroSubtitle: {
+    fontSize: 14,
+    lineHeight: 22,
+    paddingHorizontal: 4,
   },
   formCard: {
-    marginHorizontal: 16,
+    borderRadius: 28,
     padding: 24,
-    backgroundColor: '#FFF',
-    borderRadius: 32,
   },
-  form: {
-    width: '100%',
+  fieldGroup: {
+    marginBottom: 20,
   },
-  resetButton: {
-    marginTop: 32,
+  fieldLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 8,
   },
-  footer: {
+  inputInnerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 50,
+  },
+  textInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    padding: 0,
+  },
+  submitBtn: {
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  submitText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  infoCard: {
+    borderRadius: 20,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  infoText: {
+    fontSize: 12,
+    lineHeight: 18,
+    flex: 1,
+  },
+  footerRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 40,
+    gap: 6,
+    marginTop: 12,
+  },
+  footerText: {
+    fontSize: 13,
   },
   loginLink: {
-    marginLeft: 8,
-    color: '#000',
+    fontSize: 13,
+    fontWeight: '800',
   },
 });
-
-export default ForgotPasswordScreen;

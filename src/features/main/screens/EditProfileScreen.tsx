@@ -1,33 +1,55 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, SafeAreaView, ScrollView, TextInput } from 'react-native';
-import { Typography, Button } from '../../../components';
-import { useToast } from '../../../context/ToastContext';
-import { getUserProfile, updateUserProfile } from '../../../services/authService';
-import auth from '@react-native-firebase/auth';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  StyleSheet,
+  StatusBar,
+  Modal,
+  Image,
+  ActivityIndicator,
+  Pressable,
+} from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
+import { useTheme } from '../../../context/ThemeContext';
+import { useToast } from '../../../context/ToastContext';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
-import { updateName, updatePhone, updatePhoto } from '../../../store/slices/userSlice';
-import { updateProfilePhoto, deleteProfilePhoto } from '../../../services/authService';
-import { Modal, TouchableOpacity, Image } from 'react-native';
-import { colors } from '../../../theme/colors';
+import {
+  updateName,
+  updatePhone,
+  updatePhoto,
+} from '../../../store/slices/userSlice';
+import {
+  updateUserProfile,
+  updateProfilePhoto,
+  deleteProfilePhoto,
+} from '../../../services/authService';
 
-const EditProfileScreen = ({ navigation }: any) => {
+export const EditProfileScreen = ({ navigation }: any) => {
+  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const { showToast } = useToast();
   const dispatch = useAppDispatch();
   const profile = useAppSelector(state => state.user.profile);
 
-  const [name, setName] = useState(profile?.name || '');
-  const [email, setEmail] = useState(profile?.email || '');
-  const [phone, setPhone] = useState(profile?.phone || '');
-  const [photoURL, setPhotoURL] = useState<string | null>(profile?.photoURL || null);
+  const [name, setName] = useState(profile?.name || 'Talha Arshad');
+  const [email] = useState(profile?.email || 'talhaarshad010@gmail.com');
+  const [phone, setPhone] = useState(profile?.phone || '+92 300 1234567');
+  const [city, setCity] = useState('Lahore, Punjab');
+  const [photoURL, setPhotoURL] = useState<string | null>(
+    profile?.photoURL || null,
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [showPhotoSheet, setShowPhotoSheet] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
   const handleSave = async () => {
     if (!name.trim()) {
-      showToast('Name cannot be empty.', 'error');
+      showToast('Full name cannot be empty', 'error');
       return;
     }
     setIsLoading(true);
@@ -35,10 +57,10 @@ const EditProfileScreen = ({ navigation }: any) => {
       await updateUserProfile({ name: name.trim(), phone: phone.trim() });
       dispatch(updateName(name.trim()));
       dispatch(updatePhone(phone.trim()));
-      showToast('Profile updated successfully!', 'success');
+      showToast('Profile saved successfully!', 'success');
       navigation.goBack();
     } catch (error) {
-      showToast('Failed to update profile.', 'error');
+      showToast('Failed to update profile details', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -50,9 +72,9 @@ const EditProfileScreen = ({ navigation }: any) => {
       try {
         const result = await launchImageLibrary({
           mediaType: 'photo',
-          quality: 0.5,
-          maxWidth: 400,
-          maxHeight: 400,
+          quality: 0.6,
+          maxWidth: 500,
+          maxHeight: 500,
           includeBase64: true,
         });
 
@@ -60,18 +82,20 @@ const EditProfileScreen = ({ navigation }: any) => {
         const asset = result.assets?.[0];
         if (asset?.base64) {
           setIsUploading(true);
-          const dataUri = `data:${asset.type || 'image/jpeg'};base64,${asset.base64}`;
+          const dataUri = `data:${asset.type || 'image/jpeg'};base64,${
+            asset.base64
+          }`;
           await updateProfilePhoto(dataUri);
           setPhotoURL(dataUri);
           dispatch(updatePhoto(dataUri));
-          showToast('Profile photo updated!', 'success');
+          showToast('Profile picture updated!', 'success');
           setIsUploading(false);
         }
       } catch (error) {
         setIsUploading(false);
-        showToast('Failed to update profile photo.', 'error');
+        showToast('Failed to upload picture', 'error');
       }
-    }, 500);
+    }, 400);
   };
 
   const handleTakePhoto = () => {
@@ -80,9 +104,9 @@ const EditProfileScreen = ({ navigation }: any) => {
       try {
         const result = await launchCamera({
           mediaType: 'photo',
-          quality: 0.5,
-          maxWidth: 400,
-          maxHeight: 400,
+          quality: 0.6,
+          maxWidth: 500,
+          maxHeight: 500,
           includeBase64: true,
         });
 
@@ -90,18 +114,20 @@ const EditProfileScreen = ({ navigation }: any) => {
         const asset = result.assets?.[0];
         if (asset?.base64) {
           setIsUploading(true);
-          const dataUri = `data:${asset.type || 'image/jpeg'};base64,${asset.base64}`;
+          const dataUri = `data:${asset.type || 'image/jpeg'};base64,${
+            asset.base64
+          }`;
           await updateProfilePhoto(dataUri);
           setPhotoURL(dataUri);
           dispatch(updatePhoto(dataUri));
-          showToast('Profile photo updated!', 'success');
+          showToast('Photo captured & updated!', 'success');
           setIsUploading(false);
         }
       } catch (error) {
         setIsUploading(false);
-        showToast('Failed to update profile photo.', 'error');
+        showToast('Failed to capture photo', 'error');
       }
-    }, 500);
+    }, 400);
   };
 
   const handleDeletePhoto = async () => {
@@ -110,247 +136,550 @@ const EditProfileScreen = ({ navigation }: any) => {
       await deleteProfilePhoto();
       setPhotoURL(null);
       dispatch(updatePhoto(null));
-      showToast('Profile photo removed.', 'success');
+      showToast('Profile photo removed', 'info');
     } catch (error) {
-      showToast('Failed to remove profile photo.', 'error');
+      showToast('Failed to remove photo', 'error');
     }
   };
 
   const getInitials = () => {
-    if (!name) return '?';
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    if (!name) return 'TA';
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.avatarContainer}>
-          <TouchableOpacity 
-            style={styles.avatarWrapper} 
-            onPress={() => setShowPhotoSheet(true)}
+    <View style={[styles.container, { backgroundColor: theme.BG }]}>
+      <StatusBar
+        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.BG}
+      />
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 60,
+          },
+        ]}
+      >
+        {/* Top Header */}
+        <View style={styles.headerRow}>
+          <View>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => navigation.goBack()}
+              style={styles.backBtn}
+            >
+              <Feather name="chevron-left" size={16} color={theme.MUTED} />
+              <Text style={[styles.backText, { color: theme.MUTED }]}>
+                My Profile
+              </Text>
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+              Edit Profile
+            </Text>
+          </View>
+
+          <TouchableOpacity
             activeOpacity={0.8}
+            onPress={handleSave}
+            disabled={isLoading}
+            style={[styles.saveHeaderBtn, { backgroundColor: theme.TEXT }]}
           >
-            {photoURL ? (
-              <Image source={{ uri: photoURL }} style={styles.avatarImage} />
+            {isLoading ? (
+              <ActivityIndicator size="small" color={theme.BG} />
             ) : (
-              <View style={styles.avatarMock}>
-                <Typography variant="h1" weight="700" color="#FFF" style={{ fontSize: 32 }}>
-                  {getInitials()}
-                </Typography>
-              </View>
+              <>
+                <Feather name="check" size={15} color={theme.BG} />
+                <Text style={[styles.saveHeaderText, { color: theme.BG }]}>
+                  Save
+                </Text>
+              </>
             )}
-            <View style={styles.editBadge}>
-              <Feather name="camera" size={14} color="#FFF" />
-            </View>
           </TouchableOpacity>
-          <Typography variant="body" color="#666" style={{ marginTop: 12 }}>
-            Tap to change profile picture
-          </Typography>
         </View>
 
-        <View style={styles.inputGroup}>
-          <Typography variant="caption" weight="700" color="#666" style={{ letterSpacing: 1, marginBottom: 8 }}>
-            FULL NAME
-          </Typography>
-          <TextInput
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-            placeholderTextColor="#AAA"
-            placeholder="Enter your full name"
-          />
+        {/* Avatar Selection Hero */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.avatarHeroCard, { backgroundColor: theme.CARD }]}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => setShowPhotoSheet(true)}
+              style={styles.avatarTouchArea}
+            >
+              <View
+                style={[
+                  styles.avatarRing,
+                  { borderColor: theme.ACTIVE, backgroundColor: theme.MODAL },
+                ]}
+              >
+                {photoURL ? (
+                  <Image source={{ uri: photoURL }} style={styles.avatarImage} />
+                ) : (
+                  <View style={styles.initialsAvatar}>
+                    <Text style={[styles.initialsText, { color: theme.TEXT }]}>
+                      {getInitials()}
+                    </Text>
+                  </View>
+                )}
+                {isUploading && (
+                  <View style={styles.uploadingOverlay}>
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  </View>
+                )}
+              </View>
+
+              <View
+                style={[
+                  styles.cameraBadge,
+                  { backgroundColor: theme.ACTIVE, borderColor: theme.CARD },
+                ]}
+              >
+                <Feather name="camera" size={14} color="#FFFFFF" />
+              </View>
+            </TouchableOpacity>
+
+            <Text style={[styles.avatarHintText, { color: theme.MUTED }]}>
+              Tap avatar to upload photo or take a picture
+            </Text>
+          </View>
         </View>
 
-        <View style={styles.inputGroup}>
-          <Typography variant="caption" weight="700" color="#666" style={{ letterSpacing: 1, marginBottom: 8 }}>
-            EMAIL ADDRESS
-          </Typography>
-          <TextInput
-            style={[styles.input, styles.inputDisabled]}
-            value={email}
-            editable={false}
-            placeholderTextColor="#AAA"
-          />
-          <Typography variant="caption" color="#999" style={{ marginTop: 6 }}>
-            Email cannot be changed for security reasons.
-          </Typography>
+        {/* Form Inputs Group */}
+        <View style={styles.sectionMargin}>
+          <Text style={[styles.sectionTitle, { color: theme.MUTED }]}>
+            PERSONAL INFORMATION
+          </Text>
+
+          <View style={styles.inputsStack}>
+            {/* Full Name */}
+            <View style={[styles.inputCard, { backgroundColor: theme.CARD }]}>
+              <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
+                FULL NAME
+              </Text>
+              <View style={styles.inputInnerRow}>
+                <Feather name="user" size={18} color={theme.MUTED} />
+                <TextInput
+                  style={[styles.textInput, { color: theme.TEXT }]}
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Enter your full name"
+                  placeholderTextColor={theme.MUTED}
+                />
+              </View>
+            </View>
+
+            {/* Email Address (Read-Only) */}
+            <View style={[styles.inputCard, { backgroundColor: theme.CARD }]}>
+              <View style={styles.labelLockRow}>
+                <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
+                  EMAIL ADDRESS
+                </Text>
+                <View style={styles.lockTag}>
+                  <Feather name="lock" size={10} color={theme.MUTED} />
+                  <Text style={[styles.lockTagText, { color: theme.MUTED }]}>
+                    Read Only
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.inputInnerRow}>
+                <Feather name="mail" size={18} color={theme.MUTED} />
+                <TextInput
+                  style={[
+                    styles.textInput,
+                    { color: theme.MUTED, opacity: 0.8 },
+                  ]}
+                  value={email}
+                  editable={false}
+                />
+              </View>
+              <Text style={[styles.helperText, { color: theme.MUTED }]}>
+                Email address is verified via Firebase Auth and cannot be modified.
+              </Text>
+            </View>
+
+            {/* Phone Number */}
+            <View style={[styles.inputCard, { backgroundColor: theme.CARD }]}>
+              <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
+                PHONE NUMBER
+              </Text>
+              <View style={styles.inputInnerRow}>
+                <Feather name="phone" size={18} color={theme.MUTED} />
+                <TextInput
+                  style={[styles.textInput, { color: theme.TEXT }]}
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                  placeholder="Enter phone number"
+                  placeholderTextColor={theme.MUTED}
+                />
+              </View>
+            </View>
+
+            {/* City / Province */}
+            <View style={[styles.inputCard, { backgroundColor: theme.CARD }]}>
+              <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
+                CITY / PROVINCE
+              </Text>
+              <View style={styles.inputInnerRow}>
+                <Feather name="map-pin" size={18} color={theme.MUTED} />
+                <TextInput
+                  style={[styles.textInput, { color: theme.TEXT }]}
+                  value={city}
+                  onChangeText={setCity}
+                  placeholder="Enter city name"
+                  placeholderTextColor={theme.MUTED}
+                />
+              </View>
+            </View>
+          </View>
         </View>
 
-        <View style={styles.inputGroup}>
-          <Typography variant="caption" weight="700" color="#666" style={{ letterSpacing: 1, marginBottom: 8 }}>
-            PHONE NUMBER
-          </Typography>
-          <TextInput
-            style={styles.input}
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-            placeholderTextColor="#AAA"
-            placeholder="Enter your phone number"
-          />
+        {/* Verification Status Banner */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.verifyCard, { backgroundColor: theme.CARD }]}>
+            <View
+              style={[
+                styles.verifyIconBox,
+                { backgroundColor: `${theme.GREEN}15` },
+              ]}
+            >
+              <Feather name="check-circle" size={20} color={theme.GREEN} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.verifyTitle, { color: theme.TEXT }]}>
+                CNIC & Biometric Verified
+              </Text>
+              <Text style={[styles.verifySub, { color: theme.MUTED }]}>
+                Tier 1 Financial Compliance Active (Nadra Verified)
+              </Text>
+            </View>
+          </View>
         </View>
 
-        <Button
-          title="Save Changes"
-          style={{ marginTop: 32 }}
+        {/* Submit Save Button */}
+        <TouchableOpacity
+          activeOpacity={0.8}
           onPress={handleSave}
-          isLoading={isLoading}
-        />
+          disabled={isLoading}
+          style={[styles.saveBigBtn, { backgroundColor: theme.TEXT }]}
+        >
+          {isLoading ? (
+            <ActivityIndicator color={theme.BG} />
+          ) : (
+            <Text style={[styles.saveBigText, { color: theme.BG }]}>
+              Save Profile Changes →
+            </Text>
+          )}
+        </TouchableOpacity>
       </ScrollView>
 
+      {/* Photo Picker Bottom Sheet Modal */}
       <Modal
         visible={showPhotoSheet}
         transparent
         animationType="slide"
         onRequestClose={() => setShowPhotoSheet(false)}
       >
-        <TouchableOpacity 
-          style={styles.modalOverlay} 
-          activeOpacity={1} 
+        <Pressable
+          style={styles.modalOverlay}
           onPress={() => setShowPhotoSheet(false)}
         >
-          <View style={styles.bottomSheet}>
-            <View style={styles.sheetHandle} />
-            <Typography variant="h2" weight="700" style={{ marginBottom: 24 }}>
-              Profile Photo
-            </Typography>
+          <Pressable
+            style={[styles.sheetContent, { backgroundColor: theme.CARD }]}
+            onPress={e => e.stopPropagation()}
+          >
+            <View style={[styles.sheetHandle, { backgroundColor: theme.BORDER }]} />
+            <Text style={[styles.sheetTitle, { color: theme.TEXT }]}>
+              Update Profile Picture
+            </Text>
 
-            <TouchableOpacity style={styles.sheetOption} onPress={handleTakePhoto}>
-              <View style={styles.sheetIconBox}>
-                <Feather name="camera" size={20} color="#000" />
-              </View>
-              <Typography variant="body" weight="600" style={{ marginLeft: 16 }}>
-                Take Photo
-              </Typography>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={handleTakePhoto}
+              style={[styles.sheetOption, { backgroundColor: theme.MODAL }]}
+            >
+              <Feather name="camera" size={20} color={theme.TEXT} />
+              <Text style={[styles.sheetOptionText, { color: theme.TEXT }]}>
+                Take a New Photo
+              </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.sheetOption} onPress={handleUploadPhoto}>
-              <View style={styles.sheetIconBox}>
-                <Feather name="image" size={20} color="#000" />
-              </View>
-              <Typography variant="body" weight="600" style={{ marginLeft: 16 }}>
-                Choose from Gallery
-              </Typography>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={handleUploadPhoto}
+              style={[styles.sheetOption, { backgroundColor: theme.MODAL }]}
+            >
+              <Feather name="image" size={20} color={theme.TEXT} />
+              <Text style={[styles.sheetOptionText, { color: theme.TEXT }]}>
+                Choose from Photo Gallery
+              </Text>
             </TouchableOpacity>
 
             {photoURL && (
-              <TouchableOpacity style={styles.sheetOption} onPress={handleDeletePhoto}>
-                <View style={[styles.sheetIconBox, { backgroundColor: '#FFEBEE' }]}>
-                  <Feather name="trash-2" size={20} color={colors.accent.errorText} />
-                </View>
-                <Typography variant="body" weight="600" color={colors.accent.errorText} style={{ marginLeft: 16 }}>
-                  Delete Photo
-                </Typography>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={handleDeletePhoto}
+                style={[
+                  styles.sheetOption,
+                  { backgroundColor: `${theme.RED}14` },
+                ]}
+              >
+                <Feather name="trash-2" size={20} color={theme.RED} />
+                <Text style={[styles.sheetOptionText, { color: theme.RED }]}>
+                  Remove Profile Picture
+                </Text>
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity style={styles.sheetCancel} onPress={() => setShowPhotoSheet(false)}>
-              <Typography variant="body" weight="700" color="#666">
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setShowPhotoSheet(false)}
+              style={styles.sheetCancelBtn}
+            >
+              <Text style={[styles.sheetCancelText, { color: theme.MUTED }]}>
                 Cancel
-              </Typography>
+              </Text>
             </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
+          </Pressable>
+        </Pressable>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 };
 
+export default EditProfileScreen;
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FB' },
-  content: { padding: 24, paddingTop: 32 },
-  inputGroup: { marginBottom: 24 },
-  input: {
-    backgroundColor: '#FFF',
-    padding: 16,
-    borderRadius: 16,
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#000',
-    borderWidth: 1,
-    borderColor: '#EAEBEE',
+  container: {
+    flex: 1,
   },
-  inputDisabled: {
-    backgroundColor: '#F3F4F6',
-    color: '#999',
+  scrollContent: {
+    paddingHorizontal: 16,
   },
-  avatarContainer: {
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 20,
+    paddingHorizontal: 4,
   },
-  avatarWrapper: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  backText: {
+    fontSize: 12,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -1.2,
+  },
+  saveHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 100,
+  },
+  saveHeaderText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sectionMargin: {
+    marginBottom: 16,
+  },
+  avatarHeroCard: {
+    borderRadius: 28,
+    padding: 24,
+    alignItems: 'center',
+  },
+  avatarTouchArea: {
     position: 'relative',
+    marginBottom: 12,
+  },
+  avatarRing: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    padding: 3,
+    borderWidth: 2,
   },
   avatarImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: '100%',
+    height: '100%',
+    borderRadius: 42,
   },
-  avatarMock: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#000',
-    justifyContent: 'center',
+  initialsAvatar: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 42,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  editBadge: {
+  initialsText: {
+    fontSize: 28,
+    fontWeight: '800',
+  },
+  uploadingOverlay: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#0047AB',
-    justifyContent: 'center',
+    inset: 0,
+    borderRadius: 45,
+    backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#F8F9FB',
+    justifyContent: 'center',
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2.5,
+  },
+  avatarHintText: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  sectionTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  inputsStack: {
+    gap: 10,
+  },
+  inputCard: {
+    borderRadius: 20,
+    padding: 16,
+  },
+  fieldLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+  },
+  labelLockRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  lockTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  lockTagText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  inputInnerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  textInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    padding: 0,
+  },
+  helperText: {
+    fontSize: 11,
+    marginTop: 8,
+  },
+  verifyCard: {
+    borderRadius: 20,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  verifyIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verifyTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  verifySub: {
+    fontSize: 11,
+  },
+  saveBigBtn: {
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  saveBigText: {
+    fontSize: 14,
+    fontWeight: '800',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
   },
-  bottomSheet: {
-    backgroundColor: '#FFF',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 40,
+  sheetContent: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 16,
+    paddingBottom: 36,
   },
   sheetHandle: {
-    width: 40,
+    width: 36,
     height: 4,
-    backgroundColor: '#E0E0E0',
     borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: 20,
+    marginVertical: 12,
+  },
+  sheetTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 16,
   },
   sheetOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
+    gap: 14,
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 8,
   },
-  sheetIconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
+  sheetOptionText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
-  sheetCancel: {
+  sheetCancelBtn: {
     alignItems: 'center',
-    paddingVertical: 16,
-    marginTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+    paddingVertical: 14,
+    marginTop: 4,
+  },
+  sheetCancelText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
 });
-
-export default EditProfileScreen;

@@ -1,6 +1,6 @@
 import React from 'react';
 import { StatusBar } from 'react-native';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createStackNavigator, TransitionPresets } from '@react-navigation/stack';
 import OnboardingScreen from '../features/auth/screens/OnboardingScreen';
 import LoginScreen from '../features/auth/screens/LoginScreen';
 import RegisterScreen from '../features/auth/screens/RegisterScreen';
@@ -15,11 +15,7 @@ export type AuthStackParamList = {
 
 const Stack = createStackNavigator<AuthStackParamList>();
 
-interface AuthStackProps {
-  onLogin: () => void;
-}
-
-export const AuthStack = ({ onLogin }: AuthStackProps) => {
+export const AuthStack = () => {
   return (
     <>
       <StatusBar
@@ -27,11 +23,15 @@ export const AuthStack = ({ onLogin }: AuthStackProps) => {
         backgroundColor="#F9F9F9"
         translucent={false}
       />
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+          gestureEnabled: true,
+          ...TransitionPresets.SlideFromRightIOS,
+        }}
+      >
         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-        <Stack.Screen name="Login">
-          {(props) => <LoginScreen {...props} onLogin={onLogin} />}
-        </Stack.Screen>
+        <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Register" component={RegisterScreen} />
         <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
       </Stack.Navigator>

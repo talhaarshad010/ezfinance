@@ -1,40 +1,53 @@
 import React, { useState } from 'react';
 import {
   View,
-  StyleSheet,
-  TouchableOpacity,
+  Text,
   ScrollView,
+  TouchableOpacity,
+  TextInput,
   KeyboardAvoidingView,
-  Image,
   Platform,
+  ActivityIndicator,
+  Image,
+  StyleSheet,
   StatusBar,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
-import { Typography, Input, Button, Card, Logo, LoadingOverlay } from '../../../components';
-import { colors } from '../../../theme/colors';
-import { signUp, signInWithGoogle } from '../../../services/authService';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
+import { signUp, signInWithGoogle } from '../../../services/authService';
+import Logo from '../../../components/Logo';
 
-const RegisterScreen = () => {
+export const RegisterScreen = () => {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
+  const { showToast } = useToast();
+
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [agree, setAgree] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { showToast } = useToast();
 
   const handleRegister = async () => {
-    if (!fullName || !email || !password || !confirmPassword) {
-      showToast('Please fill in all fields', 'error');
+    if (!fullName.trim() || !email.trim() || !password || !confirmPassword) {
+      showToast('Please fill in all account fields', 'error');
       return;
     }
 
     if (password !== confirmPassword) {
       showToast('Passwords do not match', 'error');
+      return;
+    }
+
+    if (password.length < 6) {
+      showToast('Password must be at least 6 characters', 'error');
       return;
     }
 
@@ -45,17 +58,16 @@ const RegisterScreen = () => {
 
     setIsLoading(true);
     try {
-      await signUp(fullName, email, password);
-      showToast('Account created successfully!', 'success');
-      // Navigation is handled by auth state listener in AppNavigator
+      await signUp(fullName.trim(), email.trim(), password);
+      showToast('Account created successfully! Welcome to EZFinance.', 'success');
     } catch (error: any) {
       let errorMessage = 'An error occurred during registration.';
       if (error.code === 'auth/email-already-in-use') {
-        errorMessage = 'This email is already in use.';
+        errorMessage = 'This email address is already registered.';
       } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Invalid email address.';
+        errorMessage = 'Invalid email address format.';
       } else if (error.code === 'auth/weak-password') {
-        errorMessage = 'Password is too weak.';
+        errorMessage = 'Password is too weak. Please use a stronger password.';
       }
       showToast(errorMessage, 'error');
     } finally {
@@ -77,244 +89,416 @@ const RegisterScreen = () => {
     }
   };
 
-
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F9F9F9" translucent />
+    <View style={[styles.container, { backgroundColor: theme.BG }]}>
+      <StatusBar
+        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.BG}
+      />
+
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-              <Feather name="arrow-left" size={24} color="#000" />
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingTop: insets.top + 16,
+              paddingBottom: insets.bottom + 40,
+            },
+          ]}
+        >
+          {/* Top Navigation Header */}
+          <View style={styles.headerRow}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => navigation.goBack()}
+              style={[styles.backBtn, { backgroundColor: theme.CARD }]}
+            >
+              <Feather name="chevron-left" size={20} color={theme.TEXT} />
             </TouchableOpacity>
-            <Logo size={32} />
+
+            <Logo size={48} />
           </View>
 
-          <View style={styles.titleSection}>
-            <Typography variant="h1" weight="700" style={styles.title}>
+          {/* Hero Section */}
+          <View style={styles.sectionMargin}>
+            <Text style={[styles.heroTag, { color: theme.ACTIVE }]}>
+              START YOUR FINANCIAL JOURNEY
+            </Text>
+            <Text style={[styles.heroTitle, { color: theme.TEXT }]}>
               Create Account
-            </Typography>
-            <Typography variant="body" color="#666" style={styles.subtitle}>
+            </Text>
+            <Text style={[styles.heroSubtitle, { color: theme.MUTED }]}>
               Join the elite circle of serious investors and take control of your wealth.
-            </Typography>
+            </Text>
           </View>
 
           {/* Form Card */}
-          <Card style={styles.formCard}>
-            <View style={styles.form}>
-              <Input
-                label="FULL NAME"
-                placeholder="John Doe"
-                value={fullName}
-                onChangeText={setFullName}
-              />
-              
-              <View style={{ marginTop: 16 }}>
-                <Input
-                  label="EMAIL ADDRESS"
-                  placeholder="name@example.com"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-              </View>
-
-              <View style={{ marginTop: 16 }}>
-                <Input
-                  label="PASSWORD"
-                  placeholder="••••••••"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                />
-              </View>
-
-              <View style={{ marginTop: 16 }}>
-                <Input
-                  label="CONFIRM PASSWORD"
-                  placeholder="••••••••"
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  secureTextEntry
-                />
-              </View>
-
-              <TouchableOpacity 
-                style={styles.checkboxContainer} 
-                onPress={() => setAgree(!agree)}
-              >
-                <View style={[styles.checkbox, agree && styles.checkboxActive]}>
-                  {agree && <Feather name="check" size={12} color="#FFF" />}
+          <View style={styles.sectionMargin}>
+            <View style={[styles.formCard, { backgroundColor: theme.CARD }]}>
+              {/* Full Name */}
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
+                  FULL NAME
+                </Text>
+                <View
+                  style={[
+                    styles.inputInnerRow,
+                    { backgroundColor: theme.MODAL },
+                  ]}
+                >
+                  <Feather name="user" size={18} color={theme.MUTED} />
+                  <TextInput
+                    style={[styles.textInput, { color: theme.TEXT }]}
+                    value={fullName}
+                    onChangeText={setFullName}
+                    placeholder="Enter your full name"
+                    placeholderTextColor={theme.MUTED}
+                  />
                 </View>
-                <Typography variant="caption" color="#666" style={{ marginLeft: 12 }}>
-                  By creating an account, I agree to the <Typography variant="caption" weight="700" color="#000">Terms & Service</Typography>
-                </Typography>
+              </View>
+
+              {/* Email Address */}
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
+                  EMAIL ADDRESS
+                </Text>
+                <View
+                  style={[
+                    styles.inputInnerRow,
+                    { backgroundColor: theme.MODAL },
+                  ]}
+                >
+                  <Feather name="mail" size={18} color={theme.MUTED} />
+                  <TextInput
+                    style={[styles.textInput, { color: theme.TEXT }]}
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="name@example.com"
+                    placeholderTextColor={theme.MUTED}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                </View>
+              </View>
+
+              {/* Password */}
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
+                  PASSWORD
+                </Text>
+                <View
+                  style={[
+                    styles.inputInnerRow,
+                    { backgroundColor: theme.MODAL },
+                  ]}
+                >
+                  <Feather name="lock" size={18} color={theme.MUTED} />
+                  <TextInput
+                    style={[styles.textInput, { color: theme.TEXT }]}
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="••••••••"
+                    placeholderTextColor={theme.MUTED}
+                    secureTextEntry={!showPassword}
+                  />
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => setShowPassword(!showPassword)}
+                  >
+                    <Feather
+                      name={showPassword ? 'eye' : 'eye-off'}
+                      size={18}
+                      color={theme.MUTED}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Confirm Password */}
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
+                  CONFIRM PASSWORD
+                </Text>
+                <View
+                  style={[
+                    styles.inputInnerRow,
+                    { backgroundColor: theme.MODAL },
+                  ]}
+                >
+                  <Feather name="check-circle" size={18} color={theme.MUTED} />
+                  <TextInput
+                    style={[styles.textInput, { color: theme.TEXT }]}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    placeholder="••••••••"
+                    placeholderTextColor={theme.MUTED}
+                    secureTextEntry={!showConfirm}
+                  />
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => setShowConfirm(!showConfirm)}
+                  >
+                    <Feather
+                      name={showConfirm ? 'eye' : 'eye-off'}
+                      size={18}
+                      color={theme.MUTED}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Checkbox Terms Agreement */}
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => setAgree(!agree)}
+                style={styles.checkboxRow}
+              >
+                <View
+                  style={[
+                    styles.checkboxBox,
+                    {
+                      borderColor: agree ? theme.TEXT : theme.BORDER,
+                      backgroundColor: agree ? theme.TEXT : 'transparent',
+                    },
+                  ]}
+                >
+                  {agree && (
+                    <Feather name="check" size={12} color={theme.BG} />
+                  )}
+                </View>
+                <Text style={[styles.termsText, { color: theme.MUTED }]}>
+                  By creating an account, I agree to the{' '}
+                  <Text style={{ color: theme.TEXT, fontWeight: '700' }}>
+                    Terms & Service
+                  </Text>
+                </Text>
               </TouchableOpacity>
 
-              <Button
-                title="Create Account"
+              {/* Register Button */}
+              <TouchableOpacity
+                activeOpacity={0.8}
                 onPress={handleRegister}
-                style={styles.registerButton}
-                disabled={!agree}
-                isLoading={isLoading}
-              />
+                disabled={isLoading}
+                style={[
+                  styles.submitBtn,
+                  {
+                    backgroundColor: agree ? theme.TEXT : theme.MODAL,
+                    opacity: agree ? 1 : 0.6,
+                  },
+                ]}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color={theme.BG} />
+                ) : (
+                  <Text style={[styles.submitText, { color: theme.BG }]}>
+                    Create Vault Account →
+                  </Text>
+                )}
+              </TouchableOpacity>
             </View>
-          </Card>
+          </View>
 
-          {/* Social Login */}
-          <View style={styles.socialSection}>
-            <Typography variant="caption" weight="700" color="#AAA" style={styles.socialTitle}>
-              OR CONTINUE WITH
-            </Typography>
-            <TouchableOpacity style={styles.googleBtn} onPress={handleGoogleSignIn}>
-              <Image 
-                source={require('../../../assets/images/Logo-google-icon-PNG.png')} 
-                style={styles.googleIcon} 
+          {/* Social Sign-In */}
+          <View style={styles.sectionMargin}>
+            <View style={styles.dividerRow}>
+              <View style={[styles.divLine, { backgroundColor: theme.BORDER }]} />
+              <Text style={[styles.divText, { color: theme.MUTED }]}>
+                OR CONTINUE WITH
+              </Text>
+              <View style={[styles.divLine, { backgroundColor: theme.BORDER }]} />
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={handleGoogleSignIn}
+              disabled={isLoading}
+              style={[
+                styles.googleBtn,
+                { backgroundColor: theme.CARD, borderColor: theme.BORDER },
+              ]}
+            >
+              <Image
+                source={require('../../../assets/images/Logo-google-icon-PNG.png')}
+                style={styles.googleIcon}
                 resizeMode="contain"
               />
-              <Typography variant="body" weight="700" style={{ marginLeft: 12 }}>
+              <Text style={[styles.googleBtnText, { color: theme.TEXT }]}>
                 Continue with Google
-              </Typography>
+              </Text>
             </TouchableOpacity>
           </View>
 
-
-          {/* Footer */}
-          <View style={styles.footer}>
-            <Typography variant="body" color="#666">
+          {/* Login Link Footer */}
+          <View style={styles.footerRow}>
+            <Text style={[styles.footerText, { color: theme.MUTED }]}>
               Already have an account?
-            </Typography>
-            <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-              <Typography variant="body" weight="700" style={styles.loginLink}>
+            </Text>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('Login')}
+            >
+              <Text style={[styles.loginLink, { color: theme.TEXT }]}>
                 Log In
-              </Typography>
+              </Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-      <LoadingOverlay visible={isLoading} />
-    </SafeAreaView>
+    </View>
   );
 };
+
+export default RegisterScreen;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9F9F9',
   },
   scrollContent: {
-    paddingBottom: 40,
+    paddingHorizontal: 16,
   },
-  header: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingTop: 16,
+    marginBottom: 20,
+    paddingHorizontal: 4,
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionMargin: {
     marginBottom: 20,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
+  heroTag: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    paddingHorizontal: 4,
   },
-  titleSection: {
-    paddingHorizontal: 24,
-    marginBottom: 32,
+  heroTitle: {
+    fontSize: 40,
+    fontWeight: '800',
+    letterSpacing: -1.8,
+    marginBottom: 8,
+    paddingHorizontal: 4,
   },
-  title: {
-    fontSize: 42,
-    lineHeight: 48,
-    marginBottom: 12,
-  },
-  subtitle: {
-    fontSize: 16,
-    lineHeight: 24,
+  heroSubtitle: {
+    fontSize: 14,
+    lineHeight: 22,
+    paddingHorizontal: 4,
   },
   formCard: {
-    marginHorizontal: 16,
+    borderRadius: 28,
     padding: 24,
-    backgroundColor: '#FFF',
-    borderRadius: 32,
   },
-  form: {
-    width: '100%',
+  fieldGroup: {
+    marginBottom: 14,
   },
-  checkboxContainer: {
+  fieldLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+  },
+  inputInnerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 24,
+    gap: 12,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 50,
   },
-  checkbox: {
+  textInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    padding: 0,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginVertical: 14,
+  },
+  checkboxBox: {
     width: 20,
     height: 20,
     borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#EEE',
+    borderWidth: 1.8,
+    alignItems: 'center',
     justifyContent: 'center',
+  },
+  termsText: {
+    fontSize: 12,
+    flex: 1,
+  },
+  submitBtn: {
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
   },
-  checkboxActive: {
-    backgroundColor: '#000',
-    borderColor: '#000',
+  submitText: {
+    fontSize: 14,
+    fontWeight: '800',
   },
-  registerButton: {
-    marginTop: 32,
-  },
-  socialSection: {
-    marginTop: 40,
-    paddingHorizontal: 24,
+  dividerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+    paddingHorizontal: 8,
   },
-  socialTitle: {
-    letterSpacing: 2,
-    marginBottom: 20,
+  divLine: {
+    flex: 1,
+    height: 1,
   },
-
+  divText: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+  },
   googleBtn: {
-    width: '100%',
-    backgroundColor: '#FFF',
-    height: 56,
-    borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 12,
+    height: 52,
+    borderRadius: 26,
     borderWidth: 1,
-    borderColor: '#EEE',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 1,
   },
   googleIcon: {
-    width: 24,
-    height: 24,
+    width: 20,
+    height: 20,
   },
-
-  footer: {
+  googleBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  footerRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 40,
+    gap: 6,
+    marginTop: 4,
+  },
+  footerText: {
+    fontSize: 13,
   },
   loginLink: {
-    marginLeft: 8,
-    color: '#000',
+    fontSize: 13,
+    fontWeight: '800',
   },
 });
-
-export default RegisterScreen;

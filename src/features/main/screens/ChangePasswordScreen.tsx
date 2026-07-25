@@ -1,25 +1,51 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TextInput } from 'react-native';
-import { Typography, Card, Button } from '../../../components';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  StyleSheet,
+  StatusBar,
+  ActivityIndicator,
+} from 'react-native';
+import Feather from 'react-native-vector-icons/Feather';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import { changePassword } from '../../../services/authService';
-import { useNavigation } from '@react-navigation/native';
 
-const ChangePasswordScreen = () => {
+export const ChangePasswordScreen = () => {
+  const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const { showToast } = useToast();
-  const navigation = useNavigation();
+
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
   const [isLoading, setIsLoading] = useState(false);
+
+  // Requirement checks
+  const isMinLength = newPassword.length >= 8;
+  const hasUpperLower =
+    /[a-z]/.test(newPassword) && /[A-Z]/.test(newPassword);
+  const hasNumberSpecial =
+    /[0-9]/.test(newPassword) && /[^A-Za-z0-9]/.test(newPassword);
 
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
-      showToast('Please fill in all fields.', 'error');
+      showToast('Please fill in all password fields.', 'error');
       return;
     }
 
-    if (newPassword.length < 8) {
+    if (!isMinLength) {
       showToast('New password must be at least 8 characters.', 'error');
       return;
     }
@@ -46,7 +72,8 @@ const ChangePasswordScreen = () => {
       } else if (error.code === 'auth/weak-password') {
         errorMessage = 'New password is too weak.';
       } else if (error.code === 'auth/requires-recent-login') {
-        errorMessage = 'Please sign out and sign in again before changing password.';
+        errorMessage =
+          'Please sign out and sign in again before updating password.';
       }
       showToast(errorMessage, 'error');
     } finally {
@@ -55,110 +82,280 @@ const ChangePasswordScreen = () => {
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Typography variant="h1" weight="700" style={{ fontSize: 32 }}>Change Password</Typography>
-        <Typography variant="body" style={{ marginTop: 8, lineHeight: 24 }}>
-          Ensure your new password meets the security requirements.
-        </Typography>
-      </View>
-
-      <Card style={styles.card}>
-        <Typography variant="caption" weight="700" style={styles.label}>CURRENT PASSWORD</Typography>
-        <View style={styles.inputBox}>
-          <TextInput
-            placeholder="••••••••"
-            placeholderTextColor="#AAA"
-            secureTextEntry
-            style={styles.input}
-            value={currentPassword}
-            onChangeText={setCurrentPassword}
-          />
-        </View>
-
-        <View style={styles.divider} />
-
-        <Typography variant="caption" weight="700" style={styles.label}>NEW PASSWORD</Typography>
-        <View style={styles.inputBox}>
-          <TextInput
-            placeholder="Enter new password"
-            placeholderTextColor="#AAA"
-            secureTextEntry
-            style={styles.input}
-            value={newPassword}
-            onChangeText={setNewPassword}
-          />
-        </View>
-
-        <Typography variant="caption" weight="700" style={styles.label}>CONFIRM NEW PASSWORD</Typography>
-        <View style={[styles.inputBox, { marginBottom: 8 }]}>
-          <TextInput
-            placeholder="Repeat new password"
-            placeholderTextColor="#AAA"
-            secureTextEntry
-            style={styles.input}
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-          />
-        </View>
-
-        <Typography variant="caption" color="#666" style={{ fontSize: 11, marginTop: 12 }}>
-          • Minimum 8 characters long{'\n'}
-          • At least one uppercase and one lowercase letter{'\n'}
-          • At least one number and special character
-        </Typography>
-      </Card>
-
-      <Button
-        title="Update Password"
-        onPress={handleChangePassword}
-        isLoading={isLoading}
+    <View style={[styles.container, { backgroundColor: theme.BG }]}>
+      <StatusBar
+        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.BG}
       />
 
-      <View style={{ height: 100 }} />
-    </ScrollView>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 60,
+          },
+        ]}
+      >
+        {/* Top Header */}
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => navigation.goBack()}
+            style={styles.backBtn}
+          >
+            <Feather name="chevron-left" size={16} color={theme.MUTED} />
+            <Text style={[styles.backText, { color: theme.MUTED }]}>
+              Account Security
+            </Text>
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+            Change Password
+          </Text>
+          <Text style={[styles.headerSub, { color: theme.MUTED }]}>
+            Ensure your new password meets security requirements.
+          </Text>
+        </View>
+
+        {/* Inputs Stack Card */}
+        <View style={styles.sectionMargin}>
+          <View style={styles.inputsStack}>
+            {/* Current Password */}
+            <View style={[styles.inputCard, { backgroundColor: theme.CARD }]}>
+              <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
+                CURRENT PASSWORD
+              </Text>
+              <View style={styles.inputInnerRow}>
+                <Feather name="lock" size={18} color={theme.MUTED} />
+                <TextInput
+                  style={[styles.textInput, { color: theme.TEXT }]}
+                  value={currentPassword}
+                  onChangeText={setCurrentPassword}
+                  secureTextEntry={!showCurrent}
+                  placeholder="Enter current password"
+                  placeholderTextColor={theme.MUTED}
+                />
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => setShowCurrent(!showCurrent)}
+                >
+                  <Feather
+                    name={showCurrent ? 'eye' : 'eye-off'}
+                    size={18}
+                    color={theme.MUTED}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* New Password */}
+            <View style={[styles.inputCard, { backgroundColor: theme.CARD }]}>
+              <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
+                NEW PASSWORD
+              </Text>
+              <View style={styles.inputInnerRow}>
+                <Feather name="key" size={18} color={theme.MUTED} />
+                <TextInput
+                  style={[styles.textInput, { color: theme.TEXT }]}
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  secureTextEntry={!showNew}
+                  placeholder="Enter new password"
+                  placeholderTextColor={theme.MUTED}
+                />
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => setShowNew(!showNew)}
+                >
+                  <Feather
+                    name={showNew ? 'eye' : 'eye-off'}
+                    size={18}
+                    color={theme.MUTED}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Confirm New Password */}
+            <View style={[styles.inputCard, { backgroundColor: theme.CARD }]}>
+              <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
+                CONFIRM NEW PASSWORD
+              </Text>
+              <View style={styles.inputInnerRow}>
+                <Feather name="check-circle" size={18} color={theme.MUTED} />
+                <TextInput
+                  style={[styles.textInput, { color: theme.TEXT }]}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={!showConfirm}
+                  placeholder="Repeat new password"
+                  placeholderTextColor={theme.MUTED}
+                />
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => setShowConfirm(!showConfirm)}
+                >
+                  <Feather
+                    name={showConfirm ? 'eye' : 'eye-off'}
+                    size={18}
+                    color={theme.MUTED}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Security Requirements Card */}
+        <View style={styles.sectionMargin}>
+          <Text style={[styles.sectionTitle, { color: theme.MUTED }]}>
+            SECURITY REQUIREMENTS
+          </Text>
+          <View style={[styles.rulesCard, { backgroundColor: theme.CARD }]}>
+            {[
+              {
+                label: 'Minimum 8 characters long',
+                pass: isMinLength,
+              },
+              {
+                label: 'At least one uppercase & lowercase letter',
+                pass: hasUpperLower,
+              },
+              {
+                label: 'At least one number & special character',
+                pass: hasNumberSpecial,
+              },
+            ].map(r => (
+              <View key={r.label} style={styles.ruleRow}>
+                <Feather
+                  name={r.pass ? 'check-circle' : 'circle'}
+                  size={14}
+                  color={r.pass ? theme.GREEN : theme.MUTED}
+                />
+                <Text
+                  style={[
+                    styles.ruleText,
+                    { color: r.pass ? theme.TEXT : theme.MUTED },
+                  ]}
+                >
+                  {r.label}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Action Button */}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={handleChangePassword}
+          disabled={isLoading}
+          style={[styles.submitBtn, { backgroundColor: theme.TEXT }]}
+        >
+          {isLoading ? (
+            <ActivityIndicator color={theme.BG} />
+          ) : (
+            <Text style={[styles.submitText, { color: theme.BG }]}>
+              Update Password →
+            </Text>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
   );
 };
+
+export default ChangePasswordScreen;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FB',
   },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
+  scrollContent: {
+    paddingHorizontal: 16,
   },
-  header: {
-    marginBottom: 32,
+  headerRow: {
+    marginBottom: 20,
+    paddingHorizontal: 4,
   },
-  card: {
-    marginBottom: 32,
-  },
-  label: {
-    fontSize: 10,
-    letterSpacing: 1,
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     marginBottom: 12,
   },
-  inputBox: {
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginBottom: 20,
-    backgroundColor: '#EAEBEE',
+  backText: {
+    fontSize: 12,
   },
-  input: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#000',
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -1.2,
+    marginBottom: 4,
   },
-  divider: {
-    height: 1,
-    width: '100%',
-    marginVertical: 12,
-    marginBottom: 24,
-    backgroundColor: '#EAEBEE',
+  headerSub: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  sectionMargin: {
+    marginBottom: 16,
+  },
+  inputsStack: {
+    gap: 10,
+  },
+  inputCard: {
+    borderRadius: 20,
+    padding: 16,
+  },
+  fieldLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+  },
+  inputInnerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  textInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    padding: 0,
+  },
+  sectionTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  rulesCard: {
+    borderRadius: 20,
+    padding: 16,
+    gap: 10,
+  },
+  ruleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  ruleText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  submitBtn: {
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  submitText: {
+    fontSize: 14,
+    fontWeight: '800',
   },
 });
-
-export default ChangePasswordScreen;

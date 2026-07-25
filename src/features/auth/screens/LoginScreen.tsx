@@ -1,45 +1,56 @@
 import React, { useState } from 'react';
 import {
   View,
-  StyleSheet,
-  TouchableOpacity,
+  Text,
   ScrollView,
+  TouchableOpacity,
+  TextInput,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Image,
+  StyleSheet,
   StatusBar,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
-import { Typography, Input, Button, Card, Logo, LoadingOverlay } from '../../../components';
-import { signIn, signInWithGoogle } from '../../../services/authService';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
+import { signIn, signInWithGoogle } from '../../../services/authService';
+import Logo from '../../../components/Logo';
 
-const LoginScreen = () => {
+export const LoginScreen = () => {
   const navigation = useNavigation<any>();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const { showToast } = useToast();
 
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
   const handleLogin = async () => {
-    if (!email || !password) {
+    if (!email.trim() || !password) {
       showToast('Please enter both email and password', 'error');
       return;
     }
 
     setIsLoading(true);
     try {
-      await signIn(email, password);
-      showToast('Login successful!', 'success');
+      await signIn(email.trim(), password);
+      showToast('Welcome back! Vault unlocked.', 'success');
     } catch (error: any) {
       let errorMessage = 'An error occurred during login.';
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+      if (
+        error.code === 'auth/user-not-found' ||
+        error.code === 'auth/wrong-password' ||
+        error.code === 'auth/invalid-credential'
+      ) {
         errorMessage = 'Incorrect email or password.';
       } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Invalid email address.';
+        errorMessage = 'Invalid email address format.';
       } else if (error.code === 'auth/user-disabled') {
         errorMessage = 'This account has been disabled.';
       }
@@ -64,261 +75,399 @@ const LoginScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F9F9F9" translucent />
+    <View style={[styles.container, { backgroundColor: theme.BG }]}>
+      <StatusBar
+        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.BG}
+      />
+
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* Hero Section */}
-          <View style={styles.heroSection}>
-            <View style={styles.logoRow}>
-              <Logo size={32} />
-              <Typography variant="h2" weight="700" style={styles.logoText}>
-                EZFinance
-              </Typography>
-            </View>
-            
-            <Typography variant="h1" weight="700" style={styles.heroTitle}>
-              Elevated{"\n"}Wealth{"\n"}Authority.
-            </Typography>
-            
-            <Typography variant="body" color="#666" style={styles.heroSubtitle}>
-              Experience financial clarity through organic minimalism and professional-grade analytics.
-            </Typography>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingTop: insets.top + 16,
+              paddingBottom: insets.bottom + 40,
+            },
+          ]}
+        >
+          {/* Top Brand Header */}
+          <View style={styles.headerRow}>
+            <Logo size={52} />
+          </View>
 
-            <View style={styles.trustSection}>
+          {/* Hero Headline Section */}
+          <View style={styles.sectionMargin}>
+            <Text style={[styles.heroTag, { color: theme.ACTIVE }]}>
+              EXCLUSIVELY FOR INVESTORS
+            </Text>
+            <Text style={[styles.heroTitle, { color: theme.TEXT }]}>
+              Elevated{'\n'}Wealth Authority.
+            </Text>
+            <Text style={[styles.heroSubtitle, { color: theme.MUTED }]}>
+              Experience financial clarity through organic minimalism, PSX feeds, and AI-grade analytics.
+            </Text>
+
+            {/* Social Trust Proof */}
+            <View style={styles.trustRow}>
               <View style={styles.avatarStack}>
-                <View style={[styles.avatar, { backgroundColor: '#E1F5FE' }]} />
-                <View style={[styles.avatar, { backgroundColor: '#F3E5F5', marginLeft: -12 }]} />
-                <View style={[styles.avatarCount, { marginLeft: -12 }]}>
-                  <Typography variant="caption" weight="700" color="#FFF" style={{ fontSize: 10 }}>
+                <View
+                  style={[
+                    styles.avatarDot,
+                    { backgroundColor: theme.ACTIVE, borderColor: theme.BG },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.avatarDot,
+                    {
+                      backgroundColor: theme.GREEN,
+                      borderColor: theme.BG,
+                      marginLeft: -10,
+                    },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.avatarCountDot,
+                    { backgroundColor: theme.TEXT, borderColor: theme.BG },
+                  ]}
+                >
+                  <Text style={[styles.avatarCountText, { color: theme.BG }]}>
                     +10k
-                  </Typography>
+                  </Text>
                 </View>
               </View>
-              <Typography variant="caption" color="#666" style={styles.trustText}>
-                Trusted by serious{"\n"}investors worldwide.
-              </Typography>
+              <Text style={[styles.trustText, { color: theme.MUTED }]}>
+                Trusted by serious investors nationwide
+              </Text>
             </View>
           </View>
 
-          {/* Form Section */}
-          <Card style={styles.loginCard}>
-            <Typography variant="h2" weight="700" style={styles.formTitle}>
-              Login
-            </Typography>
-            <Typography variant="body" color="#666" style={styles.formSubtitle}>
-              Enter your credentials to access your vault.
-            </Typography>
+          {/* Credentials Login Card */}
+          <View style={styles.sectionMargin}>
+            <View style={[styles.formCard, { backgroundColor: theme.CARD }]}>
+              <Text style={[styles.cardTitle, { color: theme.TEXT }]}>
+                Sign In
+              </Text>
+              <Text style={[styles.cardSub, { color: theme.MUTED }]}>
+                Enter your registered credentials to access your financial vault.
+              </Text>
 
-            <View style={styles.form}>
-              <Input
-                label="EMAIL ADDRESS"
-                placeholder="name@example.com"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-              
-              <View style={styles.passwordHeader}>
-                <Typography variant="caption" weight="700" color="#666">
-                  PASSWORD
-                </Typography>
-                <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
-                  <Typography variant="caption" weight="700" color="#000">
-                    Forgot Password?
-                  </Typography>
-                </TouchableOpacity>
+              {/* Email Address Input */}
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
+                  EMAIL ADDRESS
+                </Text>
+                <View
+                  style={[
+                    styles.inputInnerRow,
+                    { backgroundColor: theme.MODAL },
+                  ]}
+                >
+                  <Feather name="mail" size={18} color={theme.MUTED} />
+                  <TextInput
+                    style={[styles.textInput, { color: theme.TEXT }]}
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="name@example.com"
+                    placeholderTextColor={theme.MUTED}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                </View>
               </View>
-              <Input
-                placeholder="••••••••"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-              />
 
-              <Button
-                title="Login"
+              {/* Password Input */}
+              <View style={styles.fieldGroup}>
+                <View style={styles.labelForgotRow}>
+                  <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
+                    PASSWORD
+                  </Text>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => navigation.navigate('ForgotPassword')}
+                  >
+                    <Text style={[styles.forgotText, { color: theme.TEXT }]}>
+                      Forgot Password?
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View
+                  style={[
+                    styles.inputInnerRow,
+                    { backgroundColor: theme.MODAL },
+                  ]}
+                >
+                  <Feather name="lock" size={18} color={theme.MUTED} />
+                  <TextInput
+                    style={[styles.textInput, { color: theme.TEXT }]}
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="••••••••"
+                    placeholderTextColor={theme.MUTED}
+                    secureTextEntry={!showPassword}
+                  />
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => setShowPassword(!showPassword)}
+                  >
+                    <Feather
+                      name={showPassword ? 'eye' : 'eye-off'}
+                      size={18}
+                      color={theme.MUTED}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Login Action Button */}
+              <TouchableOpacity
+                activeOpacity={0.8}
                 onPress={handleLogin}
-                style={styles.loginButton}
-                isLoading={isLoading}
-              />
+                disabled={isLoading}
+                style={[styles.submitBtn, { backgroundColor: theme.TEXT }]}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color={theme.BG} />
+                ) : (
+                  <Text style={[styles.submitText, { color: theme.BG }]}>
+                    Sign In to Vault →
+                  </Text>
+                )}
+              </TouchableOpacity>
             </View>
-          </Card>
+          </View>
 
-          {/* Social Login */}
-          <View style={styles.socialSection}>
-            <Typography variant="caption" weight="700" color="#AAA" style={styles.socialTitle}>
-              OR CONTINUE WITH
-            </Typography>
-            <TouchableOpacity style={styles.googleBtn} onPress={handleGoogleSignIn}>
-              <Image 
-                source={require('../../../assets/images/Logo-google-icon-PNG.png')} 
-                style={styles.googleIcon} 
+          {/* Social Sign-In Section */}
+          <View style={styles.sectionMargin}>
+            <View style={styles.dividerRow}>
+              <View style={[styles.divLine, { backgroundColor: theme.BORDER }]} />
+              <Text style={[styles.divText, { color: theme.MUTED }]}>
+                OR CONTINUE WITH
+              </Text>
+              <View style={[styles.divLine, { backgroundColor: theme.BORDER }]} />
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={handleGoogleSignIn}
+              disabled={isLoading}
+              style={[
+                styles.googleBtn,
+                { backgroundColor: theme.CARD, borderColor: theme.BORDER },
+              ]}
+            >
+              <Image
+                source={require('../../../assets/images/Logo-google-icon-PNG.png')}
+                style={styles.googleIcon}
                 resizeMode="contain"
               />
-              <Typography variant="body" weight="700" style={{ marginLeft: 12 }}>
+              <Text style={[styles.googleBtnText, { color: theme.TEXT }]}>
                 Continue with Google
-              </Typography>
+              </Text>
             </TouchableOpacity>
           </View>
 
-          {/* Footer */}
-          <View style={styles.footer}>
-            <Typography variant="body" color="#666">
+          {/* Bottom Register Account Link */}
+          <View style={styles.footerRow}>
+            <Text style={[styles.footerText, { color: theme.MUTED }]}>
               New to EZFinance?
-            </Typography>
-            <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-              <Typography variant="body" weight="700" style={styles.signupLink}>
+            </Text>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('Register')}
+            >
+              <Text style={[styles.signupLink, { color: theme.TEXT }]}>
                 Create Account
-              </Typography>
+              </Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-      <LoadingOverlay visible={isLoading} />
-    </SafeAreaView>
+    </View>
   );
 };
+
+export default LoginScreen;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9F9F9',
   },
   scrollContent: {
-    paddingBottom: 40,
+    paddingHorizontal: 16,
   },
-  heroSection: {
-    paddingHorizontal: 24,
-    paddingTop: 20,
+  headerRow: {
+    marginBottom: 20,
+    paddingHorizontal: 4,
+  },
+  sectionMargin: {
     marginBottom: 20,
   },
-  logoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  logoText: {
-    marginLeft: 8,
-    fontSize: 20,
-    letterSpacing: -0.5,
+  heroTag: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    paddingHorizontal: 4,
   },
   heroTitle: {
-    fontSize: 48,
-    lineHeight: 52,
-    marginBottom: 16,
-    color: '#000',
+    fontSize: 40,
+    fontWeight: '800',
+    letterSpacing: -1.8,
+    lineHeight: 46,
+    marginBottom: 12,
+    paddingHorizontal: 4,
   },
   heroSubtitle: {
-    fontSize: 18,
-    lineHeight: 26,
-    color: '#666',
-    maxWidth: '80%',
+    fontSize: 14,
+    lineHeight: 22,
+    paddingHorizontal: 4,
+    marginBottom: 20,
   },
-  trustSection: {
+  trustRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 32,
+    gap: 12,
+    paddingHorizontal: 4,
   },
   avatarStack: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  avatarDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     borderWidth: 2,
-    borderColor: '#F9F9F9',
   },
-  avatarCount: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#000',
-    justifyContent: 'center',
+  avatarCountDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#F9F9F9',
+    marginLeft: -10,
+  },
+  avatarCountText: {
+    fontSize: 9,
+    fontWeight: '800',
   },
   trustText: {
-    marginLeft: 12,
     fontSize: 12,
-    lineHeight: 16,
+    fontWeight: '600',
   },
-  loginCard: {
-    marginHorizontal: 16,
+  formCard: {
+    borderRadius: 28,
     padding: 24,
-    backgroundColor: '#FFF',
-    borderRadius: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 20,
-    elevation: 2,
   },
-  formTitle: {
-    fontSize: 28,
-    marginBottom: 8,
+  cardTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.8,
+    marginBottom: 4,
   },
-  formSubtitle: {
-    marginBottom: 32,
-  },
-  form: {
-    width: '100%',
-  },
-  passwordHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  loginButton: {
-    marginTop: 32,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 32,
-  },
-  signupLink: {
-    marginLeft: 8,
-    color: '#000',
-  },
-  socialSection: {
-    marginTop: 32,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  socialTitle: {
-    letterSpacing: 2,
+  cardSub: {
+    fontSize: 12,
+    lineHeight: 18,
     marginBottom: 20,
   },
-  googleBtn: {
-    width: '100%',
-    backgroundColor: '#FFF',
-    height: 56,
+  fieldGroup: {
+    marginBottom: 16,
+  },
+  fieldLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+  },
+  labelForgotRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  forgotText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  inputInnerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 50,
+  },
+  textInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    padding: 0,
+  },
+  submitBtn: {
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  submitText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+    paddingHorizontal: 8,
+  },
+  divLine: {
+    flex: 1,
+    height: 1,
+  },
+  divText: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+  },
+  googleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 12,
+    height: 52,
+    borderRadius: 26,
     borderWidth: 1,
-    borderColor: '#EEE',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 1,
   },
   googleIcon: {
-    width: 24,
-    height: 24,
+    width: 20,
+    height: 20,
+  },
+  googleBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  footerText: {
+    fontSize: 13,
+  },
+  signupLink: {
+    fontSize: 13,
+    fontWeight: '800',
   },
 });
-
-export default LoginScreen;

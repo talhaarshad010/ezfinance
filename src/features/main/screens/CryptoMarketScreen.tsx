@@ -1,273 +1,918 @@
-import React, { useState } from 'react';
-import {View, StyleSheet, ScrollView, TouchableOpacity, Dimensions} from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import {Typography, Card} from '../../../components';
-import {colors} from '../../../theme/colors';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  Modal,
+  Pressable,
+  Animated,
+  StyleSheet,
+  StatusBar,
+  Dimensions,
+} from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
+import Svg, { Path, Defs, LinearGradient, Stop, Polyline } from 'react-native-svg';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../../context/ThemeContext';
+import { useToast } from '../../../context/ToastContext';
 
-const CryptoMarketScreen = () => {
-  const [activeFilter, setActiveFilter] = useState(0);
-  const navigation = useNavigation<any>();
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+const COINS = [
+  {
+    name: 'Bitcoin',
+    symbol: 'BTC',
+    priceUsd: '64,231.50',
+    pricePkr: '17,910,000',
+    change: '+2.45%',
+    isUp: true,
+    icon: 'cpu',
+    sparkline: [62100, 62800, 63400, 63100, 64231.5],
+  },
+  {
+    name: 'Ethereum',
+    symbol: 'ETH',
+    priceUsd: '3,450.22',
+    pricePkr: '962,500',
+    change: '-1.12%',
+    isUp: false,
+    icon: 'layers',
+    sparkline: [3520, 3500, 3480, 3460, 3450.22],
+  },
+  {
+    name: 'Solana',
+    symbol: 'SOL',
+    priceUsd: '145.89',
+    pricePkr: '40,700',
+    change: '+8.31%',
+    isUp: true,
+    icon: 'zap',
+    sparkline: [134, 137, 140, 142, 145.89],
+  },
+  {
+    name: 'Binance Coin',
+    symbol: 'BNB',
+    priceUsd: '584.10',
+    pricePkr: '162,900',
+    change: '+1.75%',
+    isUp: true,
+    icon: 'shield',
+    sparkline: [572, 575, 580, 582, 584.1],
+  },
+  {
+    name: 'Cardano',
+    symbol: 'ADA',
+    priceUsd: '0.485',
+    pricePkr: '135',
+    change: '-2.05%',
+    isUp: false,
+    icon: 'activity',
+    sparkline: [0.50, 0.495, 0.49, 0.488, 0.485],
+  },
+];
+
+const DOMINANCE_DATA = [
+  { label: 'Bitcoin (BTC)', percent: 52.4, color: '#00A3FF' },
+  { label: 'Ethereum (ETH)', percent: 18.1, color: '#FF9500' },
+  { label: 'Altcoins & Stablecoins', percent: 29.5, color: '#00C853' },
+];
+
+const NEWS_PULSE = [
+  {
+    tag: 'REGULATION',
+    title: 'SEC Approves Spot Ethereum ETF: What You Need To Know',
+    time: '2h ago',
+  },
+  {
+    tag: 'ANALYSIS',
+    title: 'The Halving Cycle: Historical Data vs. Current Trends',
+    time: '5h ago',
+  },
+  {
+    tag: 'WEB3',
+    title: 'Gaming Protocols Lead the Mid-Cap Recovery Surge',
+    time: '8h ago',
+  },
+];
+
+function Track({ pct, color }: { pct: number; color: string }) {
+  const animWidth = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(animWidth, {
+      toValue: Math.min(pct, 100),
+      duration: 900,
+      useNativeDriver: false,
+    }).start();
+  }, [pct, animWidth]);
+
+  const interpolatedWidth = animWidth.interpolate({
+    inputRange: [0, 100],
+    outputRange: ['0%', '100%'],
+  });
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Typography variant="caption" weight="700" color="#666">TOTAL CRYPTO BALANCE</Typography>
-        <Typography variant="h1" weight="700" style={{fontSize: 40}}>$42,892.<Typography variant="h3" color="#AAA">45</Typography></Typography>
-      </View>
+    <View style={styles.trackBackground}>
+      <Animated.View
+        style={[
+          styles.trackFill,
+          {
+            backgroundColor: color,
+            width: interpolatedWidth,
+          },
+        ]}
+      />
+    </View>
+  );
+}
 
-      {/* Action Row */}
-      <View style={styles.actionRow}>
-        <TouchableOpacity 
-          style={[styles.actionBtn, {backgroundColor: '#000'}]}
-          onPress={() => navigation.navigate('BuyCrypto')}
-        >
-          <Feather name="plus" size={20} color="#FFF" />
-          <Typography variant="body" weight="700" color="#FFF" style={{marginLeft: 8}}>Buy Crypto</Typography>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#FFF'}]}>
-          <Feather name="repeat" size={18} color="#333" />
-          <Typography variant="body" weight="700" color="#333" style={{marginLeft: 8}}>Trade</Typography>
-        </TouchableOpacity>
-      </View>
+function MiniSparkline({ data, isUp }: { data: number[]; isUp: boolean }) {
+  const { theme } = useTheme();
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const w = 60;
+  const h = 24;
 
-      {/* Market List */}
-      <Card style={styles.marketCard}>
-        <View style={styles.marketHeader}>
-          <Typography variant="h3" weight="700">Crypto Market</Typography>
-          <View style={styles.timeFilter}>
-            {['24h', '7d', '30d'].map((t, i) => (
-              <TouchableOpacity 
-                key={t} 
-                style={[styles.filterBtn, activeFilter === i && styles.activeFilter]}
-                onPress={() => setActiveFilter(i)}
+  const points = data
+    .map((val, idx) => {
+      const x = (idx / (data.length - 1)) * w;
+      const y = h - ((val - min) / range) * (h - 4);
+      return `${x},${y}`;
+    })
+    .join(' ');
+
+  const color = isUp ? theme.GREEN : theme.RED;
+
+  return (
+    <Svg width={w} height={h}>
+      <Polyline fill="none" stroke={color} strokeWidth="1.8" points={points} />
+    </Svg>
+  );
+}
+
+export const CryptoMarketScreen = () => {
+  const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
+  const { showToast } = useToast();
+
+  const [activeTimeframe, setActiveTimeframe] = useState('24h');
+  const [tradeModalVisible, setTradeModalVisible] = useState(false);
+  const [selectedCoin, setSelectedCoin] = useState<any>(null);
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.BG }]}>
+      <StatusBar
+        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.BG}
+      />
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 100,
+          },
+        ]}
+      >
+        {/* Top Header */}
+        <View style={styles.headerRow}>
+          <View>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => navigation.goBack()}
+              style={styles.backBtn}
+            >
+              <Feather name="chevron-left" size={16} color={theme.MUTED} />
+              <Text style={[styles.backText, { color: theme.MUTED }]}>
+                Global Digital Assets
+              </Text>
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+              Crypto Market
+            </Text>
+          </View>
+
+          {/* Market Pulse Badge */}
+          <View style={styles.statusBadgeRow}>
+            <View
+              style={[
+                styles.livePulseDot,
+                { backgroundColor: theme.GREEN },
+              ]}
+            />
+            <Text style={[styles.statusText, { color: theme.GREEN }]}>
+              LIVE FEED
+            </Text>
+          </View>
+        </View>
+
+        {/* Hero Total Crypto Vault Card */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.heroCard, { backgroundColor: theme.HERO_BG }]}>
+            <Text style={styles.heroSubhead}>
+              TOTAL CRYPTO PORTFOLIO VALUE
+            </Text>
+            <Text style={styles.heroAmount}>
+              $42,892.<Text style={{ fontSize: 32, opacity: 0.6 }}>45</Text>
+            </Text>
+            <Text style={styles.heroCurrency}>~ PKR 11,940,000</Text>
+
+            {/* Quick Action Buttons Row inside Hero */}
+            <View style={styles.heroActionRow}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => navigation.navigate('BuyCrypto')}
+                style={[styles.heroActionBtn, { backgroundColor: '#FFFFFF' }]}
               >
-                <Typography variant="caption" weight="700" color={activeFilter === i ? '#333' : '#AAA'}>{t}</Typography>
+                <Feather name="plus" size={16} color="#000000" />
+                <Text style={[styles.heroActionBtnText, { color: '#000000' }]}>
+                  Buy Crypto
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() =>
+                  showToast(
+                    'Opening Crypto Swap Terminal.',
+                    'info',
+                    'Exchange Terminal',
+                  )
+                }
+                style={[
+                  styles.heroActionBtn,
+                  { backgroundColor: 'rgba(255,255,255,0.12)' },
+                ]}
+              >
+                <Feather name="repeat" size={15} color="#FFFFFF" />
+                <Text style={[styles.heroActionBtnText, { color: '#FFFFFF' }]}>
+                  Swap & Trade
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Bottom 3-Column Stats Divider */}
+            <View style={styles.heroStatsDividerRow}>
+              <View style={styles.heroStatCol}>
+                <Text style={styles.heroStatLabel}>24h Profit</Text>
+                <Text style={[styles.heroStatValue, { color: theme.GREEN }]}>
+                  +$1,240.50
+                </Text>
+              </View>
+
+              <View style={styles.heroStatColBordered}>
+                <Text style={styles.heroStatLabel}>Top Holding</Text>
+                <Text style={[styles.heroStatValue, { color: theme.ACTIVE }]}>
+                  Bitcoin (BTC)
+                </Text>
+              </View>
+
+              <View style={styles.heroStatColBordered}>
+                <Text style={styles.heroStatLabel}>Staking APY</Text>
+                <Text style={[styles.heroStatValue, { color: '#FFFFFF' }]}>
+                  6.4% APY
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Crypto Market Asset Watchlist Card */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.card, { backgroundColor: theme.CARD }]}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={[styles.cardTitle, { color: theme.TEXT }]}>
+                Market Assets
+              </Text>
+
+              {/* Timeframe Filter Pills */}
+              <View style={styles.timeframePillsRow}>
+                {['24h', '7d', '30d'].map(t => {
+                  const isActive = activeTimeframe === t;
+                  return (
+                    <TouchableOpacity
+                      key={t}
+                      activeOpacity={0.8}
+                      onPress={() => setActiveTimeframe(t)}
+                      style={[
+                        styles.tfPill,
+                        {
+                          backgroundColor: isActive
+                            ? theme.TEXT
+                            : theme.MODAL,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.tfPillText,
+                          {
+                            color: isActive ? theme.BG : theme.MUTED,
+                          },
+                        ]}
+                      >
+                        {t}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Coins List */}
+            <View style={styles.coinsList}>
+              {COINS.map((c, i) => (
+                <TouchableOpacity
+                  key={c.symbol}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setSelectedCoin(c);
+                    setTradeModalVisible(true);
+                  }}
+                  style={[
+                    styles.coinRowItem,
+                    {
+                      borderBottomWidth: i < COINS.length - 1 ? 1 : 0,
+                      borderBottomColor: theme.BORDER,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.coinIconSquare,
+                      { backgroundColor: theme.MODAL },
+                    ]}
+                  >
+                    <Feather name={c.icon} size={18} color={theme.ACTIVE} />
+                  </View>
+
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.coinName, { color: theme.TEXT }]}>
+                      {c.name}
+                    </Text>
+                    <Text style={[styles.coinSymbol, { color: theme.MUTED }]}>
+                      {c.symbol} · PKR {c.pricePkr}
+                    </Text>
+                  </View>
+
+                  <MiniSparkline data={c.sparkline} isUp={c.isUp} />
+
+                  <View style={styles.priceCol}>
+                    <Text style={[styles.coinPriceUsd, { color: theme.TEXT }]}>
+                      ${c.priceUsd}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.coinChangeText,
+                        { color: c.isUp ? theme.GREEN : theme.RED },
+                      ]}
+                    >
+                      {c.change}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+
+        {/* Market Dominance Card */}
+        <View style={styles.sectionMargin}>
+          <View style={[styles.card, { backgroundColor: theme.CARD }]}>
+            <Text style={[styles.cardTitle, { color: theme.TEXT }]}>
+              Market Dominance
+            </Text>
+            <Text
+              style={[
+                styles.subText,
+                { color: theme.MUTED, marginBottom: 14 },
+              ]}
+            >
+              Global market cap breakdown
+            </Text>
+
+            <View style={styles.dominanceList}>
+              {DOMINANCE_DATA.map(d => (
+                <View key={d.label} style={styles.dominanceRow}>
+                  <View style={styles.domLabelRow}>
+                    <Text style={[styles.domLabelText, { color: theme.TEXT }]}>
+                      {d.label}
+                    </Text>
+                    <Text style={[styles.domPctText, { color: theme.TEXT }]}>
+                      {d.percent}%
+                    </Text>
+                  </View>
+                  <Track pct={d.percent} color={d.color} />
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+
+        {/* AI Financial Advisor Insights Card */}
+        <View style={styles.sectionMargin}>
+          <View
+            style={[
+              styles.aiCard,
+              {
+                backgroundColor: `${theme.ACTIVE}18`,
+                borderColor: `${theme.ACTIVE}30`,
+              },
+            ]}
+          >
+            <View style={styles.aiHeaderRow}>
+              <Feather name="zap" size={16} color={theme.ACTIVE} />
+              <Text style={[styles.aiLabel, { color: theme.ACTIVE }]}>
+                AI FINANCIAL ADVISOR
+              </Text>
+            </View>
+
+            <Text style={[styles.aiBodyText, { color: theme.TEXT }]}>
+              "Market volatility is currently low. Bitcoin is testing critical
+              resistance at $65k. Consider diversifying 5% into Solana based on
+              current momentum indicators."
+            </Text>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('AIAdvisor')}
+              style={[styles.aiCtaBtn, { backgroundColor: theme.TEXT }]}
+            >
+              <Text style={[styles.aiCtaText, { color: theme.BG }]}>
+                Get Full Analysis →
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Market Pulse News Feed */}
+        <View style={styles.sectionMargin}>
+          <Text
+            style={[
+              styles.sectionTitle,
+              { color: theme.MUTED, paddingHorizontal: 4, marginBottom: 10 },
+            ]}
+          >
+            Market Pulse & News
+          </Text>
+
+          <View style={styles.newsList}>
+            {NEWS_PULSE.map(item => (
+              <TouchableOpacity
+                key={item.title}
+                activeOpacity={0.8}
+                onPress={() =>
+                  showToast(
+                    'Opening full crypto intelligence report.',
+                    'info',
+                    'Crypto News',
+                  )
+                }
+                style={[styles.newsCard, { backgroundColor: theme.CARD }]}
+              >
+                <View style={styles.newsTagRow}>
+                  <Text style={[styles.newsTag, { color: theme.ACTIVE }]}>
+                    {item.tag}
+                  </Text>
+                  <Text style={[styles.newsTime, { color: theme.MUTED }]}>
+                    {item.time}
+                  </Text>
+                </View>
+                <Text style={[styles.newsTitleText, { color: theme.TEXT }]}>
+                  {item.title}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
         </View>
+      </ScrollView>
 
-        <View style={styles.listHeader}>
-          <Typography variant="caption" color="#AAA" weight="700">ASSET</Typography>
-          <Typography variant="caption" color="#AAA" weight="700" style={{marginLeft: 100}}>PRICE</Typography>
-          <Typography variant="caption" color="#AAA" weight="700" style={{flex: 1, textAlign: 'right'}}>24H CHANGE</Typography>
-        </View>
+      {/* Trade Modal Sheet */}
+      <Modal
+        visible={tradeModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setTradeModalVisible(false)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.modalOverlay}
+          onPress={() => setTradeModalVisible(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[styles.sheetContent, { backgroundColor: theme.CARD }]}
+            onPress={e => e.stopPropagation()}
+          >
+            <View style={styles.sheetHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sheetTitle, { color: theme.TEXT }]}>
+                  {selectedCoin?.name} ({selectedCoin?.symbol})
+                </Text>
+                <Text style={[styles.sheetSub, { color: theme.MUTED }]}>
+                  Live Price: ${selectedCoin?.priceUsd} (~PKR {selectedCoin?.pricePkr})
+                </Text>
+              </View>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => setTradeModalVisible(false)}
+                style={[styles.closeBtn, { backgroundColor: theme.MODAL }]}
+              >
+                <Feather name="x" size={14} color={theme.MUTED} />
+              </TouchableOpacity>
+            </View>
 
-        <CoinItem name="Bitcoin" symbol="BTC" price="$64,231.50" change="+2.45" up />
-        <CoinItem name="Ethereum" symbol="ETH" price="$3,450.22" change="-1.12" up={false} />
-        <CoinItem name="Solana" symbol="SOL" price="$145.89" change="+8.31" up />
-      </Card>
+            <View style={styles.tradeModalBody}>
+              <Text style={[styles.modalLabel, { color: theme.MUTED }]}>
+                SWAP & SWIFT EXECUTION
+              </Text>
+              <View style={styles.orderTypeRow}>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={[
+                    styles.orderTypeBtn,
+                    { backgroundColor: theme.GREEN },
+                  ]}
+                  onPress={() => {
+                    setTradeModalVisible(false);
+                    showToast(
+                      `Bought ${selectedCoin?.symbol} at $${selectedCoin?.priceUsd}`,
+                      'success',
+                      'Order Executed',
+                    );
+                  }}
+                >
+                  <Text style={styles.orderTypeBtnText}>BUY {selectedCoin?.symbol}</Text>
+                </TouchableOpacity>
 
-      {/* Market Dominance */}
-      <Card style={styles.dominanceCard}>
-        <Typography variant="h3" weight="700" color="#FFF">Market Dominance</Typography>
-        <DominanceRow label="Bitcoin" percent={0.524} color="#FFF" />
-        <DominanceRow label="Ethereum" percent={0.181} color="#AAA" />
-      </Card>
-
-      {/* AI Advisor */}
-      <Card style={styles.aiCard}>
-         <View style={{flexDirection: 'row', alignItems: 'center'}}>
-           <Feather name="zap" size={20} color="#000" />
-           <Typography variant="body" weight="700" style={{marginLeft: 8}}>AI Financial Advisor</Typography>
-         </View>
-         <Typography variant="body" color="#666" style={{marginTop: 12, lineHeight: 20}}>
-           "Market volatility is currently low. Bitcoin is testing critical resistance at \$65k. Consider diversifying 5% into Solana based on current momentum indicators."
-         </Typography>
-         <TouchableOpacity style={styles.analysisBtn}>
-           <Typography variant="body" weight="700">Get Full Analysis</Typography>
-         </TouchableOpacity>
-      </Card>
-
-      {/* Market Pulse */}
-      <Typography variant="h2" weight="700" style={{marginLeft: 24, marginVertical: 24}}>Market Pulse</Typography>
-      
-      <PulseItem category="REGULATION" title="SEC Approves Spot Ethereum ETF: What You Need To Know" />
-      <PulseItem category="ANALYSIS" title="The Halving Cycle: Historical Data vs. Current Trends" />
-      <PulseItem category="WEB3" title="Gaming Protocols Lead the Mid-Cap Recovery Surge" />
-
-      <View style={{height: 100}} />
-    </ScrollView>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={[
+                    styles.orderTypeBtn,
+                    { backgroundColor: theme.RED },
+                  ]}
+                  onPress={() => {
+                    setTradeModalVisible(false);
+                    showToast(
+                      `Sold ${selectedCoin?.symbol} at $${selectedCoin?.priceUsd}`,
+                      'error',
+                      'Order Executed',
+                    );
+                  }}
+                >
+                  <Text style={styles.orderTypeBtnText}>SELL {selectedCoin?.symbol}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+    </View>
   );
 };
 
-const CoinItem = ({name, symbol, price, change, up}: any) => (
-  <View style={styles.coinItem}>
-    <View style={styles.coinLogo}><Feather name={symbol === 'BTC' ? 'italic' : 'layers'} size={20} color="#333" /></View>
-    <View style={{flex: 1, marginLeft: 12}}>
-      <Typography variant="body" weight="700">{name}</Typography>
-      <Typography variant="caption" color="#AAA">{symbol}</Typography>
-    </View>
-    <Typography variant="body" weight="700">{price}</Typography>
-    <View style={{flexDirection: 'row', alignItems: 'center', width: 80, justifyContent: 'flex-end'}}>
-       <Feather name={up ? "trending-up" : "trending-down"} size={14} color={up ? colors.accent.successText : colors.accent.errorText} />
-       <Typography variant="caption" weight="700" color={up ? colors.accent.successText : colors.accent.errorText} style={{marginLeft: 4}}>{change}%</Typography>
-    </View>
-  </View>
-)
-
-const DominanceRow = ({label, percent, color}: any) => (
-  <View style={{marginTop: 20}}>
-    <View style={{flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8}}>
-      <Typography variant="body" color="#AAA">{label}</Typography>
-      <Typography variant="body" weight="700" color="#FFF">{(percent * 100).toFixed(1)}%</Typography>
-    </View>
-    <View style={styles.progressBg}>
-      <View style={[styles.progressFill, {width: `${percent * 100}%`, backgroundColor: color}]} />
-    </View>
-  </View>
-)
-
-const StatBox = ({label, val}: {label: string; val: string}) => (
-  <View style={styles.statBox}>
-    <Typography variant="caption" color="#AAA" weight="600">{label}</Typography>
-    <Typography variant="h3" weight="700" style={{marginTop: 4}}>{val}</Typography>
-  </View>
-);
-
-const PulseItem = ({category, title}: any) => (
-  <Card style={styles.pulseItem}>
-    <Typography variant="caption" weight="700" color="#AAA" style={{letterSpacing: 1}}>{category}</Typography>
-    <Typography variant="body" weight="700" style={{marginTop: 8}}>{title}</Typography>
-    <Typography variant="caption" color="#666" style={{marginTop: 8}}>Analysts predict institutional inflows of \$15B in the first quarter post-launch...</Typography>
-  </Card>
-)
+export default CryptoMarketScreen;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FB',
   },
-  header: {
-    padding: 24,
-    paddingTop: 24,
+  scrollContent: {
+    paddingHorizontal: 16,
   },
-  actionRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 24,
-    marginBottom: 32,
-  },
-  actionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginHorizontal: 5,
-    elevation: 2,
-    shadowOpacity: 0.1,
-  },
-  marketCard: {
-    marginHorizontal: 16,
-    padding: 20,
-    backgroundColor: '#FFF',
-    borderRadius: 30,
-  },
-  marketHeader: {
+  headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
-  },
-  timeFilter: {
-    flexDirection: 'row',
-    backgroundColor: '#F5F5F5',
-    padding: 4,
-    borderRadius: 12,
-  },
-  filterBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  activeFilter: {
-    backgroundColor: '#FFF',
-    elevation: 2,
-  },
-  listHeader: {
-    flexDirection: 'row',
     marginBottom: 16,
     paddingHorizontal: 4,
   },
-  coinItem: {
+  backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    gap: 4,
+    marginBottom: 4,
   },
-  coinLogo: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#F5F5F5',
-    justifyContent: 'center',
+  backText: {
+    fontSize: 12,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -1.2,
+  },
+  statusBadgeRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(0,200,83,0.15)',
+    borderRadius: 100,
   },
-  dominanceCard: {
-    marginHorizontal: 16,
-    marginTop: 20,
-    backgroundColor: '#000',
+  livePulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  sectionMargin: {
+    marginBottom: 12,
+  },
+  heroCard: {
+    borderRadius: 28,
     padding: 24,
-    borderRadius: 30,
   },
-  progressBg: {
-    height: 8,
-    backgroundColor: '#333',
-    borderRadius: 4,
-    overflow: 'hidden',
+  heroSubhead: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.36)',
+    letterSpacing: 1.4,
+    marginBottom: 8,
   },
-  progressFill: {
-    height: '100%',
-    borderRadius: 4,
+  heroAmount: {
+    fontSize: 50,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -3,
+    lineHeight: 52,
   },
-  assetLogo: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#F0F0F0',
-    justifyContent: 'center',
+  heroCurrency: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.3)',
+    marginTop: 4,
+  },
+  heroActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 18,
+  },
+  heroActionBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 22,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  heroActionBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  heroStatsDividerRow: {
+    flexDirection: 'row',
+    marginTop: 20,
+    paddingTop: 18,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.07)',
+  },
+  heroStatCol: {
+    flex: 1,
+  },
+  heroStatColBordered: {
+    flex: 1,
+    paddingLeft: 14,
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(255,255,255,0.07)',
+    marginLeft: 14,
+  },
+  heroStatLabel: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.32)',
+    marginBottom: 4,
+  },
+  heroStatValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+  },
+  card: {
+    borderRadius: 24,
+    padding: 20,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  cardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  timeframePillsRow: {
+    flexDirection: 'row',
+    gap: 4,
+    backgroundColor: 'rgba(128,128,128,0.12)',
+    borderRadius: 100,
+    padding: 2,
+  },
+  tfPill: {
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 100,
+  },
+  tfPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  coinsList: {
+    gap: 2,
+  },
+  coinRowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 13,
+  },
+  coinIconSquare: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  coinName: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  coinSymbol: {
+    fontSize: 11,
+  },
+  priceCol: {
+    alignItems: 'flex-end',
+    marginLeft: 10,
+  },
+  coinPriceUsd: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  coinChangeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  subText: {
+    fontSize: 11,
+  },
+  dominanceList: {
+    gap: 12,
+  },
+  dominanceRow: {
+    gap: 4,
+  },
+  domLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  domLabelText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  domPctText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  trackBackground: {
+    height: 4,
+    backgroundColor: 'rgba(128,128,128,0.18)',
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginTop: 4,
+  },
+  trackFill: {
+    height: '100%',
+    borderRadius: 2,
   },
   aiCard: {
-    marginHorizontal: 16,
-    marginTop: 20,
-    padding: 24,
-    backgroundColor: '#EEE',
-    borderRadius: 30,
-  },
-  aiInsightCard: {
-    marginHorizontal: 16,
-    marginTop: 20,
-    padding: 24,
-    backgroundColor: '#EEE',
-    borderRadius: 30,
-  },
-  analysisBtn: {
-    height: 48,
     borderRadius: 24,
+    padding: 20,
     borderWidth: 1,
-    borderColor: '#CCC',
-    justifyContent: 'center',
+  },
+  aiHeaderRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 20,
+    gap: 6,
+    marginBottom: 10,
   },
-  pulseItem: {
-    marginHorizontal: 24,
+  aiLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
+  aiBodyText: {
+    fontSize: 13,
+    lineHeight: 20,
     marginBottom: 16,
-    padding: 20,
-    backgroundColor: '#FFF',
   },
-  statBox: {
-    width: (Dimensions.get('window').width - 48) / 2,
-    backgroundColor: '#F0F0F0',
-    padding: 20,
-    borderRadius: 24,
-    margin: 4,
-  }
+  aiCtaBtn: {
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiCtaText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  sectionTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+  },
+  newsList: {
+    gap: 8,
+  },
+  newsCard: {
+    borderRadius: 20,
+    padding: 16,
+  },
+  newsTagRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  newsTag: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  newsTime: {
+    fontSize: 10,
+  },
+  newsTitleText: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 19,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  sheetContent: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 16,
+    paddingBottom: 36,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  sheetTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  sheetSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tradeModalBody: {
+    marginTop: 10,
+  },
+  modalLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    marginBottom: 14,
+  },
+  orderTypeRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  orderTypeBtn: {
+    flex: 1,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orderTypeBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
 });
-
-export default CryptoMarketScreen;
