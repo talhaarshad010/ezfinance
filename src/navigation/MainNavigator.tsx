@@ -5,7 +5,7 @@ import DashboardScreen from '../features/main/screens/DashboardScreen';
 import ExpensesScreen from '../features/main/screens/ExpensesScreen';
 import InvestmentsScreen from '../features/main/screens/InvestmentsScreen';
 import AIAdvisorScreen from '../features/main/screens/AIAdvisorScreen';
-import LoansScreen from '../features/main/screens/LoansScreen';
+import GoalsScreen from '../features/main/screens/GoalsScreen';
 import { CustomBottomNav } from './CustomBottomNav';
 import { useTheme } from '../context/ThemeContext';
 
@@ -27,7 +27,7 @@ export const MainNavigator = () => {
       <Tab.Screen name="Expenses" component={ExpensesScreen} />
       <Tab.Screen name="AI Advisor" component={AIAdvisorScreen} />
       <Tab.Screen name="Investments" component={InvestmentsScreen} />
-      <Tab.Screen name="Loans" component={LoansScreen} />
+      <Tab.Screen name="Goals" component={GoalsScreen} />
     </Tab.Navigator>
   );
 };

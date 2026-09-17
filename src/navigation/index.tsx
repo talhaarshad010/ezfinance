@@ -22,6 +22,12 @@ import AddTransactionScreen from '../features/main/screens/AddTransactionScreen'
 import TransactionDetailScreen from '../features/main/screens/TransactionDetailScreen';
 import OTPVerificationScreen from '../features/auth/screens/OTPVerificationScreen';
 import AddCategoryScreen from '../features/main/screens/AddCategoryScreen';
+import GoalDetailScreen from '../features/main/screens/GoalDetailScreen';
+import CreateGoalScreen from '../features/main/screens/CreateGoalScreen';
+import LogContributionScreen from '../features/main/screens/LogContributionScreen';
+import PauseGoalScreen from '../features/main/screens/PauseGoalScreen';
+import AgeOfMoneyScreen from '../features/main/screens/AgeOfMoneyScreen';
+import MoveMoneyScreen from '../features/main/screens/MoveMoneyScreen';
 import {
   TouchableOpacity,
   View,
@@ -292,6 +298,12 @@ export const AppNavigator = () => {
             <Stack.Screen name="AddTransaction" component={AddTransactionScreen} options={{ headerShown: false }} />
             <Stack.Screen name="TransactionDetail" component={TransactionDetailScreen} options={{ headerShown: false }} />
             <Stack.Screen name="AddCategory" component={AddCategoryScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="GoalDetail" component={GoalDetailScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="CreateGoal" component={CreateGoalScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="LogContribution" component={LogContributionScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="PauseGoal" component={PauseGoalScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="AgeOfMoney" component={AgeOfMoneyScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="MoveMoney" component={MoveMoneyScreen} options={{ headerShown: false }} />
           </Stack.Navigator>
         </>
       ) : (

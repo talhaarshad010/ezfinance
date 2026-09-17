@@ -14,6 +14,7 @@ import BudgetPlannerScreen from '../features/main/screens/BudgetPlannerScreen';
 import NotificationsScreen from '../features/main/screens/NotificationsScreen';
 import BankAccountsScreen from '../features/main/screens/BankAccountsScreen';
 import ProfileScreen from '../features/main/screens/ProfileScreen';
+import LoansScreen from '../features/main/screens/LoansScreen';
 import { useTheme } from '../context/ThemeContext';
 
 const Drawer = createDrawerNavigator();
@@ -125,6 +126,12 @@ const ProfileWrapper = React.memo(() => (
   </SceneWrapper>
 ));
 
+const LoansWrapper = React.memo(() => (
+  <SceneWrapper>
+    <LoansScreen />
+  </SceneWrapper>
+));
+
 export const MainDrawerNavigator = () => {
   const { theme } = useTheme();
 
@@ -190,6 +197,11 @@ export const MainDrawerNavigator = () => {
           name="Profile"
           component={ProfileWrapper}
           options={{ drawerItemStyle: { display: 'none' } }}
+        />
+        <Drawer.Screen
+          name="Loans"
+          component={LoansWrapper}
+          options={{ title: 'Loans & Liabilities' }}
         />
       </Drawer.Navigator>
     </View>

@@ -22,8 +22,8 @@ export const CustomBottomNav = ({
         return 'message-square';
       case 'Investments':
         return 'trending-up';
-      case 'Loans':
-        return 'layers';
+      case 'Goals':
+        return 'target';
       default:
         return 'grid';
     }
@@ -69,7 +69,7 @@ export const CustomBottomNav = ({
           >
             <Feather
               name={iconName}
-              size={18}
+              size={17}
               color={isFocused ? '#FFFFFF' : theme.DOCK_INACTIVE}
             />
           </TouchableOpacity>
@@ -85,11 +85,11 @@ const styles = StyleSheet.create({
   dockContainer: {
     position: 'absolute',
     alignSelf: 'center',
-    height: 56,
+    height: 58,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 6,
-    borderRadius: 28,
+    borderRadius: 100,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.22,
@@ -98,11 +98,11 @@ const styles = StyleSheet.create({
     zIndex: 400,
   },
   tabButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 46,
+    height: 46,
+    borderRadius: 100,
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 3,
+    marginHorizontal: 1,
   },
 });

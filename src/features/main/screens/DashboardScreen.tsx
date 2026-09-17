@@ -4,10 +4,10 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
+  TextInput,
   Animated,
   StyleSheet,
   StatusBar,
-  Dimensions,
   Modal,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
@@ -17,17 +17,35 @@ import { useTheme } from '../../../context/ThemeContext';
 import { useAppSelector } from '../../../store/hooks';
 import { useToast } from '../../../context/ToastContext';
 import auth from '@react-native-firebase/auth';
+import { ProgressRing } from '../../../components';
+import {
+  SAVINGS_GOALS,
+  goalColor,
+  goalPct,
+} from '../../../constants/savingsGoals';
+import {
+  ENVELOPE_CATS,
+  MONTHLY_INCOME_POOL,
+  UNASSIGNED_CASH,
+} from '../../../constants/envelopes';
 
-const { width } = Dimensions.get('window');
+type DashTab = 'live' | 'monthly' | 'health' | 'insights';
 
-type DashTab = 'pulse' | 'monthly' | 'flow' | 'health' | 'insights';
+type DashOverlay =
+  | null
+  | 'envelopeBudget'
+  | 'goalMilestone'
+  | 'quickDeposit'
+  | 'rebalanceSheet'
+  | 'overBudgetAlert'
+  | 'unassignedWarning'
+  | 'categoryDetail';
 
 const TABS: { key: DashTab; label: string }[] = [
-  { key: 'pulse', label: 'Pulse' },
+  { key: 'live', label: 'Live' },
   { key: 'monthly', label: 'Monthly' },
-  { key: 'flow', label: 'Cash Flow' },
   { key: 'health', label: 'Health' },
-  { key: 'insights', label: 'AI Insight' },
+  { key: 'insights', label: 'Insights' },
 ];
 
 const CATS = [
@@ -38,24 +56,53 @@ const CATS = [
   { label: 'Rent', spent: 25000, budget: 25000 },
 ];
 
-const WEEKLY = [
-  { week: 'W1', inflow: 37500, outflow: 22000 },
-  { week: 'W2', inflow: 37500, outflow: 18000 },
-  { week: 'W3', inflow: 37500, outflow: 20000 },
-  { week: 'W4', inflow: 37500, outflow: 20000 },
-];
+const CAT_TRANSACTIONS: Record<string, { date: string; desc: string; amount: number }[]> = {
+  'Groceries': [
+    { date: 'May 18', desc: 'Carrefour Tariq Road', amount: 3200 },
+    { date: 'May 12', desc: 'Imtiaz Super Market', amount: 2800 },
+    { date: 'May 6', desc: 'Naheed Supermarket', amount: 1800 },
+  ],
+  'Food & Dining': [
+    { date: 'May 20', desc: 'Optp DHA', amount: 1450 },
+    { date: 'May 15', desc: 'Hardees Clifton', amount: 980 },
+    { date: 'May 10', desc: 'BBQ Tonight', amount: 1800 },
+  ],
+  'Transport': [
+    { date: 'May 19', desc: 'Careem ride', amount: 320 },
+    { date: 'May 14', desc: 'Petrol — PSO', amount: 480 },
+  ],
+  'Utilities': [
+    { date: 'May 8', desc: 'K-Electric bill', amount: 2800 },
+    { date: 'May 5', desc: 'SSGC gas bill', amount: 700 },
+  ],
+  'Rent': [
+    { date: 'May 1', desc: 'Monthly rent — DHA Phase 5', amount: 25000 },
+  ],
+  'Housing & Rent': [
+    { date: 'May 1', desc: 'Monthly rent — DHA Phase 5', amount: 25000 },
+  ],
+  'Groceries & Essentials': [
+    { date: 'May 18', desc: 'Carrefour Tariq Road', amount: 9200 },
+    { date: 'May 10', desc: 'Imtiaz Super Market', amount: 7400 },
+    { date: 'May 5', desc: 'Al-Fatah Clifton', amount: 5400 },
+  ],
+  'Utilities (K-Electric)': [
+    { date: 'May 8', desc: 'K-Electric bill', amount: 8500 },
+    { date: 'May 5', desc: 'SSGC gas bill', amount: 3500 },
+  ],
+  'Commute & Fuel': [
+    { date: 'May 19', desc: 'Petrol — PSO', amount: 4500 },
+    { date: 'May 12', desc: 'Careem rides x4', amount: 2100 },
+    { date: 'May 6', desc: 'Parking + toll', amount: 1400 },
+  ],
+  'Discretionary / Dining': [
+    { date: 'May 20', desc: 'Dinner — Kolachi', amount: 4800 },
+    { date: 'May 15', desc: 'Cinema DHA', amount: 3200 },
+    { date: 'May 10', desc: 'Coffee — Gloria', amount: 5000 },
+  ],
+};
 
 const INSIGHTS_DATA = [
-  {
-    id: 1,
-    icon: 'alert-triangle',
-    tag: 'UTILITIES',
-    color: '#FF9500',
-    title: 'High Utility Spike Detected',
-    body: 'K-Electric bill jumped +PKR 3,500 above April average (PKR 8,500 → PKR 12,000). Consider off-peak A/C scheduling to reduce next cycle.',
-    impact: '−PKR 3,500',
-    action: 'Audit K-Electric usage and get AI off-peak scheduling recommendations.',
-  },
   {
     id: 2,
     icon: 'trending-up',
@@ -65,6 +112,26 @@ const INSIGHTS_DATA = [
     body: 'PKR 30,000 sitting in HBL Checking earning 0% p.a. Meezan Daily Amdani Account offers ~11.5% p.a. (SECP-regulated, halal).',
     impact: '+PKR 3,450/yr',
     action: 'Transfer PKR 30,000 to Meezan Daily Amdani for ~11.5% annual yield.',
+  },
+  {
+    id: 4,
+    icon: 'alert-triangle',
+    tag: 'OVERSPEND',
+    color: '#FF9500',
+    title: 'Groceries Over Budget',
+    body: 'Grocery spending hit PKR 7,800 this month vs a PKR 6,500 target — PKR 1,300 above plan. Week 3 Carrefour run drove the spike.',
+    impact: '−PKR 1,300',
+    action: 'Set a per-trip cap of PKR 2,000 and review grocery frequency next week.',
+  },
+  {
+    id: 5,
+    icon: 'trending-up',
+    tag: 'SAVINGS',
+    color: '#00A3FF',
+    title: 'Wedding Fund On Track',
+    body: 'Wedding Fund is 62% funded with 14 months to go. Maintaining PKR 12,000/mo contributions will reach your PKR 5,00,000 target by Dec 2027.',
+    impact: 'On track',
+    action: 'Keep current contribution pace — no action needed this month.',
   },
   {
     id: 3,
@@ -79,10 +146,42 @@ const INSIGHTS_DATA = [
 ];
 
 const RATIOS = [
-  { label: 'Emergency Fund', value: '3.2 Mo', sub: 'Target: 6.0 Mo', status: 'warn' },
-  { label: 'Debt-to-Income', value: '23.3%', sub: 'Healthy DTI', status: 'good' },
-  { label: 'Savings Rate', value: '20.0%', sub: 'of Inflow', status: 'good' },
-  { label: 'Tax Leverage', value: '65%', sub: 'Sec-62 Used', status: 'neutral' },
+  {
+    label: 'How many days you could live on your current cash without a new paycheck.',
+    value: '48 Days',
+    sub: 'Age of money',
+    status: 'good',
+  },
+  {
+    label: 'You could cover this many months if income stopped',
+    value: '3.2 Mo',
+    sub: 'Target: 6.0 months',
+    status: 'warn',
+  },
+  {
+    label: "Percent of income you're saving",
+    value: '20.0%',
+    sub: 'of monthly inflow',
+    status: 'good',
+  },
+  {
+    label: 'FBR Filer Savings',
+    value: 'PKR 18,400',
+    sub: 'Active filer status benefit',
+    status: 'good',
+  },
+  {
+    label: 'How much of your income goes to debt',
+    value: '23.3%',
+    sub: 'Healthy · below 36%',
+    status: 'good',
+  },
+  {
+    label: 'Tax proof saved — you could get back',
+    value: 'PKR 14,200',
+    sub: '6 payments verified this year',
+    status: 'good',
+  },
 ];
 
 const SPEND_CATS = [
@@ -143,13 +242,152 @@ function Track({ pct, color }: { pct: number; color?: string }) {
   );
 }
 
+function CategoryDetailSheet({
+  visible,
+  categoryName,
+  budget,
+  onClose,
+  onSaveLimit,
+}: {
+  visible: boolean;
+  categoryName: string;
+  budget: number;
+  onClose: () => void;
+  onSaveLimit?: (newLimit: number) => void;
+}) {
+  const { theme } = useTheme();
+  const [limit, setLimit] = useState(budget);
+
+  useEffect(() => {
+    setLimit(budget);
+  }, [budget]);
+
+  const txns = CAT_TRANSACTIONS[categoryName] ?? [];
+  const spent = txns.reduce((s, t) => s + t.amount, 0);
+  const pct = Math.min(Math.round((spent / (limit || 1)) * 100), 100);
+  const barColor = pct >= 100 ? theme.RED : pct > 75 ? '#FF9500' : theme.GREEN;
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <TouchableOpacity style={styles.modalBackdropTap} activeOpacity={1} onPress={onClose} />
+        <View style={[styles.sheetContainer, { backgroundColor: theme.CARD, maxHeight: '82%' }]}>
+          {/* Header */}
+          <View style={styles.sheetHeader}>
+            <View>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: theme.MUTED, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 2 }}>
+                CATEGORY
+              </Text>
+              <Text style={[styles.sheetTitle, { color: theme.TEXT }]}>{categoryName}</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={[styles.closeBtn, { backgroundColor: theme.MODAL }]}>
+              <Feather name="x" size={14} color={theme.MUTED} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+            {/* Spend summary */}
+            <View style={[styles.catDetailSummaryCard, { backgroundColor: theme.MODAL }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                <Text style={{ fontSize: 26, fontWeight: '800', color: barColor, letterSpacing: -1 }}>
+                  {spent.toLocaleString()}
+                </Text>
+                <Text style={{ fontSize: 12, color: theme.MUTED }}>
+                  / PKR {limit.toLocaleString()} limit
+                </Text>
+              </View>
+              <View style={{ height: 4, backgroundColor: 'rgba(128,128,128,0.15)', borderRadius: 2, overflow: 'hidden', marginBottom: 6 }}>
+                <View style={{ height: '100%', width: `${pct}%`, backgroundColor: barColor, borderRadius: 2 }} />
+              </View>
+              <Text style={{ fontSize: 10, color: theme.MUTED }}>{pct}% of monthly limit used</Text>
+            </View>
+
+            {/* Spending limit editor */}
+            <View style={[styles.catDetailLimitEditor, { backgroundColor: theme.MODAL }]}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: theme.MUTED, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 12 }}>
+                EDIT SPENDING LIMIT
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => setLimit(l => Math.max(1000, l - 1000))}
+                  style={[styles.limitStepBtn, { backgroundColor: theme.CARD }]}
+                >
+                  <Text style={{ fontSize: 20, fontWeight: '700', color: theme.TEXT, lineHeight: 22 }}>−</Text>
+                </TouchableOpacity>
+                <View style={{ flex: 1, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 24, fontWeight: '800', color: theme.TEXT, letterSpacing: -0.8 }}>
+                    PKR {limit.toLocaleString()}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => setLimit(l => l + 1000)}
+                  style={[styles.limitStepBtn, { backgroundColor: theme.CARD }]}
+                >
+                  <Text style={{ fontSize: 20, fontWeight: '700', color: theme.TEXT, lineHeight: 22 }}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Transactions list */}
+            <Text style={{ fontSize: 10, fontWeight: '700', color: theme.MUTED, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10, marginTop: 4 }}>
+              THIS MONTH
+            </Text>
+            <View style={{ gap: 8 }}>
+              {txns.length === 0 ? (
+                <Text style={{ fontSize: 12, color: theme.MUTED, textAlign: 'center', paddingVertical: 16 }}>
+                  No transactions yet this month.
+                </Text>
+              ) : (
+                txns.map((t, idx) => (
+                  <View
+                    key={idx}
+                    style={[styles.catDetailTxRow, { backgroundColor: theme.MODAL }]}
+                  >
+                    <View>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: theme.TEXT, marginBottom: 2 }}>{t.desc}</Text>
+                      <Text style={{ fontSize: 10, color: theme.MUTED }}>{t.date}</Text>
+                    </View>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: theme.RED }}>
+                      −{t.amount.toLocaleString()}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </View>
+
+            {/* Save Limit CTA */}
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => {
+                if (onSaveLimit) onSaveLimit(limit);
+                onClose();
+              }}
+              style={[styles.saveLimitBtn, { backgroundColor: theme.TEXT }]}
+            >
+              <Text style={[styles.saveLimitBtnText, { color: theme.BG }]}>Save Limit</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export const DashboardScreen = () => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { showToast } = useToast();
 
-  const [subTab, setSubTab] = useState<DashTab>('pulse');
+  const [subTab, setSubTab] = useState<DashTab>('live');
+  const [overlay, setOverlay] = useState<DashOverlay>(null);
+  const [envelopes, setEnvelopes] = useState(ENVELOPE_CATS);
+  const [quickDepositGoalId, setQuickDepositGoalId] = useState(
+    SAVINGS_GOALS[0].id,
+  );
+  const [quickDepositIdx, setQuickDepositIdx] = useState(0);
   const [dateRangeModalVisible, setDateRangeModalVisible] = useState(false);
   const [accountModalVisible, setAccountModalVisible] = useState(false);
   const [metricBreakModalVisible, setMetricBreakModalVisible] = useState(false);
@@ -170,6 +408,31 @@ export const DashboardScreen = () => {
       ? totalBalance.toLocaleString('en-PK')
       : '3,82,000';
 
+  const now = new Date();
+  const MONTH_NAMES = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+  const planMonthLabel = `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
+  const planMonthShort = MONTH_NAMES[now.getMonth()].slice(0, 3);
+
+  const allocated = envelopes.reduce((sum, e) => sum + e.amount, 0);
+  const unallocated = MONTHLY_INCOME_POOL - allocated;
+  const overAllocated = unallocated < 0;
+
+  const adjustEnvelope = (idx: number, delta: number) =>
+    setEnvelopes(list =>
+      list.map((e, i) =>
+        i === idx && !e.locked
+          ? { ...e, amount: Math.max(0, e.amount + delta) }
+          : e,
+      ),
+    );
+
+  const quickDepositAmounts = [5000, 10000, 25000];
+  const quickDepositGoal =
+    SAVINGS_GOALS.find(g => g.id === quickDepositGoalId) ?? SAVINGS_GOALS[0];
+
   const burnPct = 53;
   const burnColor =
     burnPct > 80 ? theme.RED : burnPct > 60 ? '#FF9500' : theme.GREEN;
@@ -180,6 +443,48 @@ export const DashboardScreen = () => {
 
   // State for AccountSheet
   const [currency, setCurrency] = useState<'PKR' | 'USD'>('PKR');
+  const [accountList, setAccountList] = useState([
+    { id: '1', name: 'Meezan Checking', balance: 45200, tag: 'Islamic' },
+    { id: '2', name: 'HBL Savings', balance: 67180, tag: 'Conventional' },
+    { id: '3', name: 'Easypaisa Wallet', balance: 3500, tag: 'Digital' },
+  ]);
+  const [editingAccId, setEditingAccId] = useState<string | null>(null);
+  const [editAccBalance, setEditAccBalance] = useState('');
+  const [addingNewAcc, setAddingNewAcc] = useState(false);
+  const [newAccName, setNewAccName] = useState('');
+  const [newAccBal, setNewAccBal] = useState('');
+
+  const handleSaveAccEdit = (id: string) => {
+    const num = parseInt(editAccBalance.replace(/[^0-9]/g, ''), 10);
+    if (!isNaN(num)) {
+      setAccountList(prev => prev.map(a => a.id === id ? { ...a, balance: num } : a));
+    }
+    setEditingAccId(null);
+  };
+
+  const handleAddNewAcc = () => {
+    if (!newAccName.trim()) return;
+    const num = parseInt(newAccBal.replace(/[^0-9]/g, ''), 10) || 0;
+    setAccountList(prev => [
+      ...prev,
+      { id: String(Date.now()), name: newAccName.trim(), balance: num, tag: 'Manual' },
+    ]);
+    setNewAccName('');
+    setNewAccBal('');
+    setAddingNewAcc(false);
+  };
+
+  const totalAccountBal = accountList.reduce((s, a) => s + a.balance, 0);
+
+  // State for CategoryDetailSheet
+  const [selectedCat, setSelectedCat] = useState<{ label: string; budget: number } | null>(null);
+  const [catLimits, setCatLimits] = useState<Record<string, number>>({});
+  const [categoryDetailVisible, setCategoryDetailVisible] = useState(false);
+
+  const handleCategoryTap = (label: string, budget: number) => {
+    setSelectedCat({ label, budget: catLimits[label] ?? budget });
+    setCategoryDetailVisible(true);
+  };
 
   // State for InsightsView
   const [expandedInsight, setExpandedInsight] = useState<number | null>(null);
@@ -281,9 +586,44 @@ export const DashboardScreen = () => {
 
         {/* TAB CONTENTS */}
 
-        {/* 1. PULSE VIEW */}
-        {subTab === 'pulse' && (
+        {/* 1. LIVE VIEW */}
+        {subTab === 'live' && (
           <View>
+            {/* Monthly Planning Ritual Banner */}
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => setOverlay('envelopeBudget')}
+              style={styles.sectionMargin}
+            >
+              <View
+                style={[
+                  styles.planBanner,
+                  {
+                    backgroundColor: `${theme.ACTIVE}14`,
+                    borderColor: `${theme.ACTIVE}28`,
+                  },
+                ]}
+              >
+                <View style={styles.planBannerLeft}>
+                  <Text style={styles.planBannerBolt}>⚡</Text>
+                  <View style={styles.flexShrink}>
+                    <Text style={[styles.planBannerTitle, { color: theme.ACTIVE }]}>
+                      {planMonthLabel} — Unused money left
+                    </Text>
+                    <Text style={[styles.planBannerSub, { color: theme.MUTED }]}>
+                      Set spending limits for PKR{' '}
+                      {MONTHLY_INCOME_POOL.toLocaleString('en-PK')} →
+                    </Text>
+                  </View>
+                </View>
+                <View style={[styles.planBannerPill, { backgroundColor: theme.ACTIVE }]}>
+                  <Text style={styles.planBannerPillText}>
+                    Plan {planMonthShort}
+                  </Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+
             {/* Hero Card */}
             <View style={styles.sectionMargin}>
               <View style={[styles.heroCard, { backgroundColor: theme.HERO_BG }]}>
@@ -322,79 +662,129 @@ export const DashboardScreen = () => {
               </View>
             </View>
 
-            {/* 2-Column Mini Cards */}
+            {/* Second stat row: Investments + Cash on Hand */}
             <View style={[styles.twoColRow, styles.sectionMargin]}>
+              {/* Investments */}
               <TouchableOpacity
                 activeOpacity={0.85}
                 onPress={() => navigation.navigate('Investments')}
-                style={[styles.miniCard, { backgroundColor: theme.CARD }]}
+                style={[styles.duoCard, { backgroundColor: theme.CARD, minHeight: 158 }]}
               >
-                <Text style={[styles.miniCardLabel, { color: theme.MUTED }]}>
-                  Investments
+                <Text style={[styles.duoCardLabel, { color: theme.MUTED }]}>
+                  INVESTMENTS
                 </Text>
-                <Text style={[styles.miniCardValue, { color: theme.TEXT }]}>
+                <Text style={[styles.statLargeVal, { color: theme.TEXT }]}>
                   2,48,000
                 </Text>
-                <View style={styles.badgeRow}>
+                <View style={{ marginTop: 'auto', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <Feather
                     name="arrow-up-right"
-                    size={13}
+                    size={12}
                     color={theme.GREEN}
                   />
-                  <Text style={[styles.badgeText, { color: theme.GREEN }]}>
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: theme.GREEN }}>
                     +14.8%
                   </Text>
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={() => navigation.navigate('Portfolio')}
-                style={[styles.miniCard, { backgroundColor: theme.CARD }]}
-              >
-                <Text style={[styles.miniCardLabel, { color: theme.MUTED }]}>
-                  Tax Saved FY26
+              {/* Cash on Hand */}
+              <View style={[styles.duoCard, { backgroundColor: theme.CARD, minHeight: 158 }]}>
+                <Text style={[styles.duoCardLabel, { color: theme.MUTED }]}>
+                  CASH ON HAND
                 </Text>
-                <Text style={[styles.miniCardValue, { color: theme.TEXT }]}>
-                  18,400
+                <Text style={[styles.statLargeVal, { color: theme.TEXT }]}>
+                  48 Days
                 </Text>
-                <View style={styles.badgeRow}>
-                  <Feather
-                    name="arrow-up-right"
-                    size={13}
-                    color={theme.GREEN}
-                  />
-                  <Text style={[styles.badgeText, { color: theme.GREEN }]}>
-                    Sec 62
-                  </Text>
+                <Text style={[styles.duoCardSub, { color: theme.MUTED }]}>
+                  3.2 months without income
+                </Text>
+                <View style={{ marginTop: 'auto' }}>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => navigation.navigate('AgeOfMoney')}
+                    style={[
+                      styles.simulateBtn,
+                      { borderColor: `${theme.ACTIVE}40` },
+                    ]}
+                  >
+                    <Text style={[styles.simulateBtnText, { color: theme.ACTIVE }]}>
+                      Simulate →
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
+              </View>
             </View>
 
-            {/* Monthly Burn Card */}
+            {/* Active Savings Goals — compact rings */}
             <View style={styles.sectionMargin}>
               <View style={[styles.card, { backgroundColor: theme.CARD }]}>
                 <View style={styles.cardHeaderRow}>
                   <Text style={[styles.cardTagLabel, { color: theme.MUTED }]}>
-                    Monthly Burn
+                    Active Savings Goals
                   </Text>
-                  <Text style={[styles.burnPctText, { color: burnColor }]}>
-                    {burnPct}%
-                  </Text>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() =>
+                      navigation.navigate('Drawer', {
+                        screen: 'MainTabs',
+                        params: { screen: 'Goals' },
+                      })
+                    }
+                  >
+                    <Text style={[styles.viewAllText, { color: theme.ACTIVE }]}>
+                      View All ({SAVINGS_GOALS.length}) →
+                    </Text>
+                  </TouchableOpacity>
                 </View>
 
-                <Text style={[styles.bigNumberText, { color: theme.TEXT }]}>
-                  80,000
-                </Text>
-                <Text style={[styles.subText, { color: theme.MUTED }]}>
-                  of PKR 1,50,000 budget
-                </Text>
-
-                <Track pct={burnPct} />
-
-                <Text style={[styles.remainingText, { color: theme.MUTED }]}>
-                  PKR 70,000 remaining this cycle
-                </Text>
+                <View style={styles.goalRingsRow}>
+                  {SAVINGS_GOALS.slice(0, 3).map(goal => {
+                    const pct = goalPct(goal);
+                    const color = goalColor(goal, theme.GREEN, theme.ACTIVE);
+                    const shortName = goal.label
+                      .split(' ')
+                      .slice(0, 2)
+                      .join(' ');
+                    return (
+                      <TouchableOpacity
+                        key={goal.id}
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setQuickDepositGoalId(goal.id);
+                          setOverlay('quickDeposit');
+                        }}
+                        style={styles.goalRingItem}
+                      >
+                        <View style={styles.goalRingWrap}>
+                          <ProgressRing
+                            pct={pct}
+                            size={58}
+                            strokeWidth={3.5}
+                            color={color}
+                            track={theme.MODAL}
+                          />
+                          <View style={styles.goalRingCenter}>
+                            <Text style={[styles.goalRingPct, { color }]}>
+                              {pct}%
+                            </Text>
+                          </View>
+                        </View>
+                        <Text
+                          style={[styles.goalRingName, { color: theme.TEXT }]}
+                          numberOfLines={2}
+                        >
+                          {shortName}
+                        </Text>
+                        <Text
+                          style={[styles.goalRingDate, { color: theme.MUTED }]}
+                        >
+                          {goal.deadline}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
             </View>
 
@@ -444,10 +834,13 @@ export const DashboardScreen = () => {
                 </View>
 
                 {CATS.map((cat, i) => {
-                  const pct = Math.round((cat.spent / cat.budget) * 100);
+                  const limit = catLimits[cat.label] ?? cat.budget;
+                  const pct = Math.min(Math.round((cat.spent / limit) * 100), 100);
                   return (
-                    <View
+                    <TouchableOpacity
                       key={cat.label}
+                      activeOpacity={0.75}
+                      onPress={() => handleCategoryTap(cat.label, limit)}
                       style={[
                         styles.catRow,
                         { marginBottom: i < CATS.length - 1 ? 16 : 4 },
@@ -464,78 +857,59 @@ export const DashboardScreen = () => {
                           <Text
                             style={[styles.catBudget, { color: theme.MUTED }]}
                           >
-                            / {cat.budget.toLocaleString()}
+                            / {limit.toLocaleString()}
                           </Text>
                         </View>
                       </View>
                       <Track pct={pct} />
-                    </View>
+                    </TouchableOpacity>
                   );
                 })}
               </View>
             </View>
 
-            {/* CA Insight Strip */}
+            {/* CA Insight Card */}
             <View style={styles.sectionMargin}>
               <View
                 style={[
-                  styles.caCard,
-                  { backgroundColor: theme.ACTIVE },
+                  styles.newCaCard,
+                  { backgroundColor: theme.CARD, borderColor: theme.BORDER },
                 ]}
               >
-                <Text style={styles.caLabel}>CA Insight</Text>
-                <Text style={styles.caText}>
-                  Investing PKR 1,70,000 more in SECP-approved mutual funds before
-                  June 30 unlocks a{' '}
-                  <Text style={{ fontWeight: '800' }}>PKR 40,000 tax credit</Text>{' '}
-                  under Section 62 ITO.
-                </Text>
-              </View>
-            </View>
-
-            {/* Net Position Rows */}
-            <View style={styles.sectionMargin}>
-              <View
-                style={[
-                  styles.cardNoPadding,
-                  { backgroundColor: theme.CARD },
-                ]}
-              >
-                {[
-                  { label: 'Investments', value: '+2,48,000', up: true },
-                  { label: 'Active Loans', value: '−35,000', up: false },
-                  { label: 'Emergency Fund', value: '+45,000', up: true },
-                ].map((row, i) => (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 14 }}>
                   <View
-                    key={row.label}
-                    style={[
-                      styles.netRow,
-                      {
-                        borderBottomWidth: i < 2 ? 1 : 0,
-                        borderBottomColor: theme.BORDER,
-                      },
-                    ]}
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: 8,
+                      backgroundColor: `${theme.ACTIVE}1A`,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
                   >
-                    <Text style={[styles.netLabel, { color: theme.TEXT }]}>
-                      {row.label}
-                    </Text>
-                    <View style={styles.netValueRow}>
-                      <Feather
-                        name={row.up ? 'arrow-up-right' : 'arrow-down-right'}
-                        size={14}
-                        color={row.up ? theme.GREEN : theme.RED}
-                      />
-                      <Text
-                        style={[
-                          styles.netValue,
-                          { color: row.up ? theme.GREEN : theme.RED },
-                        ]}
-                      >
-                        {row.value}
-                      </Text>
-                    </View>
+                    <Feather name="zap" size={13} color={theme.ACTIVE} />
                   </View>
-                ))}
+                  <Text style={[styles.newCaTag, { color: theme.MUTED }]}>
+                    CA INSIGHT
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
+                  <Text style={[styles.newCaHeadline, { color: theme.ACTIVE }]}>
+                    1,20,000
+                  </Text>
+                  <View>
+                    <Text style={{ fontSize: 10, fontWeight: '600', color: theme.MUTED }}>
+                      PKR
+                    </Text>
+                    <Text style={{ fontSize: 10, color: theme.MUTED }}>
+                      a year, before tax
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[styles.newCaBody, { color: theme.MUTED }]}>
+                  A <Text style={{ color: theme.TEXT, fontWeight: '700' }}>PKR 1 million</Text> investment earning{' '}
+                  <Text style={{ color: theme.TEXT, fontWeight: '700' }}>12% annually</Text> can generate roughly this return — before taxes and fees.
+                </Text>
               </View>
             </View>
           </View>
@@ -619,13 +993,13 @@ export const DashboardScreen = () => {
                 <View style={styles.legendItem}>
                   <View style={[styles.legendDot, { backgroundColor: theme.GREEN }]} />
                   <Text style={[styles.legendText, { color: theme.MUTED }]}>
-                    Discretionary 66%
+                    Spent on wants 66%
                   </Text>
                 </View>
                 <View style={styles.legendItem}>
                   <View style={[styles.legendDot, { backgroundColor: theme.RED }]} />
                   <Text style={[styles.legendText, { color: theme.MUTED }]}>
-                    Non-Disc. 34%
+                    Spent on needs 34%
                   </Text>
                 </View>
               </View>
@@ -635,7 +1009,7 @@ export const DashboardScreen = () => {
             <View style={styles.twoColRow}>
               <View style={[styles.miniCard, { backgroundColor: theme.CARD }]}>
                 <Text style={[styles.miniCardLabel, { color: theme.MUTED }]}>
-                  Net Cash
+                  Remaining balance
                 </Text>
                 <Text style={[styles.miniCardValue, { color: theme.GREEN }]}>
                   +74,200
@@ -664,8 +1038,10 @@ export const DashboardScreen = () => {
                 Spending by Category
               </Text>
               {SPEND_CATS.map((cat, i) => (
-                <View
+                <TouchableOpacity
                   key={cat.label}
+                  activeOpacity={0.75}
+                  onPress={() => handleCategoryTap(cat.label, Math.round(cat.amount * 1.2))}
                   style={{ marginBottom: i < SPEND_CATS.length - 1 ? 14 : 0 }}
                 >
                   <View style={styles.catHeader}>
@@ -689,7 +1065,7 @@ export const DashboardScreen = () => {
                     </View>
                   </View>
                   <Track pct={cat.pct} color={cat.flag ? theme.RED : undefined} />
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
 
@@ -706,8 +1082,10 @@ export const DashboardScreen = () => {
               {BUDGETS.map((b, i) => {
                 const c = b.pct >= 85 ? theme.RED : b.pct >= 70 ? '#FF9500' : theme.GREEN;
                 return (
-                  <View
+                  <TouchableOpacity
                     key={b.label}
+                    activeOpacity={0.75}
+                    onPress={() => handleCategoryTap(b.label, b.limit)}
                     style={{ marginBottom: i < BUDGETS.length - 1 ? 14 : 0 }}
                   >
                     <View style={styles.catHeader}>
@@ -722,7 +1100,7 @@ export const DashboardScreen = () => {
                     <Text style={[styles.remainingText, { color: theme.MUTED, marginTop: 4 }]}>
                       of PKR {b.limit.toLocaleString()} · {b.pct}% used
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
             </View>
@@ -754,126 +1132,7 @@ export const DashboardScreen = () => {
           </View>
         )}
 
-        {/* 3. CASH FLOW VIEW */}
-        {subTab === 'flow' && (
-          <View style={styles.tabContentGap}>
-            {/* Weekly Cash Flow Bar Chart Card */}
-            <View style={[styles.card, { backgroundColor: theme.CARD }]}>
-              <Text style={[styles.cardTagLabel, { color: theme.MUTED, marginBottom: 18 }]}>
-                Weekly Cash Flow · May 2026
-              </Text>
-
-              <View style={styles.chartContainer}>
-                {WEEKLY.map(w => {
-                  const maxVal = 40000;
-                  const maxH = 100;
-                  const ih = Math.round((w.inflow / maxVal) * maxH);
-                  const oh = Math.round((w.outflow / maxVal) * maxH);
-
-                  return (
-                    <View key={w.week} style={styles.chartCol}>
-                      <View style={[styles.chartBarsGroup, { height: maxH }]}>
-                        <View
-                          style={[
-                            styles.chartBar,
-                            {
-                              height: ih,
-                              backgroundColor: theme.GREEN,
-                            },
-                          ]}
-                        />
-                        <View
-                          style={[
-                            styles.chartBar,
-                            {
-                              height: oh,
-                              backgroundColor: theme.RED,
-                            },
-                          ]}
-                        />
-                      </View>
-                      <Text style={[styles.chartWeekLabel, { color: theme.MUTED }]}>
-                        {w.week}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-
-              <View style={styles.legendRow}>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: theme.GREEN }]} />
-                  <Text style={[styles.legendText, { color: theme.MUTED }]}>Inflows</Text>
-                </View>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: theme.RED }]} />
-                  <Text style={[styles.legendText, { color: theme.MUTED }]}>Outflows</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Cumulative Net Retained Card */}
-            <View
-              style={[
-                styles.card,
-                {
-                  backgroundColor: `${theme.GREEN}0E`,
-                  borderColor: `${theme.GREEN}22`,
-                  borderWidth: 1,
-                },
-              ]}
-            >
-              <Text style={[styles.cardTagLabel, { color: theme.GREEN, marginBottom: 8 }]}>
-                Cumulative Net Retained
-              </Text>
-              <Text style={[styles.bigNumberText, { color: theme.TEXT }]}>
-                +70,000
-              </Text>
-              <Text style={[styles.subText, { color: theme.MUTED }]}>
-                PKR retained across May 2026
-              </Text>
-            </View>
-
-            {/* Weekly Breakdown Table Card */}
-            <View style={[styles.cardNoPadding, { backgroundColor: theme.CARD }]}>
-              <View style={[styles.tableHeader, { borderBottomColor: theme.BORDER }]}>
-                <Text style={[styles.cardTitle, { color: theme.TEXT }]}>
-                  Weekly Breakdown
-                </Text>
-              </View>
-              {WEEKLY.map((w, i) => {
-                const net = w.inflow - w.outflow;
-                return (
-                  <View
-                    key={w.week}
-                    style={[
-                      styles.tableRow,
-                      {
-                        borderBottomWidth: i < WEEKLY.length - 1 ? 1 : 0,
-                        borderBottomColor: theme.BORDER,
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.tableCellWeek, { color: theme.TEXT }]}>
-                      {w.week}
-                    </Text>
-                    <Text style={[styles.tableCellVal, { color: theme.GREEN }]}>
-                      +{(w.inflow / 1000).toFixed(1)}k
-                    </Text>
-                    <Text style={[styles.tableCellVal, { color: theme.RED }]}>
-                      −{(w.outflow / 1000).toFixed(1)}k
-                    </Text>
-                    <Text style={[styles.tableCellValBold, { color: theme.GREEN }]}>
-                      +{(net / 1000).toFixed(1)}k
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-        )}
-
-        {/* 4. HEALTH VIEW */}
+        {/* 3. HEALTH VIEW */}
         {subTab === 'health' && (
           <View style={styles.tabContentGap}>
             {/* Score Badge Card */}
@@ -895,8 +1154,8 @@ export const DashboardScreen = () => {
               </Text>
             </View>
 
-            {/* 2×2 Ratio Grid Cards */}
-            <View style={styles.gridContainer}>
+            {/* Plain-language metric stack */}
+            <View style={styles.metricStack}>
               {RATIOS.map(r => {
                 const c =
                   r.status === 'good'
@@ -907,16 +1166,18 @@ export const DashboardScreen = () => {
                 return (
                   <View
                     key={r.label}
-                    style={[styles.gridCard, { backgroundColor: theme.CARD }]}
+                    style={[styles.metricRow, { backgroundColor: theme.CARD }]}
                   >
-                    <Text style={[styles.miniCardLabel, { color: theme.MUTED }]}>
-                      {r.label}
-                    </Text>
-                    <Text style={[styles.gridValue, { color: c }]}>
+                    <View style={styles.metricRowLeft}>
+                      <Text style={[styles.metricLabel, { color: theme.MUTED }]}>
+                        {r.label}
+                      </Text>
+                      <Text style={[styles.metricSub, { color: theme.MUTED }]}>
+                        {r.sub}
+                      </Text>
+                    </View>
+                    <Text style={[styles.metricValue, { color: c }]}>
                       {r.value}
-                    </Text>
-                    <Text style={[styles.badgeText, { color: theme.MUTED }]}>
-                      {r.sub}
                     </Text>
                   </View>
                 );
@@ -937,7 +1198,7 @@ export const DashboardScreen = () => {
           </View>
         )}
 
-        {/* 5. AI INSIGHT VIEW */}
+        {/* 4. AI INSIGHTS VIEW */}
         {subTab === 'insights' && (
           <View style={styles.tabContentGap}>
             <Text style={[styles.cardTagLabel, { color: theme.MUTED, marginBottom: 4, paddingHorizontal: 4 }]}>
@@ -1165,90 +1426,203 @@ export const DashboardScreen = () => {
             activeOpacity={1}
             onPress={() => setAccountModalVisible(false)}
           />
-          <View style={[styles.sheetContainer, { backgroundColor: theme.CARD }]}>
+          <View style={[styles.sheetContainer, { backgroundColor: theme.CARD, maxHeight: '85%' }]}>
             <View style={styles.sheetHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Feather name="briefcase" size={16} color={theme.ACTIVE} />
                 <Text style={[styles.sheetTitle, { color: theme.TEXT }]}>
-                  Linked Accounts
+                  Accounts
                 </Text>
               </View>
-              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                <View style={[styles.currencyPillGroup, { backgroundColor: theme.MODAL }]}>
-                  {(['PKR', 'USD'] as const).map(c => (
-                    <TouchableOpacity
-                      key={c}
-                      onPress={() => setCurrency(c)}
-                      style={[
-                        styles.currencyPill,
-                        {
-                          backgroundColor:
-                            currency === c ? theme.ACTIVE : 'transparent',
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.currencyPillText,
-                          { color: currency === c ? '#FFFFFF' : theme.MUTED },
-                        ]}
-                      >
-                        {c}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <TouchableOpacity
-                  onPress={() => setAccountModalVisible(false)}
-                  style={[styles.closeBtn, { backgroundColor: theme.MODAL }]}
-                >
-                  <Feather name="x" size={14} color={theme.MUTED} />
-                </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setAccountModalVisible(false)}
+                style={[styles.closeBtn, { backgroundColor: theme.MODAL }]}
+              >
+                <Feather name="x" size={14} color={theme.MUTED} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+              {/* Manual-entry note */}
+              <View
+                style={[
+                  styles.manualNote,
+                  {
+                    backgroundColor: `${theme.ACTIVE}14`,
+                    borderColor: `${theme.ACTIVE}28`,
+                  },
+                ]}
+              >
+                <Feather name="info" size={13} color={theme.ACTIVE} style={{ marginTop: 2 }} />
+                <Text style={[styles.manualNoteText, { color: theme.ACTIVE }]}>
+                  Update your balances manually — bank syncing isn't available yet.
+                </Text>
               </View>
-            </View>
 
-            <View style={{ gap: 10 }}>
-              {[
-                { name: 'Meezan Checking', balance: 45200, tag: 'Islamic' },
-                { name: 'HBL Savings', balance: 67180, tag: 'Conventional' },
-                { name: 'Easypaisa Wallet', balance: 3500, tag: 'Digital' },
-              ].map(a => {
-                const bal =
-                  currency === 'PKR' ? a.balance : Math.round(a.balance / 280);
-                return (
+              {/* Account list */}
+              <View style={{ gap: 10 }}>
+                {accountList.map(a => (
                   <View
-                    key={a.name}
-                    style={[styles.accountCardRow, { backgroundColor: theme.MODAL }]}
+                    key={a.id}
+                    style={[styles.accountCardRow, { backgroundColor: theme.MODAL, flexDirection: 'column', alignItems: 'stretch' }]}
                   >
-                    <View>
-                      <Text style={[styles.accountName, { color: theme.TEXT }]}>
-                        {a.name}
-                      </Text>
-                      <View style={[styles.accountTag, { backgroundColor: `${theme.ACTIVE}22` }]}>
-                        <Text style={[styles.accountTagText, { color: theme.ACTIVE }]}>
-                          {a.tag}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={[styles.accountName, { color: theme.TEXT, marginBottom: 0 }]}>
+                          {a.name}
                         </Text>
+                        <View style={[styles.accountTag, { backgroundColor: `${theme.ACTIVE}22` }]}>
+                          <Text style={[styles.accountTagText, { color: theme.ACTIVE }]}>
+                            {a.tag}
+                          </Text>
+                        </View>
                       </View>
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setEditingAccId(a.id);
+                          setEditAccBalance(String(a.balance));
+                        }}
+                        style={[styles.editAccBtn, { backgroundColor: `${theme.ACTIVE}18` }]}
+                      >
+                        <Text style={[styles.editAccBtnText, { color: theme.ACTIVE }]}>Edit</Text>
+                      </TouchableOpacity>
                     </View>
-                    <Text style={[styles.accountBal, { color: theme.GREEN }]}>
-                      {currency === 'PKR' ? 'Rs.' : '$'} {bal.toLocaleString()}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
 
-            <View style={[styles.totalBalCard, { backgroundColor: theme.MODAL }]}>
-              <Text style={[styles.totalBalLabel, { color: theme.MUTED }]}>
-                Total Liquid Balance
-              </Text>
-              <Text style={[styles.totalBalValue, { color: theme.TEXT }]}>
-                Rs. 1,15,880
-              </Text>
-            </View>
+                    {editingAccId === a.id ? (
+                      <View style={{ marginTop: 10, flexDirection: 'row', gap: 8 }}>
+                        <TextInput
+                          value={editAccBalance}
+                          onChangeText={setEditAccBalance}
+                          keyboardType="numeric"
+                          placeholder="Balance"
+                          placeholderTextColor={theme.MUTED}
+                          style={[
+                            styles.editBalInput,
+                            {
+                              backgroundColor: theme.CARD,
+                              borderColor: `${theme.ACTIVE}40`,
+                              color: theme.TEXT,
+                            },
+                          ]}
+                        />
+                        <TouchableOpacity
+                          activeOpacity={0.8}
+                          onPress={() => handleSaveAccEdit(a.id)}
+                          style={[styles.saveBalBtn, { backgroundColor: theme.GREEN }]}
+                        >
+                          <Text style={[styles.saveBalBtnText, { color: '#000000' }]}>Save</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <Text style={[styles.accountBal, { color: theme.GREEN, marginTop: 6 }]}>
+                        Rs. {a.balance.toLocaleString()}
+                      </Text>
+                    )}
+                  </View>
+                ))}
+              </View>
+
+              {/* Add new account */}
+              {addingNewAcc ? (
+                <View style={[styles.addAccBox, { backgroundColor: theme.MODAL }]}>
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: theme.MUTED, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10 }}>
+                    NEW ACCOUNT
+                  </Text>
+                  <TextInput
+                    value={newAccName}
+                    onChangeText={setNewAccName}
+                    placeholder="Account name"
+                    placeholderTextColor={theme.MUTED}
+                    style={[
+                      styles.addAccInput,
+                      {
+                        backgroundColor: theme.CARD,
+                        borderColor: theme.BORDER,
+                        color: theme.TEXT,
+                      },
+                    ]}
+                  />
+                  <TextInput
+                    value={newAccBal}
+                    onChangeText={setNewAccBal}
+                    keyboardType="numeric"
+                    placeholder="Balance (PKR)"
+                    placeholderTextColor={theme.MUTED}
+                    style={[
+                      styles.addAccInput,
+                      {
+                        backgroundColor: theme.CARD,
+                        borderColor: theme.BORDER,
+                        color: theme.TEXT,
+                        marginBottom: 12,
+                      },
+                    ]}
+                  />
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => setAddingNewAcc(false)}
+                      style={[styles.modalBtnHalf, { backgroundColor: theme.CARD }]}
+                    >
+                      <Text style={[styles.modalBtnText, { color: theme.MUTED }]}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={handleAddNewAcc}
+                      style={[styles.modalBtnHalf, { backgroundColor: theme.TEXT }]}
+                    >
+                      <Text style={[styles.modalBtnText, { color: theme.BG, fontWeight: '700' }]}>Add Account</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => setAddingNewAcc(true)}
+                  style={[styles.addAccDashedBtn, { borderColor: theme.BORDER }]}
+                >
+                  <Feather name="plus" size={14} color={theme.MUTED} />
+                  <Text style={[styles.addAccDashedText, { color: theme.MUTED }]}>Add Account</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Total Liquid Balance */}
+              <View style={[styles.totalBalCard, { backgroundColor: theme.MODAL }]}>
+                <Text style={[styles.totalBalLabel, { color: theme.MUTED }]}>
+                  Total Liquid Balance
+                </Text>
+                <Text style={[styles.totalBalValue, { color: theme.TEXT }]}>
+                  Rs. {totalAccountBal.toLocaleString()}
+                </Text>
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
+
+      {/* Category Detail Sheet Modal */}
+      {selectedCat && (
+        <CategoryDetailSheet
+          visible={categoryDetailVisible}
+          categoryName={selectedCat.label}
+          budget={selectedCat.budget}
+          onClose={() => {
+            setCategoryDetailVisible(false);
+            setSelectedCat(null);
+          }}
+          onSaveLimit={newLimit => {
+            if (selectedCat) {
+              setCatLimits(prev => ({ ...prev, [selectedCat.label]: newLimit }));
+              showToast(
+                `Limit for ${selectedCat.label} updated to PKR ${newLimit.toLocaleString()}`,
+                'success',
+                'BUDGET UPDATED',
+              );
+            }
+          }}
+        />
+      )}
 
       {/* 3. How We Calculate Metric Breakdown Modal */}
       <Modal
@@ -1408,6 +1782,600 @@ export const DashboardScreen = () => {
           )}
         </View>
       </Modal>
+
+      {/* 5. Monthly Planning Ritual — Envelope Allocation */}
+      <Modal
+        visible={overlay === 'envelopeBudget'}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setOverlay(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdropTap}
+          activeOpacity={1}
+          onPress={() => setOverlay(null)}
+        />
+        <View
+          style={[
+            styles.tallSheet,
+            { backgroundColor: theme.CARD, paddingBottom: insets.bottom + 20 },
+          ]}
+        >
+          <View style={styles.sheetHeaderRow}>
+            <View style={styles.flexShrink}>
+              <Text style={[styles.envelopeEyebrow, { color: theme.ACTIVE }]}>
+                {planMonthLabel.toUpperCase()} ENVELOPE ALLOCATION
+              </Text>
+              <Text style={[styles.sheetTitle, { color: theme.TEXT }]}>
+                Monthly Planning Ritual
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setOverlay(null)}
+              style={[styles.sheetCloseBtn, { backgroundColor: theme.MODAL }]}
+            >
+              <Feather name="x" size={14} color={theme.MUTED} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Income pool */}
+          <View
+            style={[
+              styles.incomePool,
+              {
+                backgroundColor: overAllocated
+                  ? `${theme.RED}14`
+                  : `${theme.GREEN}12`,
+                borderColor: overAllocated
+                  ? `${theme.RED}33`
+                  : `${theme.GREEN}33`,
+              },
+            ]}
+          >
+            <View>
+              <Text style={[styles.poolLabel, { color: theme.MUTED }]}>
+                Available to Allocate
+              </Text>
+              <Text
+                style={[
+                  styles.poolValue,
+                  { color: overAllocated ? theme.RED : theme.GREEN },
+                ]}
+              >
+                PKR {Math.abs(unallocated).toLocaleString()}{' '}
+                {overAllocated ? 'OVER' : 'left'}
+              </Text>
+            </View>
+            <Text style={[styles.poolOf, { color: theme.MUTED }]}>
+              of PKR {MONTHLY_INCOME_POOL.toLocaleString('en-PK')}
+            </Text>
+          </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={styles.envelopeList}
+          >
+            {envelopes.map((env, i) => (
+              <View
+                key={env.label}
+                style={[
+                  styles.envelopeRow,
+                  i < envelopes.length - 1 && {
+                    borderBottomWidth: 1,
+                    borderBottomColor: theme.BORDER,
+                  },
+                ]}
+              >
+                <View style={styles.flexShrink}>
+                  <Text style={[styles.envelopeName, { color: theme.TEXT }]}>
+                    {env.label}
+                  </Text>
+                  {env.locked && (
+                    <Text style={[styles.envelopeFixed, { color: theme.MUTED }]}>
+                      FIXED
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.envelopeStepper}>
+                  {!env.locked && (
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => adjustEnvelope(i, -1000)}
+                      style={[styles.stepCircle, { backgroundColor: theme.MODAL }]}
+                    >
+                      <Feather name="minus" size={12} color={theme.TEXT} />
+                    </TouchableOpacity>
+                  )}
+                  <Text style={[styles.envelopeAmount, { color: theme.TEXT }]}>
+                    {env.amount.toLocaleString()}
+                  </Text>
+                  {!env.locked && (
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => adjustEnvelope(i, 1000)}
+                      style={[styles.stepCircle, { backgroundColor: theme.MODAL }]}
+                    >
+                      <Feather name="plus" size={12} color={theme.TEXT} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+
+          {overAllocated && (
+            <View
+              style={[styles.overAllocWarn, { backgroundColor: `${theme.RED}14` }]}
+            >
+              <Feather name="info" size={12} color={theme.RED} />
+              <Text style={[styles.overAllocText, { color: theme.RED }]}>
+                Over-allocated by PKR{' '}
+                {Math.abs(unallocated).toLocaleString()}. Rebalance envelopes.
+              </Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => {
+              if (overAllocated) {
+                setOverlay('rebalanceSheet');
+                return;
+              }
+              if (unallocated > 0) {
+                setOverlay('unassignedWarning');
+                return;
+              }
+              setOverlay(null);
+              showToast(
+                `${planMonthLabel} budget locked. Every rupee has a job.`,
+                'success',
+                'Budget Locked',
+              );
+            }}
+            style={[
+              styles.lockBtn,
+              { backgroundColor: overAllocated ? theme.RED : theme.TEXT },
+            ]}
+          >
+            <Text
+              style={[
+                styles.lockBtnText,
+                { color: overAllocated ? '#FFFFFF' : theme.BG },
+              ]}
+            >
+              {overAllocated
+                ? 'Rebalance First'
+                : `Lock ${planMonthShort} Budget & Zero Out`}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* 6. Goal Milestone Celebration */}
+      <Modal
+        visible={overlay === 'goalMilestone'}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOverlay(null)}
+      >
+        <View style={styles.centerModalOverlay}>
+          <TouchableOpacity
+            style={styles.modalBackdropTap}
+            activeOpacity={1}
+            onPress={() => setOverlay(null)}
+          />
+          <View style={[styles.centerModalCard, { backgroundColor: theme.CARD }]}>
+            <View
+              style={[
+                styles.milestoneBadge,
+                {
+                  backgroundColor: `${theme.GREEN}18`,
+                  borderColor: theme.GREEN,
+                },
+              ]}
+            >
+              <Feather name="check" size={28} color={theme.GREEN} />
+            </View>
+            <Text style={[styles.milestoneTitle, { color: theme.TEXT }]}>
+              Goal Reached!
+            </Text>
+            <Text style={[styles.confirmBody, { color: theme.MUTED }]}>
+              You have completed 100% of your{' '}
+              <Text style={{ color: theme.TEXT, fontWeight: '600' }}>
+                {quickDepositGoal.label} (PKR{' '}
+                {quickDepositGoal.target.toLocaleString()})
+              </Text>
+              . Deploy into Meezan Daily Amdani to earn yield?
+            </Text>
+            <View style={styles.twoColRow}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => setOverlay(null)}
+                style={[styles.modalBtnHalf, { backgroundColor: theme.MODAL }]}
+              >
+                <Text style={[styles.modalBtnText, { color: theme.MUTED }]}>
+                  Later
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  setOverlay(null);
+                  showToast(
+                    'Deploying into Meezan Daily Amdani (≈12.8% p.a.).',
+                    'success',
+                    'Yield Deployment',
+                  );
+                }}
+                style={[styles.modalBtnHalf, { backgroundColor: theme.GREEN }]}
+              >
+                <Text
+                  style={[
+                    styles.modalBtnText,
+                    { color: '#000000', fontWeight: '700' },
+                  ]}
+                >
+                  Deploy to Meezan
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 7. Goal Quick Deposit Sheet */}
+      <Modal
+        visible={overlay === 'quickDeposit'}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setOverlay(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdropTap}
+          activeOpacity={1}
+          onPress={() => setOverlay(null)}
+        />
+        <View
+          style={[
+            styles.bottomSheet,
+            { backgroundColor: theme.CARD, paddingBottom: insets.bottom + 20 },
+          ]}
+        >
+          <View style={styles.sheetHeaderRow}>
+            <Text style={[styles.sheetTitle, { color: theme.TEXT }]}>
+              Quick Deposit
+            </Text>
+            <TouchableOpacity
+              onPress={() => setOverlay(null)}
+              style={[styles.sheetCloseBtn, { backgroundColor: theme.MODAL }]}
+            >
+              <Feather name="x" size={14} color={theme.MUTED} />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={[styles.sheetSectionLabel, { color: theme.MUTED }]}>
+            SELECT GOAL
+          </Text>
+          <View style={styles.chipWrap}>
+            {SAVINGS_GOALS.map(g => {
+              const selected = g.id === quickDepositGoalId;
+              const c = goalColor(g, theme.GREEN, theme.ACTIVE);
+              return (
+                <TouchableOpacity
+                  key={g.id}
+                  activeOpacity={0.85}
+                  onPress={() => setQuickDepositGoalId(g.id)}
+                  style={[
+                    styles.goalChip,
+                    { backgroundColor: selected ? c : theme.MODAL },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.goalChipText,
+                      { color: selected ? '#FFFFFF' : theme.MUTED },
+                    ]}
+                  >
+                    {g.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={[styles.sheetSectionLabel, { color: theme.MUTED }]}>
+            QUICK AMOUNT
+          </Text>
+          <View style={styles.quickAmountRow}>
+            {quickDepositAmounts.map((a, i) => (
+              <TouchableOpacity
+                key={a}
+                activeOpacity={0.85}
+                onPress={() => setQuickDepositIdx(i)}
+                style={[
+                  styles.quickAmountBtn,
+                  {
+                    backgroundColor:
+                      quickDepositIdx === i ? theme.ACTIVE : theme.MODAL,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.quickAmountText,
+                    {
+                      color: quickDepositIdx === i ? '#FFFFFF' : theme.MUTED,
+                    },
+                  ]}
+                >
+                  {(a / 1000).toFixed(0)}k
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => {
+              const amount = quickDepositAmounts[quickDepositIdx];
+              const completes =
+                quickDepositGoal.current + amount >= quickDepositGoal.target;
+              if (completes) {
+                setOverlay('goalMilestone');
+                return;
+              }
+              setOverlay(null);
+              showToast(
+                `PKR ${amount.toLocaleString()} deposited to ${
+                  quickDepositGoal.label
+                }.`,
+                'success',
+                'Contribution Logged',
+              );
+            }}
+            style={[styles.lockBtn, { backgroundColor: theme.GREEN }]}
+          >
+            <Text style={[styles.lockBtnText, { color: '#000000' }]}>
+              Deposit PKR{' '}
+              {quickDepositAmounts[quickDepositIdx].toLocaleString()} to{' '}
+              {quickDepositGoal.label}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* 8. Quick Rebalance Sheet */}
+      <Modal
+        visible={overlay === 'rebalanceSheet'}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setOverlay(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdropTap}
+          activeOpacity={1}
+          onPress={() => setOverlay(null)}
+        />
+        <View
+          style={[
+            styles.bottomSheet,
+            { backgroundColor: theme.MODAL, paddingBottom: insets.bottom + 20 },
+          ]}
+        >
+          <View style={[styles.sheetGrabber, { backgroundColor: theme.BORDER }]} />
+          <Text style={[styles.sheetSectionLabel, { color: theme.MUTED }]}>
+            QUICK REBALANCE
+          </Text>
+          <Text style={[styles.sheetTitle, { color: theme.TEXT }]}>
+            Cover Overspending
+          </Text>
+          <Text style={[styles.rebalanceIntro, { color: theme.MUTED }]}>
+            Groceries is overspent by{' '}
+            <Text style={{ color: theme.RED, fontWeight: '700' }}>
+              PKR 5,000
+            </Text>
+            . Move funds from:
+          </Text>
+
+          {[
+            {
+              label: 'Cover from Discretionary Buffer',
+              available: 'PKR 12,000 available',
+              color: theme.GREEN,
+            },
+            {
+              label: 'Cover from Savings Goal Slice',
+              available: 'PKR 25,000 available',
+              color: theme.ACTIVE,
+            },
+            {
+              label: 'Use Unassigned Cash',
+              available: `PKR ${UNASSIGNED_CASH.toLocaleString()} ready to assign`,
+              color: theme.MUTED,
+            },
+          ].map(opt => (
+            <TouchableOpacity
+              key={opt.label}
+              activeOpacity={0.9}
+              onPress={() => {
+                setOverlay(null);
+                showToast(
+                  `${opt.label} — PKR 5,000 moved to Groceries.`,
+                  'success',
+                  'Envelope Covered',
+                );
+              }}
+              style={[
+                styles.rebalanceOption,
+                { backgroundColor: theme.CARD, borderColor: theme.BORDER },
+              ]}
+            >
+              <View style={styles.flexShrink}>
+                <Text style={[styles.rebalanceLabel, { color: theme.TEXT }]}>
+                  {opt.label}
+                </Text>
+                <Text style={[styles.rebalanceAvail, { color: opt.color }]}>
+                  {opt.available}
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={16} color={theme.MUTED} />
+            </TouchableOpacity>
+          ))}
+
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => {
+              setOverlay(null);
+              navigation.navigate('MoveMoney');
+            }}
+            style={[styles.outlineBtn, { borderColor: theme.ACTIVE }]}
+          >
+            <Text style={[styles.outlineBtnText, { color: theme.ACTIVE }]}>
+              Advanced Money Movement →
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* 9. Over-Budget Alert */}
+      <Modal
+        visible={overlay === 'overBudgetAlert'}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOverlay(null)}
+      >
+        <View style={styles.centerModalOverlay}>
+          <TouchableOpacity
+            style={styles.modalBackdropTap}
+            activeOpacity={1}
+            onPress={() => setOverlay(null)}
+          />
+          <View style={[styles.centerModalCard, { backgroundColor: theme.MODAL }]}>
+            <View
+              style={[styles.alertBadge, { backgroundColor: `${theme.RED}20` }]}
+            >
+              <Feather name="alert-triangle" size={22} color={theme.RED} />
+            </View>
+            <Text style={[styles.alertEyebrow, { color: theme.RED }]}>
+              OVER-BUDGET ALERT
+            </Text>
+            <Text style={[styles.alertTitle, { color: theme.TEXT }]}>
+              Envelope Exceeded
+            </Text>
+            <Text style={[styles.confirmBody, { color: theme.MUTED }]}>
+              <Text style={{ color: theme.RED, fontWeight: '700' }}>
+                Groceries
+              </Text>{' '}
+              spending limit exceeded by{' '}
+              <Text style={{ color: theme.RED, fontWeight: '700' }}>
+                PKR 5,000
+              </Text>
+              . Tap to rebalance from Buffer, or carry the leftover into next
+              month.
+            </Text>
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => setOverlay('rebalanceSheet')}
+              style={[styles.lockBtn, { backgroundColor: theme.RED }]}
+            >
+              <Text style={[styles.lockBtnText, { color: '#FFFFFF' }]}>
+                Rebalance Now
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => {
+                setOverlay(null);
+                showToast(
+                  'Groceries overspend carried into next month.',
+                  'info',
+                  'Rollover Applied',
+                );
+              }}
+              style={[styles.outlineBtn, { borderColor: theme.BORDER }]}
+            >
+              <Text style={[styles.outlineBtnText, { color: theme.MUTED }]}>
+                Carry leftover to next month
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 10. Unassigned Income Warning */}
+      <Modal
+        visible={overlay === 'unassignedWarning'}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOverlay(null)}
+      >
+        <View style={styles.centerModalOverlay}>
+          <TouchableOpacity
+            style={styles.modalBackdropTap}
+            activeOpacity={1}
+            onPress={() => setOverlay(null)}
+          />
+          <View style={[styles.centerModalCard, { backgroundColor: theme.MODAL }]}>
+            <View
+              style={[styles.alertBadge, { backgroundColor: `${theme.ACTIVE}20` }]}
+            >
+              <Feather name="info" size={22} color={theme.ACTIVE} />
+            </View>
+            <Text style={[styles.alertEyebrow, { color: theme.ACTIVE }]}>
+              UNASSIGNED INCOME
+            </Text>
+            <Text style={[styles.alertTitle, { color: theme.TEXT }]}>
+              Give Every Rupee a Job
+            </Text>
+
+            <View
+              style={[
+                styles.unassignedBox,
+                {
+                  backgroundColor: `${theme.ACTIVE}14`,
+                  borderColor: `${theme.ACTIVE}33`,
+                },
+              ]}
+            >
+              <Text style={[styles.unassignedValue, { color: theme.ACTIVE }]}>
+                PKR {Math.max(unallocated, 0).toLocaleString()}
+              </Text>
+              <Text style={[styles.poolLabel, { color: theme.MUTED }]}>
+                unused money left to assign
+              </Text>
+            </View>
+
+            <Text style={[styles.confirmBody, { color: theme.MUTED }]}>
+              In zero-based budgeting, every rupee has a job before the month
+              begins. Assign remaining funds to an envelope or savings goal.
+            </Text>
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => setOverlay('envelopeBudget')}
+              style={[styles.lockBtn, { backgroundColor: theme.ACTIVE }]}
+            >
+              <Text style={[styles.lockBtnText, { color: '#FFFFFF' }]}>
+                Assign Remaining PKR{' '}
+                {Math.max(unallocated, 0).toLocaleString()}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => setOverlay(null)}
+              style={[styles.outlineBtn, { borderColor: theme.BORDER }]}
+            >
+              <Text style={[styles.outlineBtnText, { color: theme.MUTED }]}>
+                Skip for Now
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1418,6 +2386,324 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+
+  /* ── Monthly planning ritual banner ── */
+  planBanner: {
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  planBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  planBannerBolt: { fontSize: 15 },
+  planBannerTitle: { fontSize: 11, fontWeight: '700', marginBottom: 1 },
+  planBannerSub: { fontSize: 10 },
+  planBannerPill: {
+    borderRadius: 100,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginLeft: 8,
+  },
+  planBannerPillText: { fontSize: 10, fontWeight: '700', color: '#FFFFFF' },
+  flexShrink: { flex: 1, minWidth: 0 },
+
+  /* ── Dual metric cards (burn + age of money) ── */
+  duoCard: {
+    flex: 1,
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 16,
+  },
+  duoCardLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+  duoCardValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -1.5,
+    marginBottom: 3,
+  },
+  duoCardSub: { fontSize: 10, marginBottom: 10 },
+  duoCardRunway: {
+    fontSize: 11,
+    fontWeight: '600',
+    lineHeight: 15,
+    marginBottom: 10,
+  },
+  duoCardFootRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginTop: 8,
+  },
+  duoCardFoot: { fontSize: 10 },
+  duoCardPct: { fontSize: 11, fontWeight: '700' },
+  simulateBtn: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignSelf: 'flex-start',
+    marginTop: 'auto',
+  },
+  simulateBtnText: { fontSize: 10, fontWeight: '600' },
+
+  /* ── Savings goals compact card ── */
+  viewAllText: { fontSize: 11, fontWeight: '600' },
+  goalRingsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  goalRingItem: { flex: 1, alignItems: 'center', gap: 8 },
+  goalRingWrap: { width: 58, height: 58 },
+  goalRingCenter: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  goalRingPct: { fontSize: 11, fontWeight: '800' },
+  goalRingName: {
+    fontSize: 9,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 13,
+  },
+  goalRingDate: { fontSize: 8, textAlign: 'center' },
+
+  /* ── Health plain-language metric rows ── */
+  metricStack: { gap: 8 },
+  metricRow: {
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 14,
+  },
+  metricRowLeft: { flex: 1 },
+  metricLabel: { fontSize: 12, lineHeight: 17, marginBottom: 5 },
+  metricSub: { fontSize: 10, opacity: 0.7 },
+  metricValue: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
+
+  /* ── Envelope allocation sheet ── */
+  tallSheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    maxHeight: '90%',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 20,
+  },
+  sheetHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 18,
+    paddingBottom: 12,
+    gap: 12,
+  },
+  sheetCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  envelopeEyebrow: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 2,
+  },
+  incomePool: {
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  poolLabel: { fontSize: 10, marginBottom: 2 },
+  poolValue: { fontSize: 22, fontWeight: '800', letterSpacing: -1 },
+  poolOf: { fontSize: 11 },
+  envelopeList: { flexGrow: 0, marginBottom: 8 },
+  envelopeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    gap: 8,
+  },
+  envelopeName: { fontSize: 13, fontWeight: '600', marginBottom: 2 },
+  envelopeFixed: { fontSize: 9, fontWeight: '700' },
+  envelopeStepper: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  envelopeAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+    minWidth: 72,
+    textAlign: 'center',
+  },
+  stepCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  overAllocWarn: {
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  overAllocText: { fontSize: 10, fontWeight: '600', flex: 1 },
+  lockBtn: {
+    height: 52,
+    borderRadius: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  lockBtnText: { fontSize: 14, fontWeight: '700' },
+
+  /* ── Bottom sheets shared by the new overlays ── */
+  bottomSheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 20,
+    paddingTop: 4,
+  },
+  sheetGrabber: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  sheetSectionLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.9,
+    marginBottom: 8,
+  },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 16,
+  },
+  goalChip: { borderRadius: 100, paddingHorizontal: 12, paddingVertical: 6 },
+  goalChipText: { fontSize: 11, fontWeight: '600' },
+  quickAmountRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  quickAmountBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickAmountText: { fontSize: 14, fontWeight: '700' },
+  rebalanceIntro: { fontSize: 12, marginTop: 4, marginBottom: 16 },
+  rebalanceOption: {
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 10,
+  },
+  rebalanceLabel: { fontSize: 13, fontWeight: '600', marginBottom: 2 },
+  rebalanceAvail: { fontSize: 11 },
+  outlineBtn: {
+    height: 48,
+    borderRadius: 100,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  outlineBtnText: { fontSize: 13, fontWeight: '600' },
+
+  /* ── Alert dialogs ── */
+  milestoneBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  milestoneTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  alertBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  alertEyebrow: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.9,
+    marginBottom: 6,
+  },
+  alertTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    marginBottom: 8,
+  },
+  unassignedBox: {
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 16,
+  },
+  unassignedValue: { fontSize: 28, fontWeight: '800', letterSpacing: -1.5 },
+
   scrollContent: {
     paddingHorizontal: 16,
   },
@@ -1894,22 +3180,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     maxWidth: 240,
   },
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  gridCard: {
-    width: (width - 42) / 2,
-    borderRadius: 20,
-    padding: 16,
-  },
-  gridValue: {
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-    marginBottom: 4,
-  },
 
   /* AI Insight View Styles */
   insightCard: {
@@ -2210,6 +3480,151 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   modalBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  /* Category Detail Sheet Styles */
+  catDetailSummaryCard: {
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    marginBottom: 14,
+  },
+  catDetailLimitEditor: {
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    marginBottom: 14,
+  },
+  limitStepBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  catDetailTxRow: {
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  saveLimitBtn: {
+    width: '100%',
+    marginTop: 18,
+    height: 50,
+    borderRadius: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveLimitBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  /* New CA Card Styles */
+  newCaCard: {
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    borderWidth: 1,
+  },
+  newCaTag: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.9,
+    textTransform: 'uppercase',
+  },
+  newCaHeadline: {
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: -1.2,
+  },
+  newCaBody: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  statLargeVal: {
+    fontSize: 26,
+    fontWeight: '800',
+    letterSpacing: -1,
+    marginBottom: 4,
+  },
+
+  /* Account Sheet Improvements */
+  manualNote: {
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  manualNoteText: {
+    fontSize: 11,
+    lineHeight: 16,
+    flex: 1,
+  },
+  editAccBtn: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  editAccBtnText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  editBalInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  saveBalBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  saveBalBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  addAccBox: {
+    borderRadius: 20,
+    padding: 16,
+    marginTop: 10,
+  },
+  addAccInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  addAccDashedBtn: {
+    width: '100%',
+    marginTop: 10,
+    height: 48,
+    borderRadius: 100,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  addAccDashedText: {
     fontSize: 13,
     fontWeight: '600',
   },

@@ -5,317 +5,225 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Modal,
   StyleSheet,
   StatusBar,
-  Pressable,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
+import {
+  TRANSACTIONS as SEED_TXS,
+  RECURRING,
+  UPCOMING_BILLS as SEED_BILLS,
+  SEED_DEBTS,
+  groupByDate,
+  DATE_LABELS,
+  LedgerTransaction,
+  UpcomingBill,
+  DebtEntry,
+} from '../../../constants/ledgerData';
 
-type Tab = 'ledger' | 'sms';
+import AddEntrySheet from './expenses/AddEntrySheet';
+import AddGatewaySheet from './expenses/AddGatewaySheet';
+import QuickAuditSheet, {
+  TransactionDetailModal,
+  EditTxModal,
+  SplitTxModal,
+  DeleteConfirmModal,
+} from './expenses/QuickAuditSheet';
+import { AddDebtSheet, DebtReminderSheet } from './expenses/DebtSheets';
+import {
+  AddRecurringBillSheet,
+  BillQuickActionSheet,
+  MarkAsPaidSheet,
+} from './expenses/RecurringSheets';
+import StatementImportModal from './expenses/StatementImportModal';
 
-const TRANSACTIONS = [
-  {
-    id: 1,
-    icon: 'shopping-cart',
-    label: 'Carrefour Hyperstar',
-    sub: 'Groceries · HBL',
-    amount: -3240,
-    date: 'Today 11:42',
-  },
-  {
-    id: 2,
-    icon: 'truck',
-    label: 'Uber Pakistan',
-    sub: 'Transport · Meezan',
-    amount: -380,
-    date: 'Today 09:15',
-  },
-  {
-    id: 3,
-    icon: 'home',
-    label: 'Rent — DHA Phase 6',
-    sub: 'Housing · Alfalah',
-    amount: -25000,
-    date: 'May 1',
-  },
-  {
-    id: 4,
-    icon: 'zap',
-    label: 'LESCO Bill',
-    sub: 'Utilities · HBL',
-    amount: -2800,
-    date: 'Apr 28',
-  },
-  {
-    id: 5,
-    icon: 'coffee',
-    label: 'Espresso — Gulberg',
-    sub: 'Food · Meezan',
-    amount: -1450,
-    date: 'Apr 27',
-  },
-  {
-    id: 6,
-    icon: 'smartphone',
-    label: 'Jazz Postpaid',
-    sub: 'Telecom · UBL',
-    amount: -1200,
-    date: 'Apr 25',
-  },
-  {
-    id: 7,
-    icon: 'shopping-cart',
-    label: 'Chase Up Superstore',
-    sub: 'Groceries · Alfalah',
-    amount: -4560,
-    date: 'Apr 23',
-  },
-  {
-    id: 8,
-    icon: 'arrow-up-right',
-    label: 'Salary Credit',
-    sub: 'Income · HBL',
-    amount: 150000,
-    date: 'Apr 1',
-  },
-];
+type LedgerTab = 'transactions' | 'recurring' | 'debts';
+type TxFilter = 'all' | 'in' | 'out' | 'transfers';
+type RecurringSubTab = 'history' | 'calendar';
 
-const SMS_LOGS = [
-  {
-    bank: 'HBL',
-    conf: 98,
-    raw: 'HBL: PKR 3,240.00 debited from a/c XX1234 at CARREFOUR HYPERSTAR DHA on 21-May-26. Avail Bal: PKR 67,180.',
-    parsed: {
-      Merchant: 'Carrefour Hyperstar',
-      Category: 'Groceries',
-      Amount: 'Rs. 3,240',
-    },
-  },
-  {
-    bank: 'Meezan',
-    conf: 96,
-    raw: 'Meezan Bank: Rs.380 debited from a/c ending 5678 for UBER PAKISTAN on 21-May-26. Avail Balance Rs.12,440.',
-    parsed: {
-      Merchant: 'Uber Pakistan',
-      Category: 'Transport',
-      Amount: 'Rs. 380',
-    },
-  },
-  {
-    bank: 'Alfalah',
-    conf: 91,
-    raw: 'Dear customer, Rs. 25,000 debited from Bank Alfalah a/c XX9012 as RENT PAYMENT on 01-May-26.',
-    parsed: {
-      Merchant: 'Rent — DHA Phase 6',
-      Category: 'Housing',
-      Amount: 'Rs. 25,000',
-    },
-  },
-];
-
-function SMSCard({ log }: { log: (typeof SMS_LOGS)[0] }) {
-  const { theme } = useTheme();
-  const [open, setOpen] = useState(false);
-
-  return (
-    <View style={[styles.smsCardContainer, { backgroundColor: theme.CARD }]}>
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={() => setOpen(o => !o)}
-        style={styles.smsHeaderBtn}
-      >
-        <View style={[styles.activeDot, { backgroundColor: theme.ACTIVE }]} />
-        <View style={styles.smsHeaderInfo}>
-          <Text style={[styles.smsBankTitle, { color: theme.TEXT }]}>
-            {log.bank}
-          </Text>
-          <Text
-            numberOfLines={1}
-            style={[styles.smsRawPreview, { color: theme.MUTED }]}
-          >
-            {log.raw}
-          </Text>
-        </View>
-        <View style={styles.smsHeaderRight}>
-          <View style={[styles.confBadge, { backgroundColor: theme.ACTIVE }]}>
-            <Text style={styles.confBadgeText}>{log.conf}%</Text>
-          </View>
-          <Feather
-            name={open ? 'chevron-up' : 'chevron-down'}
-            size={14}
-            color={theme.MUTED}
-          />
-        </View>
-      </TouchableOpacity>
-
-      {open && (
-        <View
-          style={[styles.smsBodyContent, { borderTopColor: theme.BORDER }]}
-        >
-          <Text style={[styles.rawCodeBlock, { backgroundColor: theme.MODAL, color: theme.MUTED }]}>
-            {log.raw}
-          </Text>
-          <View style={styles.parsedGrid}>
-            {Object.entries(log.parsed).map(([k, v]) => (
-              <View
-                key={k}
-                style={[styles.parsedGridItem, { backgroundColor: theme.MODAL }]}
-              >
-                <Text style={[styles.parsedKeyLabel, { color: theme.MUTED }]}>
-                  {k}
-                </Text>
-                <Text style={[styles.parsedValueText, { color: theme.TEXT }]}>
-                  {v}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      )}
-    </View>
-  );
-}
-
-function AddSheet({ onClose }: { onClose: () => void }) {
-  const { theme } = useTheme();
-  const { showToast } = useToast();
-  const [val, setVal] = useState('');
-  const [cat, setCat] = useState('Food');
-
-  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'];
-
-  function tap(k: string) {
-    if (k === '⌫') {
-      setVal(v => v.slice(0, -1));
-    } else if (k === '.' && val.includes('.')) {
-      return;
-    } else {
-      setVal(v => v + k);
-    }
-  }
-
-  function handleAdd() {
-    if (!val || val === '0') {
-      showToast('Please enter an amount', 'error', 'Add Expense');
-      return;
-    }
-    showToast(`Added PKR ${val} under ${cat}`, 'success', 'Transaction Recorded');
-    onClose();
-  }
-
-  return (
-    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable style={styles.modalOverlay} onPress={onClose}>
-        <Pressable
-          style={[styles.sheetContent, { backgroundColor: theme.CARD }]}
-          onPress={e => e.stopPropagation()}
-        >
-          <View style={styles.sheetHeader}>
-            <Text style={[styles.sheetTitle, { color: theme.TEXT }]}>
-              Add Expense
-            </Text>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={onClose}
-              style={[styles.closeBtn, { backgroundColor: theme.MODAL }]}
-            >
-              <Feather name="x" size={14} color={theme.MUTED} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.amountContainer}>
-            <Text style={[styles.amountLabel, { color: theme.MUTED }]}>
-              Amount (PKR)
-            </Text>
-            <Text style={[styles.amountDisplay, { color: theme.TEXT }]}>
-              {val || '0'}
-            </Text>
-          </View>
-
-          {/* Categories Pill Bar */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoriesRow}
-          >
-            {['Food', 'Transport', 'Groceries', 'Utilities', 'Other'].map(
-              c => {
-                const isActive = cat === c;
-                return (
-                  <TouchableOpacity
-                    key={c}
-                    activeOpacity={0.8}
-                    onPress={() => setCat(c)}
-                    style={[
-                      styles.categoryPill,
-                      {
-                        backgroundColor: isActive ? theme.TEXT : theme.MODAL,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.categoryPillText,
-                        { color: isActive ? theme.BG : theme.TEXT },
-                      ]}
-                    >
-                      {c}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              },
-            )}
-          </ScrollView>
-
-          {/* Custom Numeric Keypad */}
-          <View style={styles.keypadGrid}>
-            {keys.map(k => (
-              <TouchableOpacity
-                key={k}
-                activeOpacity={0.7}
-                onPress={() => tap(k)}
-                style={[styles.keyBtn, { backgroundColor: theme.MODAL }]}
-              >
-                <Text style={[styles.keyBtnText, { color: theme.TEXT }]}>
-                  {k}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Submit Button */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={handleAdd}
-            style={[styles.submitBtn, { backgroundColor: theme.TEXT }]}
-          >
-            <Text style={[styles.submitBtnText, { color: theme.BG }]}>
-              Add PKR {val || '0'}
-            </Text>
-          </TouchableOpacity>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
+const CAT_COLORS: Record<string, { bg: string; icon: string }> = {
+  Groceries: { bg: '#FF950022', icon: '#FF9500' },
+  Transport: { bg: '#00A3FF22', icon: '#00A3FF' },
+  Housing: { bg: '#8B5CF622', icon: '#8B5CF6' },
+  Utilities: { bg: '#10B98122', icon: '#10B981' },
+  Dining: { bg: '#F9731622', icon: '#F97316' },
+  Telecom: { bg: '#06B6D422', icon: '#06B6D4' },
+  Health: { bg: '#EC489922', icon: '#EC4899' },
+  Healthcare: { bg: '#EC489922', icon: '#EC4899' },
+  Entertainment: { bg: '#7C3AED22', icon: '#7C3AED' },
+  Investment: { bg: '#00C85322', icon: '#00C853' },
+  Salary: { bg: '#00C85322', icon: '#00C853' },
+  Transfer: { bg: '#86868B22', icon: '#86868B' },
+  Loan: { bg: '#D5000022', icon: '#D50000' },
+};
+const DEFAULT_CAT = { bg: '#86868B22', icon: '#86868B' };
 
 export const ExpensesScreen = () => {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { showToast } = useToast();
 
-  const [tab, setTab] = useState<Tab>('ledger');
+  // Primary State
+  const [tab, setTab] = useState<LedgerTab>('transactions');
+  const [txFilter, setTxFilter] = useState<TxFilter>('all');
   const [search, setSearch] = useState('');
-  const [showAdd, setShowAdd] = useState(false);
+  const [recurringSub, setRecurringSub] = useState<RecurringSubTab>('history');
 
-  const filtered = TRANSACTIONS.filter(
-    tx =>
-      tx.label.toLowerCase().includes(search.toLowerCase()) ||
-      tx.sub.toLowerCase().includes(search.toLowerCase()),
-  );
+  // Data Collections
+  const [transactions, setTransactions] = useState<LedgerTransaction[]>(SEED_TXS);
+  const [upcomingBills, setUpcomingBills] = useState<UpcomingBill[]>(SEED_BILLS);
+  const [debts, setDebts] = useState<DebtEntry[]>(SEED_DEBTS);
+
+  // Modals & Sheets Visibility
+  const [gatewayOpen, setGatewayOpen] = useState(false);
+  const [manualEntryOpen, setManualEntryOpen] = useState(false);
+  const [statementImportOpen, setStatementImportOpen] = useState(false);
+
+  // Quick Audit and Detail Overlays
+  const [auditTx, setAuditTx] = useState<LedgerTransaction | null>(null);
+  const [detailTx, setDetailTx] = useState<LedgerTransaction | null>(null);
+  const [editTx, setEditTx] = useState<LedgerTransaction | null>(null);
+  const [splitTx, setSplitTx] = useState<LedgerTransaction | null>(null);
+  const [deleteTx, setDeleteTx] = useState<LedgerTransaction | null>(null);
+
+  // Recurring Overlays
+  const [addBillOpen, setAddBillOpen] = useState(false);
+  const [activeBill, setActiveBill] = useState<UpcomingBill | null>(null);
+  const [markPaidBill, setMarkPaidBill] = useState<UpcomingBill | null>(null);
+
+  // Debts Overlays
+  const [debtAddOpen, setDebtAddOpen] = useState(false);
+  const [debtEditTarget, setDebtEditTarget] = useState<DebtEntry | null>(null);
+  const [debtRemTarget, setDebtRemTarget] = useState<DebtEntry | null>(null);
+
+  // Filtering
+  const filteredTxs = transactions.filter(tx => {
+    if (txFilter === 'in' && tx.type !== 'income') return false;
+    if (txFilter === 'out' && tx.type !== 'expense') return false;
+    if (txFilter === 'transfers' && tx.type !== 'transfer') return false;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      return (
+        tx.label.toLowerCase().includes(q) ||
+        tx.account.toLowerCase().includes(q) ||
+        tx.category.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
+
+  const groupedTxs = groupByDate(filteredTxs);
+
+  // Metrics
+  const todaySpent = transactions
+    .filter(t => t.dateGroup === 'TODAY' && t.amount < 0)
+    .reduce((s, t) => s + Math.abs(t.amount), 0);
+
+  const incomeTotal = transactions
+    .filter(t => t.type === 'income')
+    .reduce((s, t) => s + t.amount, 0);
+
+  const totalRecurring = RECURRING.reduce((s, r) => s + r.amount, 0);
+  const totalDebt = debts.reduce((s, d) => s + d.remaining, 0);
+  const totalEMI = debts.reduce((s, d) => s + d.emi, 0);
+  const dtiPct = ((totalEMI / 150000) * 100).toFixed(1);
+
+  // Handlers
+  const handleAddManualTransaction = (tx: any) => {
+    const newTx: LedgerTransaction = {
+      id: tx.id || Date.now(),
+      icon: tx.icon || 'shopping-cart',
+      label: tx.label || tx.merchant || 'Expense',
+      account: tx.account || 'Checking',
+      category: tx.category || 'Groceries',
+      amount: tx.type === 'income' ? Math.abs(tx.amount) : -Math.abs(tx.amount),
+      dateGroup: 'TODAY',
+      time: 'Just now',
+      type: tx.type || 'expense',
+      smsRef: `MAN-${Date.now()}`,
+      status: 'Settled',
+    };
+    setTransactions(prev => [newTx, ...prev]);
+    showToast('Transaction added to ledger', 'success');
+  };
+
+  const handleImportTransactions = (imported: LedgerTransaction[]) => {
+    setTransactions(prev => [...imported, ...prev]);
+    showToast(`${imported.length} transactions imported`, 'success');
+  };
+
+  const handleSaveDebt = (d: DebtEntry) => {
+    setDebts(prev => {
+      const idx = prev.findIndex(x => x.id === d.id);
+      if (idx >= 0) {
+        return prev.map(x => (x.id === d.id ? d : x));
+      }
+      return [...prev, d];
+    });
+    showToast('Debt saved successfully', 'success');
+  };
+
+  const handleDeleteDebt = (id: number) => {
+    setDebts(prev => prev.filter(d => d.id !== id));
+    showToast('Debt removed', 'info');
+  };
+
+  const handleSaveEditedTx = (updated: LedgerTransaction) => {
+    setTransactions(prev => prev.map(t => (t.id === updated.id ? updated : t)));
+    showToast('Transaction updated', 'success');
+  };
+
+  const handleDeleteTx = (tx: LedgerTransaction) => {
+    setTransactions(prev => prev.filter(t => t.id !== tx.id));
+    showToast('Transaction deleted', 'info');
+  };
+
+  const handleConfirmSplit = (
+    part1: number,
+    part2: number,
+    cat1: string,
+    cat2: string,
+  ) => {
+    if (!splitTx) return;
+    const isNegative = splitTx.amount < 0;
+    const tx1: LedgerTransaction = {
+      ...splitTx,
+      id: Date.now(),
+      label: `${splitTx.label} (Split 1)`,
+      category: cat1,
+      amount: isNegative ? -part1 : part1,
+    };
+    const tx2: LedgerTransaction = {
+      ...splitTx,
+      id: Date.now() + 1,
+      label: `${splitTx.label} (Split 2)`,
+      category: cat2,
+      amount: isNegative ? -part2 : part2,
+    };
+    setTransactions(prev => [tx1, tx2, ...prev.filter(t => t.id !== splitTx.id)]);
+    showToast('Transaction split into 2 envelopes', 'success');
+  };
+
+  const handleSaveRecurringBill = (bill: UpcomingBill) => {
+    setUpcomingBills(prev => [...prev, bill]);
+    showToast('Recurring bill added', 'success');
+  };
+
+  const handleDeleteBill = (bill: UpcomingBill) => {
+    setUpcomingBills(prev => prev.filter(b => b.id !== bill.id));
+    showToast('Bill removed from schedule', 'info');
+  };
+
+  const handleConfirmPaid = (method: string) => {
+    if (!markPaidBill) return;
+    setUpcomingBills(prev =>
+      prev.map(b => (b.id === markPaidBill.id ? { ...b, paid: true } : b)),
+    );
+    showToast(`Marked as paid (${method})`, 'success');
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.BG }]}>
@@ -329,7 +237,7 @@ export const ExpensesScreen = () => {
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: insets.top + 16,
+            paddingTop: insets.top + 12,
             paddingBottom: insets.bottom + 120,
           },
         ]}
@@ -337,33 +245,43 @@ export const ExpensesScreen = () => {
         {/* Top Header */}
         <View style={styles.headerRow}>
           <Text style={[styles.screenTitle, { color: theme.TEXT }]}>
-            Ledger
+            Expenses
           </Text>
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => setShowAdd(true)}
+            onPress={() => setGatewayOpen(true)}
             style={[styles.addBtn, { backgroundColor: theme.TEXT }]}
           >
             <Feather name="plus" size={18} color={theme.BG} />
           </TouchableOpacity>
         </View>
 
-        {/* Tab Switcher Pills */}
-        <View style={styles.tabsRow}>
-          {(['ledger', 'sms'] as Tab[]).map(t => {
-            const isActive = tab === t;
+        {/* 3 Main Tabs: Transactions, Recurring, Loans */}
+        <View style={styles.tabBar}>
+          {[
+            { key: 'transactions' as LedgerTab, label: 'Transactions', icon: 'list' },
+            { key: 'recurring' as LedgerTab, label: 'Recurring', icon: 'clock' },
+            { key: 'debts' as LedgerTab, label: 'Loans', icon: 'credit-card' },
+          ].map(t => {
+            const isActive = tab === t.key;
             return (
               <TouchableOpacity
-                key={t}
+                key={t.key}
                 activeOpacity={0.8}
-                onPress={() => setTab(t)}
+                onPress={() => setTab(t.key)}
                 style={[
                   styles.tabPill,
                   {
-                    backgroundColor: isActive ? theme.TEXT : theme.CARD,
+                    backgroundColor: isActive ? theme.TEXT : 'transparent',
                   },
                 ]}
               >
+                <Feather
+                  name={t.icon}
+                  size={13}
+                  color={isActive ? theme.BG : theme.MUTED}
+                  style={{ marginRight: 6 }}
+                />
                 <Text
                   style={[
                     styles.tabPillText,
@@ -372,148 +290,894 @@ export const ExpensesScreen = () => {
                     },
                   ]}
                 >
-                  {t === 'ledger' ? 'Transactions' : 'SMS Engine'}
+                  {t.label}
                 </Text>
               </TouchableOpacity>
             );
           })}
         </View>
 
-        {/* Search Input Bar (Ledger tab only) */}
-        {tab === 'ledger' && (
-          <View style={[styles.searchBar, { backgroundColor: theme.CARD }]}>
-            <Feather name="search" size={15} color={theme.MUTED} />
-            <TextInput
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search transactions…"
-              placeholderTextColor={theme.MUTED}
-              style={[styles.searchInput, { color: theme.TEXT }]}
-            />
-          </View>
-        )}
-
-        {/* Content Area */}
-        {tab === 'ledger' ? (
+        {/* ── TAB 1: TRANSACTIONS ── */}
+        {tab === 'transactions' && (
           <View>
-            {/* Top 2 Summary Cards */}
-            <View style={styles.summaryRow}>
-              <View style={[styles.summaryCard, { backgroundColor: theme.CARD }]}>
-                <Text style={[styles.summaryLabel, { color: theme.MUTED }]}>
-                  Total Out
-                </Text>
-                <Text style={[styles.summaryValue, { color: theme.RED }]}>
-                  Rs. 38,630
-                </Text>
-              </View>
-
-              <View style={[styles.summaryCard, { backgroundColor: theme.CARD }]}>
-                <Text style={[styles.summaryLabel, { color: theme.MUTED }]}>
-                  Entries
-                </Text>
-                <Text style={[styles.summaryValue, { color: theme.TEXT }]}>
-                  {filtered.length} items
-                </Text>
-              </View>
-            </View>
-
-            {/* Transactions Card List */}
-            <View style={[styles.listCard, { backgroundColor: theme.CARD }]}>
-              {filtered.map((tx, i) => {
-                const pos = tx.amount > 0;
+            {/* Sub-Filter Chips */}
+            <View style={styles.filterRow}>
+              {[
+                { key: 'all' as TxFilter, label: 'All', icon: null, color: theme.MUTED },
+                { key: 'in' as TxFilter, label: 'Money In', icon: 'arrow-down-left', color: theme.GREEN },
+                { key: 'out' as TxFilter, label: 'Money Out', icon: 'arrow-up-right', color: theme.RED },
+                { key: 'transfers' as TxFilter, label: 'Transfers', icon: 'repeat', color: theme.ACTIVE },
+              ].map(f => {
+                const isSel = txFilter === f.key;
                 return (
-                  <View
-                    key={tx.id}
+                  <TouchableOpacity
+                    key={f.key}
+                    activeOpacity={0.8}
+                    onPress={() => setTxFilter(f.key)}
                     style={[
-                      styles.txRow,
+                      styles.filterChip,
                       {
-                        borderBottomWidth: i < filtered.length - 1 ? 1 : 0,
-                        borderBottomColor: theme.BORDER,
+                        backgroundColor: isSel ? theme.TEXT : 'transparent',
+                        borderColor: isSel ? theme.TEXT : theme.MUTED + '44',
                       },
                     ]}
                   >
-                    <View
-                      style={[
-                        styles.iconSquare,
-                        { backgroundColor: theme.MODAL },
-                      ]}
-                    >
+                    {f.icon && (
                       <Feather
-                        name={tx.icon}
-                        size={16}
-                        color={theme.MUTED}
+                        name={f.icon}
+                        size={11}
+                        color={isSel ? theme.BG : f.color}
+                        style={{ marginRight: 4 }}
                       />
-                    </View>
-                    <View style={styles.txInfo}>
-                      <Text
-                        numberOfLines={1}
-                        style={[styles.txLabel, { color: theme.TEXT }]}
-                      >
-                        {tx.label}
-                      </Text>
-                      <Text style={[styles.txSub, { color: theme.MUTED }]}>
-                        {tx.sub} · {tx.date}
-                      </Text>
-                    </View>
+                    )}
                     <Text
                       style={[
-                        styles.txAmount,
-                        { color: pos ? theme.GREEN : theme.RED },
+                        styles.filterChipText,
+                        { color: isSel ? theme.BG : theme.MUTED },
                       ]}
                     >
-                      {pos ? '+' : '–'}
-                      {Math.abs(tx.amount).toLocaleString()}
+                      {f.label}
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
             </View>
-          </View>
-        ) : (
-          <View>
-            {/* SMS Parsing Engine Hero Banner */}
-            <View
-              style={[
-                styles.smsHeroBanner,
-                { backgroundColor: theme.HERO_BG },
-              ]}
-            >
-              <View style={styles.smsHeroHeaderRow}>
-                <View
-                  style={[
-                    styles.activeDot,
-                    { backgroundColor: theme.ACTIVE },
-                  ]}
-                />
-                <Text style={[styles.smsHeroTitle, { color: theme.ACTIVE }]}>
-                  Parsing Engine Active
+
+            {/* Stat Cards: Today Spent & Month In */}
+            <View style={styles.statsRow}>
+              <View
+                style={[
+                  styles.statCard,
+                  {
+                    backgroundColor: theme.isDark ? theme.CARD : '#FFFFFF',
+                    borderColor: theme.BORDER,
+                  },
+                ]}
+              >
+                <Text style={[styles.statLabel, { color: theme.MUTED }]}>
+                  TODAY SPENT
+                </Text>
+                <Text style={[styles.statVal, { color: theme.RED }]}>
+                  − PKR {todaySpent.toLocaleString()}
                 </Text>
               </View>
 
-              <Text style={styles.smsHeroDesc}>
-                Intercepts bank SMS from HBL, Meezan, Alfalah, SCB, and UBL —
-                mapping raw messages to verified ledger entries.
-              </Text>
-
-              <View style={styles.banksWrapRow}>
-                {['HBL', 'Meezan', 'Alfalah', 'SCB', 'UBL'].map(b => (
-                  <View key={b} style={styles.bankTagPill}>
-                    <Text style={styles.bankTagText}>{b}</Text>
-                  </View>
-                ))}
+              <View
+                style={[
+                  styles.statCard,
+                  {
+                    backgroundColor: theme.isDark ? theme.CARD : '#FFFFFF',
+                    borderColor: theme.BORDER,
+                  },
+                ]}
+              >
+                <Text style={[styles.statLabel, { color: theme.MUTED }]}>
+                  MONTH IN
+                </Text>
+                <Text style={[styles.statVal, { color: theme.GREEN }]}>
+                  + PKR {incomeTotal.toLocaleString()}
+                </Text>
               </View>
             </View>
 
-            {/* Parsed SMS Accordion List */}
-            {SMS_LOGS.map((log, i) => (
-              <SMSCard key={i} log={log} />
-            ))}
+            {/* Search Input */}
+            <View
+              style={[
+                styles.searchBar,
+                {
+                  backgroundColor: theme.isDark ? theme.CARD : '#FFFFFF',
+                  borderColor: theme.BORDER,
+                },
+              ]}
+            >
+              <Feather name="search" size={15} color={theme.MUTED} />
+              <TextInput
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Search transactions…"
+                placeholderTextColor={theme.MUTED}
+                style={[styles.searchInput, { color: theme.TEXT }]}
+              />
+              {search.length > 0 && (
+                <TouchableOpacity onPress={() => setSearch('')}>
+                  <Feather name="x" size={14} color={theme.MUTED} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Grouped Transactions Feed */}
+            {groupedTxs.length === 0 ? (
+              <View style={styles.emptyWrap}>
+                <Text style={[styles.emptyText, { color: theme.MUTED }]}>
+                  No transactions found
+                </Text>
+              </View>
+            ) : (
+              groupedTxs.map(group => (
+                <View key={group.date} style={styles.groupWrap}>
+                  <Text style={[styles.groupDateLabel, { color: theme.MUTED }]}>
+                    {group.date} // {DATE_LABELS[group.date] ?? group.date}
+                  </Text>
+                  <View
+                    style={[
+                      styles.groupCard,
+                      {
+                        backgroundColor: theme.isDark ? theme.CARD : '#FFFFFF',
+                        borderColor: theme.BORDER,
+                      },
+                    ]}
+                  >
+                    {group.items.map((tx, i) => {
+                      const isTransfer = tx.type === 'transfer';
+                      const amtColor = isTransfer
+                        ? theme.MUTED
+                        : tx.amount > 0
+                        ? theme.GREEN
+                        : theme.RED;
+                      const catStyle = CAT_COLORS[tx.category] || DEFAULT_CAT;
+
+                      return (
+                        <TouchableOpacity
+                          key={tx.id}
+                          activeOpacity={0.7}
+                          onPress={() => setAuditTx(tx)}
+                          style={[
+                            styles.txRow,
+                            i < group.items.length - 1 && {
+                              borderBottomWidth: StyleSheet.hairlineWidth,
+                              borderBottomColor: theme.BORDER,
+                            },
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.catIconWrap,
+                              {
+                                backgroundColor: catStyle.bg,
+                                borderColor: catStyle.icon + '40',
+                              },
+                            ]}
+                          >
+                            <Feather
+                              name={tx.icon || 'credit-card'}
+                              size={15}
+                              color={catStyle.icon}
+                            />
+                          </View>
+
+                          <View style={{ flex: 1, marginRight: 12 }}>
+                            <Text
+                              numberOfLines={1}
+                              style={[styles.txLabel, { color: theme.TEXT }]}
+                            >
+                              {tx.label}
+                            </Text>
+                            <View style={styles.txMetaRow}>
+                              <Text style={[styles.txAccount, { color: theme.MUTED }]}>
+                                {tx.account}
+                              </Text>
+                              <View
+                                style={[
+                                  styles.txCatBadge,
+                                  { backgroundColor: theme.MODAL },
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.txCatBadgeText,
+                                    { color: theme.MUTED },
+                                  ]}
+                                >
+                                  {tx.category}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+
+                          <Text style={[styles.txAmount, { color: amtColor }]}>
+                            {!isTransfer && (tx.amount > 0 ? '+' : '−')}
+                            {isTransfer && '→ '}
+                            PKR {Math.abs(tx.amount).toLocaleString()}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))
+            )}
+          </View>
+        )}
+
+        {/* ── TAB 2: RECURRING ── */}
+        {tab === 'recurring' && (
+          <View>
+            {/* Sub Tabs: History vs Upcoming Calendar */}
+            <View style={styles.recurringSubTabs}>
+              {(['history', 'calendar'] as RecurringSubTab[]).map(s => {
+                const active = recurringSub === s;
+                return (
+                  <TouchableOpacity
+                    key={s}
+                    activeOpacity={0.8}
+                    onPress={() => setRecurringSub(s)}
+                    style={[
+                      styles.recurringSubPill,
+                      {
+                        backgroundColor: active ? theme.TEXT : theme.CARD,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.recurringSubPillText,
+                        {
+                          color: active ? theme.BG : theme.MUTED,
+                        },
+                      ]}
+                    >
+                      {s === 'history' ? 'History' : 'Upcoming Calendar'}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {recurringSub === 'history' && (
+              <View>
+                {/* Monthly Commitments Header Card */}
+                <View style={[styles.commitCard, { backgroundColor: theme.CARD }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.commitLabel, { color: theme.MUTED }]}>
+                      MONTHLY COMMITMENTS
+                    </Text>
+                    <Text style={[styles.commitVal, { color: theme.RED }]}>
+                      − PKR {totalRecurring.toLocaleString()}
+                    </Text>
+                    <Text style={[styles.commitSub, { color: theme.MUTED }]}>
+                      per month · {RECURRING.length} subscriptions
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.commitIconBox,
+                      { backgroundColor: theme.MODAL },
+                    ]}
+                  >
+                    <Feather name="repeat" size={22} color={theme.MUTED} />
+                  </View>
+                </View>
+
+                {/* Subscriptions List */}
+                <View
+                  style={[
+                    styles.groupCard,
+                    {
+                      backgroundColor: theme.isDark ? theme.CARD : '#FFFFFF',
+                      borderColor: theme.BORDER,
+                      marginTop: 12,
+                    },
+                  ]}
+                >
+                  {RECURRING.map((r, i) => {
+                    const catColor = CAT_COLORS[r.category] || DEFAULT_CAT;
+                    return (
+                      <View
+                        key={r.id}
+                        style={[
+                          styles.txRow,
+                          i < RECURRING.length - 1 && {
+                            borderBottomWidth: StyleSheet.hairlineWidth,
+                            borderBottomColor: theme.BORDER,
+                          },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.catIconWrap,
+                            {
+                              backgroundColor: catColor.bg,
+                              borderColor: catColor.icon + '40',
+                            },
+                          ]}
+                        >
+                          <Feather
+                            name={r.icon || 'repeat'}
+                            size={15}
+                            color={catColor.icon}
+                          />
+                        </View>
+                        <View style={{ flex: 1, marginRight: 10 }}>
+                          <Text style={[styles.txLabel, { color: theme.TEXT }]}>
+                            {r.label}
+                          </Text>
+                          <View style={styles.txMetaRow}>
+                            <Feather name="repeat" size={9} color={theme.MUTED} />
+                            <Text style={[styles.txAccount, { color: theme.MUTED }]}>
+                              {r.cadence}
+                            </Text>
+                            <View
+                              style={[
+                                styles.txCatBadge,
+                                { backgroundColor: theme.MODAL },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.txCatBadgeText,
+                                  { color: theme.MUTED },
+                                ]}
+                              >
+                                {r.category}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                        <Text style={[styles.txAmount, { color: theme.RED }]}>
+                          − PKR {r.amount.toLocaleString()}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {recurringSub === 'calendar' && (
+              <View>
+                {/* 30-Day Liquidity Snapshot */}
+                <View
+                  style={[
+                    styles.liquidityCard,
+                    {
+                      backgroundColor: theme.isDark ? theme.CARD : '#FFFFFF',
+                      borderColor: theme.BORDER,
+                    },
+                  ]}
+                >
+                  <View style={styles.liquidityTop}>
+                    <Text style={[styles.statLabel, { color: theme.MUTED }]}>
+                      30-DAY LIQUIDITY SNAPSHOT
+                    </Text>
+                    <View
+                      style={[
+                        styles.monthBadge,
+                        { backgroundColor: theme.ACTIVE + '18' },
+                      ]}
+                    >
+                      <Text style={[styles.monthBadgeText, { color: theme.ACTIVE }]}>
+                        Sep 2026
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.liquidityGrid}>
+                    <View
+                      style={[
+                        styles.liquidityCol,
+                        { borderRightWidth: 1, borderRightColor: theme.BORDER },
+                      ]}
+                    >
+                      <Text style={[styles.colLabel, { color: theme.MUTED }]}>
+                        Available Cash
+                      </Text>
+                      <Text style={[styles.colVal, { color: theme.TEXT }]}>
+                        72,000
+                      </Text>
+                      <Text style={[styles.colSub, { color: theme.MUTED }]}>
+                        PKR
+                      </Text>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.liquidityCol,
+                        { borderRightWidth: 1, borderRightColor: theme.BORDER },
+                      ]}
+                    >
+                      <Text style={[styles.colLabel, { color: theme.MUTED }]}>
+                        Upcoming Bills
+                      </Text>
+                      <Text style={[styles.colVal, { color: theme.RED }]}>
+                        48,800
+                      </Text>
+                      <Text style={[styles.colSub, { color: theme.MUTED }]}>
+                        PKR · 30 days
+                      </Text>
+                    </View>
+
+                    <View style={styles.liquidityCol}>
+                      <Text style={[styles.colLabel, { color: theme.MUTED }]}>
+                        Safe to Spend
+                      </Text>
+                      <Text style={[styles.colVal, { color: theme.GREEN }]}>
+                        23,200
+                      </Text>
+                      <Text style={[styles.colSub, { color: theme.GREEN, fontWeight: '700' }]}>
+                        PKR buffer
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Add Bill Button */}
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => setAddBillOpen(true)}
+                  style={[
+                    styles.dashedBtn,
+                    {
+                      borderColor: theme.ACTIVE,
+                      backgroundColor: theme.ACTIVE + '0C',
+                    },
+                  ]}
+                >
+                  <Feather name="plus" size={15} color={theme.ACTIVE} />
+                  <Text style={[styles.dashedBtnText, { color: theme.ACTIVE }]}>
+                    Add Recurring Bill Manually
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Upcoming Bills List */}
+                <View
+                  style={[
+                    styles.groupCard,
+                    {
+                      backgroundColor: theme.isDark ? theme.CARD : '#FFFFFF',
+                      borderColor: theme.BORDER,
+                      marginTop: 12,
+                    },
+                  ]}
+                >
+                  {upcomingBills.map((b, i) => (
+                    <TouchableOpacity
+                      key={b.id}
+                      activeOpacity={0.7}
+                      onPress={() => setActiveBill(b)}
+                      style={[
+                        styles.txRow,
+                        i < upcomingBills.length - 1 && {
+                          borderBottomWidth: StyleSheet.hairlineWidth,
+                          borderBottomColor: theme.BORDER,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.catIconWrap,
+                          {
+                            backgroundColor: (b.tagColor || theme.ACTIVE) + '22',
+                            borderColor: (b.tagColor || theme.ACTIVE) + '40',
+                          },
+                        ]}
+                      >
+                        <Feather
+                          name={b.icon || 'clock'}
+                          size={15}
+                          color={b.tagColor || theme.ACTIVE}
+                        />
+                      </View>
+
+                      <View style={{ flex: 1, marginRight: 10 }}>
+                        <Text style={[styles.txLabel, { color: theme.TEXT }]}>
+                          {b.label}
+                        </Text>
+                        <View style={styles.txMetaRow}>
+                          <Text style={[styles.txAccount, { color: theme.MUTED }]}>
+                            In {b.dueIn} days · {b.date}
+                          </Text>
+                          <View
+                            style={[
+                              styles.txCatBadge,
+                              { backgroundColor: (b.tagColor || theme.MUTED) + '18' },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.txCatBadgeText,
+                                { color: b.tagColor || theme.MUTED },
+                              ]}
+                            >
+                              {b.tag}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      <Text style={[styles.txAmount, { color: theme.RED }]}>
+                        − PKR {b.amount.toLocaleString()}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ── TAB 3: LOANS ── */}
+        {tab === 'debts' && (
+          <View>
+            {/* DTI Banner */}
+            <View
+              style={[
+                styles.dtiCard,
+                {
+                  backgroundColor: theme.isDark ? theme.CARD : '#FFFFFF',
+                  borderColor: theme.BORDER,
+                },
+              ]}
+            >
+              <Text style={[styles.dtiTitle, { color: theme.MUTED }]}>
+                Debt-to-Income Ratio
+              </Text>
+              <View style={styles.dtiRight}>
+                <Text
+                  style={[
+                    styles.dtiVal,
+                    { color: parseFloat(dtiPct) < 36 ? theme.GREEN : theme.RED },
+                  ]}
+                >
+                  {dtiPct}%
+                </Text>
+                <View
+                  style={[
+                    styles.dtiBadge,
+                    {
+                      backgroundColor:
+                        (parseFloat(dtiPct) < 36 ? theme.GREEN : theme.RED) + '18',
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.dtiBadgeText,
+                      { color: parseFloat(dtiPct) < 36 ? theme.GREEN : theme.RED },
+                    ]}
+                  >
+                    {parseFloat(dtiPct) < 36 ? 'Healthy' : 'High'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* 3 Summary Cards */}
+            <View style={styles.debtStatsRow}>
+              {[
+                { label: 'TOTAL BALANCE', value: `PKR ${(totalDebt / 1000).toFixed(0)}K`, color: theme.RED },
+                { label: 'MONTHLY EMI', value: `PKR ${totalEMI.toLocaleString()}`, color: theme.RED },
+                { label: 'ACTIVE DEBTS', value: String(debts.length), color: theme.TEXT },
+              ].map(s => (
+                <View
+                  key={s.label}
+                  style={[
+                    styles.debtStatBox,
+                    {
+                      backgroundColor: theme.isDark ? theme.CARD : '#FFFFFF',
+                      borderColor: theme.BORDER,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.statLabel, { color: theme.MUTED }]}>
+                    {s.label}
+                  </Text>
+                  <Text style={[styles.debtStatVal, { color: s.color }]}>
+                    {s.value}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Debts List Cards */}
+            {debts.map(debt => {
+              const pct = Math.round(
+                ((debt.totalAmount - debt.remaining) / debt.totalAmount) * 100,
+              );
+              const daysLeft = debt.dueDayOfMonth - 8;
+              const urgentDue = daysLeft <= debt.remindDaysBefore && daysLeft >= 0;
+
+              return (
+                <View
+                  key={debt.id}
+                  style={[
+                    styles.debtCard,
+                    {
+                      backgroundColor: theme.isDark ? theme.CARD : '#FFFFFF',
+                      borderColor: theme.BORDER,
+                    },
+                  ]}
+                >
+                  {/* Top row */}
+                  <View style={styles.debtCardTop}>
+                    <View
+                      style={[
+                        styles.catIconWrap,
+                        {
+                          backgroundColor: '#D5000022',
+                          borderColor: '#D5000040',
+                        },
+                      ]}
+                    >
+                      <Feather name="credit-card" size={16} color="#D50000" />
+                    </View>
+                    <View style={{ flex: 1, marginRight: 10 }}>
+                      <Text style={[styles.txLabel, { color: theme.TEXT }]}>
+                        {debt.name}
+                      </Text>
+                      <Text style={[styles.txAccount, { color: theme.MUTED }]}>
+                        {debt.lender}
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.debtRemainVal, { color: theme.RED }]}>
+                        {(debt.remaining / 1000).toFixed(0)}K
+                      </Text>
+                      <Text style={[styles.debtRemainSub, { color: theme.MUTED }]}>
+                        remaining
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* 3 Metrics Detail Grid */}
+                  <View style={styles.debtGrid}>
+                    {[
+                      { k: 'EMI', v: `PKR ${debt.emi.toLocaleString()}` },
+                      { k: 'Rate', v: `${debt.interestRate}% p.a.` },
+                      { k: 'Due Day', v: `${debt.dueDayOfMonth}th` },
+                    ].map(d => (
+                      <View
+                        key={d.k}
+                        style={[styles.debtGridCell, { backgroundColor: theme.MODAL }]}
+                      >
+                        <Text style={[styles.gridCellKey, { color: theme.MUTED }]}>
+                          {d.k}
+                        </Text>
+                        <Text style={[styles.gridCellVal, { color: theme.TEXT }]}>
+                          {d.v}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* Repaid Progress Bar */}
+                  <View style={styles.progressContainer}>
+                    <View style={styles.progressLabelRow}>
+                      <Text style={{ fontSize: 10, color: theme.MUTED }}>Repaid</Text>
+                      <Text
+                        style={{
+                          fontSize: 10,
+                          fontWeight: '700',
+                          color: pct >= 50 ? theme.GREEN : theme.MUTED,
+                        }}
+                      >
+                        {pct}%
+                      </Text>
+                    </View>
+                    <View style={styles.progressTrack}>
+                      <View
+                        style={[
+                          styles.progressBarFill,
+                          {
+                            width: `${pct}%`,
+                            backgroundColor: pct >= 50 ? theme.GREEN : theme.RED,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
+
+                  {/* Bottom Action Row */}
+                  <View style={styles.debtCardBottom}>
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => setDebtRemTarget(debt)}
+                      style={[
+                        styles.remBadgeBtn,
+                        {
+                          backgroundColor: urgentDue ? theme.ACTIVE + '18' : theme.MODAL,
+                          borderColor: urgentDue ? theme.ACTIVE + '40' : 'transparent',
+                        },
+                      ]}
+                    >
+                      <Feather
+                        name="bell"
+                        size={11}
+                        color={urgentDue ? theme.ACTIVE : theme.MUTED}
+                      />
+                      <Text
+                        style={[
+                          styles.remBadgeText,
+                          { color: urgentDue ? theme.ACTIVE : theme.MUTED },
+                        ]}
+                      >
+                        {urgentDue
+                          ? `Due in ${daysLeft}d`
+                          : `Reminder: ${debt.remindDaysBefore}d before`}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={() => setDebtEditTarget(debt)}
+                        style={[styles.circleBtn, { backgroundColor: theme.MODAL }]}
+                      >
+                        <Feather name="edit-2" size={13} color={theme.MUTED} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={() => handleDeleteDebt(debt.id)}
+                        style={[styles.circleBtn, { backgroundColor: theme.MODAL }]}
+                      >
+                        <Feather name="trash-2" size={13} color={theme.MUTED} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+
+            {/* Add Debt CTA Button */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => setDebtAddOpen(true)}
+              style={[
+                styles.dashedBtn,
+                {
+                  borderColor: theme.MUTED + '55',
+                  backgroundColor: 'transparent',
+                  marginTop: 4,
+                },
+              ]}
+            >
+              <Feather name="plus" size={14} color={theme.MUTED} />
+              <Text style={[styles.dashedBtnText, { color: theme.MUTED }]}>
+                Track a new debt
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
 
-      {/* Add Sheet Modal */}
-      {showAdd && <AddSheet onClose={() => setShowAdd(false)} />}
+      {/* ── MODALS & SHEETS ── */}
+
+      {/* Add Gateway Sheet */}
+      <AddGatewaySheet
+        visible={gatewayOpen}
+        onClose={() => setGatewayOpen(false)}
+        onManual={() => setManualEntryOpen(true)}
+        onStatement={() => setStatementImportOpen(true)}
+      />
+
+      {/* Manual Entry Sheet */}
+      <AddEntrySheet
+        visible={manualEntryOpen}
+        onClose={() => setManualEntryOpen(false)}
+        onAdd={handleAddManualTransaction}
+      />
+
+      {/* Statement Import Flow */}
+      <StatementImportModal
+        visible={statementImportOpen}
+        onClose={() => setStatementImportOpen(false)}
+        onImport={handleImportTransactions}
+      />
+
+      {/* Quick Audit Sheet */}
+      <QuickAuditSheet
+        visible={auditTx !== null}
+        tx={auditTx}
+        onClose={() => setAuditTx(null)}
+        onDetail={tx => {
+          setAuditTx(null);
+          setDetailTx(tx);
+        }}
+        onEdit={tx => {
+          setAuditTx(null);
+          setEditTx(tx);
+        }}
+        onSplit={tx => {
+          setAuditTx(null);
+          setSplitTx(tx);
+        }}
+        onDelete={tx => {
+          setAuditTx(null);
+          setDeleteTx(tx);
+        }}
+      />
+
+      {/* Transaction Detail Modal */}
+      <TransactionDetailModal
+        visible={detailTx !== null}
+        tx={detailTx}
+        onClose={() => setDetailTx(null)}
+      />
+
+      {/* Edit Transaction Modal */}
+      <EditTxModal
+        visible={editTx !== null}
+        tx={editTx}
+        onClose={() => setEditTx(null)}
+        onSave={handleSaveEditedTx}
+      />
+
+      {/* Split Transaction Modal */}
+      <SplitTxModal
+        visible={splitTx !== null}
+        tx={splitTx}
+        onClose={() => setSplitTx(null)}
+        onConfirm={handleConfirmSplit}
+      />
+
+      {/* Delete Transaction Confirm Modal */}
+      <DeleteConfirmModal
+        visible={deleteTx !== null}
+        tx={deleteTx}
+        onClose={() => setDeleteTx(null)}
+        onConfirm={handleDeleteTx}
+      />
+
+      {/* Recurring Sheets */}
+      <AddRecurringBillSheet
+        visible={addBillOpen}
+        onClose={() => setAddBillOpen(false)}
+        onSave={handleSaveRecurringBill}
+      />
+
+      <BillQuickActionSheet
+        visible={activeBill !== null}
+        bill={activeBill}
+        onClose={() => setActiveBill(null)}
+        onMarkPaid={b => {
+          setActiveBill(null);
+          setMarkPaidBill(b);
+        }}
+        onDelete={handleDeleteBill}
+      />
+
+      <MarkAsPaidSheet
+        visible={markPaidBill !== null}
+        bill={markPaidBill}
+        onClose={() => setMarkPaidBill(null)}
+        onConfirmPaid={handleConfirmPaid}
+      />
+
+      {/* Debt Sheets */}
+      <AddDebtSheet
+        visible={debtAddOpen || debtEditTarget !== null}
+        existing={debtEditTarget}
+        onClose={() => {
+          setDebtAddOpen(false);
+          setDebtEditTarget(null);
+        }}
+        onSave={handleSaveDebt}
+      />
+
+      <DebtReminderSheet
+        visible={debtRemTarget !== null}
+        debt={debtRemTarget}
+        onClose={() => setDebtRemTarget(null)}
+      />
     </View>
   );
 };
@@ -531,8 +1195,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-    paddingHorizontal: 4,
+    marginBottom: 12,
   },
   screenTitle: {
     fontSize: 28,
@@ -546,292 +1209,373 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tabsRow: {
+  tabBar: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   tabPill: {
-    paddingVertical: 9,
-    paddingHorizontal: 20,
+    flex: 1,
+    height: 38,
     borderRadius: 100,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabPillText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  filterRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 10,
+  },
+  filterChip: {
+    flex: 1,
+    height: 32,
+    borderRadius: 100,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterChipText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 18,
+    padding: 13,
+    borderWidth: 1.5,
+  },
+  statLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    marginBottom: 4,
+  },
+  statVal: {
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.4,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1.5,
     marginBottom: 14,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     padding: 0,
   },
-  summaryRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 12,
+  emptyWrap: {
+    paddingVertical: 40,
+    alignItems: 'center',
   },
-  summaryCard: {
-    flex: 1,
-    borderRadius: 20,
-    padding: 16,
+  emptyText: {
+    fontSize: 13,
+    fontWeight: '500',
   },
-  summaryLabel: {
+  groupWrap: {
+    marginBottom: 14,
+  },
+  groupDateLabel: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '700',
     letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    marginBottom: 6,
+    marginBottom: 8,
+    marginLeft: 4,
   },
-  summaryValue: {
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: -0.8,
-  },
-  listCard: {
-    borderRadius: 24,
+  groupCard: {
+    borderRadius: 20,
+    borderWidth: 1.5,
     overflow: 'hidden',
   },
   txRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
   },
-  iconSquare: {
+  catIconWrap: {
     width: 40,
     height: 40,
     borderRadius: 14,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
-  },
-  txInfo: {
-    flex: 1,
   },
   txLabel: {
     fontSize: 13,
     fontWeight: '600',
     marginBottom: 2,
   },
-  txSub: {
-    fontSize: 11,
+  txMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  txAccount: {
+    fontSize: 10,
+  },
+  txCatBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+  },
+  txCatBadgeText: {
+    fontSize: 9,
+    fontWeight: '600',
   },
   txAmount: {
     fontSize: 14,
     fontWeight: '700',
-    marginLeft: 12,
   },
-  smsHeroBanner: {
-    borderRadius: 24,
-    padding: 20,
+  recurringSubTabs: {
+    flexDirection: 'row',
+    gap: 8,
     marginBottom: 12,
   },
-  smsHeroHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  activeDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  smsHeroTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  smsHeroDesc: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.5)',
-    lineHeight: 19,
-    marginBottom: 14,
-  },
-  banksWrapRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  bankTagPill: {
-    paddingVertical: 5,
-    paddingHorizontal: 12,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 100,
-  },
-  bankTagText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.55)',
-  },
-  smsCardContainer: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    marginBottom: 10,
-  },
-  smsHeaderBtn: {
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  smsHeaderInfo: {
+  recurringSubPill: {
     flex: 1,
-  },
-  smsBankTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  smsRawPreview: {
-    fontSize: 10,
-  },
-  smsHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  confBadge: {
+    height: 38,
     borderRadius: 100,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  confBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  smsBodyContent: {
-    paddingHorizontal: 18,
-    paddingBottom: 16,
-    borderTopWidth: 1,
-  },
-  rawCodeBlock: {
-    fontFamily: 'Platform',
-    fontSize: 10,
-    borderRadius: 12,
-    padding: 10,
-    marginTop: 12,
-    marginBottom: 12,
-    lineHeight: 15,
-  },
-  parsedGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  parsedGridItem: {
-    flex: 1,
-    minWidth: '45%',
-    borderRadius: 14,
-    padding: 10,
-  },
-  parsedKeyLabel: {
-    fontSize: 9,
-    fontWeight: '600',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  parsedValueText: {
+  recurringSubPillText: {
     fontSize: 12,
     fontWeight: '700',
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
+  commitCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 20,
+    padding: 16,
   },
-  sheetContent: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 16,
-    paddingBottom: 36,
+  commitLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 4,
   },
-  sheetHeader: {
+  commitVal: {
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -1,
+  },
+  commitSub: {
+    fontSize: 10,
+    marginTop: 2,
+  },
+  commitIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  liquidityCard: {
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1.5,
+    marginBottom: 12,
+  },
+  liquidityTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 16,
+    marginBottom: 12,
   },
-  sheetTitle: {
-    fontSize: 16,
+  monthBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 100,
+  },
+  monthBadgeText: {
+    fontSize: 9,
     fontWeight: '700',
   },
-  closeBtn: {
+  liquidityGrid: {
+    flexDirection: 'row',
+  },
+  liquidityCol: {
+    flex: 1,
+    paddingHorizontal: 4,
+  },
+  colLabel: {
+    fontSize: 9,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  colVal: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+  },
+  colSub: {
+    fontSize: 9,
+    marginTop: 2,
+  },
+  dashedBtn: {
+    height: 48,
+    borderRadius: 100,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  dashedBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  dtiCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    marginBottom: 12,
+  },
+  dtiTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  dtiRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dtiVal: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  dtiBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 100,
+  },
+  dtiBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  debtStatsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  debtStatBox: {
+    flex: 1,
+    borderRadius: 18,
+    padding: 12,
+    borderWidth: 1.5,
+  },
+  debtStatVal: {
+    fontSize: 15,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  debtCard: {
+    borderRadius: 22,
+    borderWidth: 1.5,
+    padding: 16,
+    marginBottom: 12,
+  },
+  debtCardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  debtRemainVal: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+  },
+  debtRemainSub: {
+    fontSize: 10,
+  },
+  debtGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  debtGridCell: {
+    flex: 1,
+    borderRadius: 14,
+    padding: 8,
+  },
+  gridCellKey: {
+    fontSize: 8,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginBottom: 3,
+  },
+  gridCellVal: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  progressContainer: {
+    marginBottom: 12,
+  },
+  progressLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  progressTrack: {
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: 'rgba(128,128,128,0.15)',
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  debtCardBottom: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  remBadgeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 100,
+    borderWidth: 1,
+  },
+  remBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  circleBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  amountContainer: {
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  amountLabel: {
-    fontSize: 11,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    marginBottom: 6,
-  },
-  amountDisplay: {
-    fontSize: 50,
-    fontWeight: '800',
-    letterSpacing: -2,
-  },
-  categoriesRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
-  categoryPill: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 100,
-  },
-  categoryPillText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  keypadGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    justifyContent: 'space-between',
-  },
-  keyBtn: {
-    width: '31%',
-    height: 56,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  keyBtnText: {
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  submitBtn: {
-    width: '100%',
-    marginTop: 14,
-    height: 54,
-    borderRadius: 27,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  submitBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
   },
 });

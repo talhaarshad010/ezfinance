@@ -115,7 +115,9 @@ export const DrawerContent = React.memo((props: DrawerContentComponentProps) => 
 
   const navigateTo = (screen: string) => {
     props.navigation.closeDrawer();
-    if (['Home', 'Expenses', 'Investments', 'AI Advisor', 'Loans'].includes(screen)) {
+    if (
+      ['Home', 'Expenses', 'Investments', 'AI Advisor', 'Goals'].includes(screen)
+    ) {
       props.navigation.navigate('MainTabs', { screen });
     } else {
       props.navigation.navigate(screen);
@@ -239,6 +241,21 @@ export const DrawerContent = React.memo((props: DrawerContentComponentProps) => 
           label="Bank Accounts"
           active={currentScreenName === 'BankAccounts'}
           onPress={() => navigateTo('BankAccounts')}
+        />
+
+        {/* Plan */}
+        <SectionHeader title="Plan & Save" />
+        <MenuItem
+          icon="target"
+          label="Savings Goals"
+          active={currentScreenName === 'Goals'}
+          onPress={() => navigateTo('Goals')}
+        />
+        <MenuItem
+          icon="layers"
+          label="Loans & Liabilities"
+          active={currentScreenName === 'Loans'}
+          onPress={() => navigateTo('Loans')}
         />
 
         {/* Growth */}
