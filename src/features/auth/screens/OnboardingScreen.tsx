@@ -1,355 +1,190 @@
-import React, { useState, useRef } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  Dimensions,
-  StyleSheet,
-  StatusBar,
-  Animated,
-} from 'react-native';
-import Feather from 'react-native-vector-icons/Feather';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useTheme } from '../../../context/ThemeContext';
-import { Logo } from '../../../components';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AuthPalette, useAuthStyles, useAuthTheme } from '../components/authTheme';
+import { PrimaryButton, TextButton } from '../components/AuthButtons';
+import { SlideIn } from '../components/Entrance';
+import {
+  GlowCard,
+  GlowTone,
+  InvestIllustration,
+  SavingsIllustration,
+  TaxIllustration,
+  TrackIllustration,
+} from '../components/OnboardingIllustrations';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-const ONBOARDING_DATA = [
+const SLIDES: { title: string; body: string; Illustration: React.FC; glow: GlowTone }[] = [
   {
-    id: 1,
-    icon: 'pie-chart',
-    tag: 'WEALTH & LIABILITIES',
-    title: 'Master Your Wealth & Liabilities',
-    description:
-      'Track net worth, income burn rate, bank accounts, credit cards, and auto loans in one unified real-time dashboard.',
-    badgeText: 'PKR 5,740,000 Portfolio',
-    badgeColor: '#00C853',
+    title: 'Track every rupee',
+    body: 'See exactly where your money goes. Automatic categorisation for spending, income, and transfers.',
+    Illustration: TrackIllustration,
+    glow: 'emerald',
   },
   {
-    id: 2,
-    icon: 'trending-up',
-    tag: 'REAL-TIME MARKETS',
-    title: 'Live PSX & Crypto Markets',
-    description:
-      'Monitor live PSX stock tickers, KSE-100 index performance, crypto market dominance, and instant trade execution.',
-    badgeText: 'PSX +0.84% · KSE 78,412 pts',
-    badgeColor: '#0047AB',
+    title: 'Understand your taxes in plain language',
+    body: 'Know your filer status, estimate taxes, and stay compliant. Province by province guidance included.',
+    Illustration: TaxIllustration,
+    glow: 'teal',
   },
   {
-    id: 3,
-    icon: 'zap',
-    tag: 'AI CA ADVISOR',
-    title: 'Personal AI Financial Advisor',
-    description:
-      'Get automated Chartered Accountant advice to clear high-APR credit debt first and maximize annual interest savings.',
-    badgeText: 'Save PKR 12,600/yr Interest',
-    badgeColor: '#7C4DFF',
+    title: 'Save toward what matters',
+    body: 'Set savings goals and track your progress. Realistic targets built around your actual income.',
+    Illustration: SavingsIllustration,
+    glow: 'emerald',
+  },
+  {
+    title: 'Grow your money, the halal way',
+    body: 'Explore mutual funds, stocks, and government bonds. Plain language explanations for every option.',
+    Illustration: InvestIllustration,
+    glow: 'teal',
   },
 ];
 
+const SWIPE_THRESHOLD = 40;
+
+/** Pagination pill: stretches from 7px to 22px and glows sky-blue when active. */
+function PageDot({ active, onPress }: { active: boolean; onPress: () => void }) {
+  const A = useAuthTheme();
+  const v = useRef(new Animated.Value(active ? 1 : 0)).current;
+  useEffect(() => {
+    Animated.timing(v, {
+      toValue: active ? 1 : 0,
+      duration: 250,
+      easing: Easing.bezier(0.34, 1.26, 0.64, 1),
+      useNativeDriver: false,
+    }).start();
+  }, [active, v]);
+  return (
+    <Pressable onPress={onPress} hitSlop={6}>
+      <Animated.View
+        style={[
+          dotStyles.dot,
+          {
+            width: v.interpolate({ inputRange: [0, 1], outputRange: [7, 22] }),
+            backgroundColor: v.interpolate({ inputRange: [0, 1], outputRange: [A.INK(0.2), A.SKY] }),
+            boxShadow: active ? '0 0 10px rgba(14,165,233,0.6)' : undefined,
+          },
+        ]}
+      />
+    </Pressable>
+  );
+}
+
+/** Four illustrated "Get started" slides (swipe, Skip, dots, Continue / Get started). */
 export const OnboardingScreen = () => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const { theme } = useTheme();
+  const { A, styles } = useAuthStyles(createStyles);
+  const [index, setIndex] = useState(0);
+  const [dir, setDir] = useState<'right' | 'left'>('right');
+  const [animKey, setAnimKey] = useState(0);
+  const touchX = useRef(0);
 
-  const [activeIndex, setActiveIndex] = useState(0);
-  const scrollX = useRef(new Animated.Value(0)).current;
-  const scrollRef = useRef<ScrollView>(null);
+  const isLast = index === SLIDES.length - 1;
+  const slide = SLIDES[index];
 
-  const handleNext = () => {
-    if (activeIndex < ONBOARDING_DATA.length - 1) {
-      const nextIdx = activeIndex + 1;
-      scrollRef.current?.scrollTo({
-        x: nextIdx * (SCREEN_WIDTH - 32),
-        animated: true,
-      });
-      setActiveIndex(nextIdx);
-    } else {
-      navigation.navigate('Login');
-    }
+  const goTo = (next: number, direction: 'right' | 'left') => {
+    setDir(direction);
+    setAnimKey(k => k + 1);
+    setIndex(next);
   };
-
-  const handleSkip = () => {
-    navigation.navigate('Login');
-  };
+  const finish = () => navigation.replace('Welcome');
+  const next = () => (isLast ? finish() : goTo(index + 1, 'right'));
+  const prev = () => index > 0 && goTo(index - 1, 'left');
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.BG }]}>
-      <StatusBar
-        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={theme.BG}
-      />
+    <View
+      style={styles.container}
+      onTouchStart={e => {
+        touchX.current = e.nativeEvent.pageX;
+      }}
+      onTouchEnd={e => {
+        const dx = e.nativeEvent.pageX - touchX.current;
+        if (dx < -SWIPE_THRESHOLD) next();
+        else if (dx > SWIPE_THRESHOLD) prev();
+      }}
+    >
+      <StatusBar barStyle={A.STATUS_BAR} backgroundColor={A.BG} />
 
-      {/* Header */}
-      <View
-        style={[
-          styles.headerRow,
-          {
-            paddingTop: insets.top + 12,
-          },
-        ]}
-      >
-        <View style={styles.brandRow}>
-          <Logo size={52} />
-          <Text style={[styles.brandTitle, { color: theme.TEXT }]}>
-            ezfinance
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={handleSkip}
-          style={[styles.skipBtn, { backgroundColor: theme.CARD }]}
-        >
-          <Text style={[styles.skipText, { color: theme.MUTED }]}>Skip</Text>
-        </TouchableOpacity>
+      <View style={[styles.topBar, { paddingTop: insets.top + 4 }]}>
+        <TextButton label="Skip" onPress={finish} textStyle={styles.skip} />
       </View>
 
-      {/* Swipeable Horizontal Slides */}
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-          {
-            useNativeDriver: false,
-            listener: (e: any) => {
-              const slide = Math.round(
-                e.nativeEvent.contentOffset.x / (SCREEN_WIDTH - 32),
-              );
-              if (slide !== activeIndex && slide >= 0 && slide < 3) {
-                setActiveIndex(slide);
-              }
-            },
-          },
-        )}
-        scrollEventThrottle={16}
-        contentContainerStyle={styles.slidesContainer}
-      >
-        {ONBOARDING_DATA.map((item, idx) => (
-          <View
-            key={item.id}
-            style={[styles.slideCard, { width: SCREEN_WIDTH - 32 }]}
-          >
-            {/* Graphic Illustration Card */}
-            <View
-              style={[
-                styles.illustrationCard,
-                { backgroundColor: theme.HERO_BG },
-              ]}
-            >
-              <View
-                style={[
-                  styles.iconGlowCircle,
-                  { backgroundColor: `${item.badgeColor}22` },
-                ]}
-              >
-                <Feather name={item.icon} size={64} color={item.badgeColor} />
-              </View>
+      <SlideIn key={`ill-${animKey}`} from={dir} style={styles.illustrationWrap}>
+        <GlowCard tone={slide.glow}>
+          <slide.Illustration />
+        </GlowCard>
+      </SlideIn>
 
-              {/* Floating Feature Metric Pill */}
-              <View
-                style={[
-                  styles.floatingPill,
-                  { backgroundColor: 'rgba(255,255,255,0.12)' },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.dotIndicator,
-                    { backgroundColor: item.badgeColor },
-                  ]}
-                />
-                <Text style={styles.floatingPillText}>{item.badgeText}</Text>
-              </View>
-            </View>
+      <View style={styles.flex} />
 
-            {/* Text Information Section */}
-            <View style={styles.textSection}>
-              <Text style={[styles.stepTag, { color: theme.ACTIVE }]}>
-                {item.tag}
-              </Text>
-              <Text style={[styles.stepTitle, { color: theme.TEXT }]}>
-                {item.title}
-              </Text>
-              <Text style={[styles.stepDesc, { color: theme.MUTED }]}>
-                {item.description}
-              </Text>
-            </View>
-          </View>
-        ))}
-      </ScrollView>
-
-      {/* Footer Area */}
-      <View
-        style={[
-          styles.footerArea,
-          {
-            paddingBottom: insets.bottom + 24,
-          },
-        ]}
-      >
-        {/* Pagination Dots */}
-        <View style={styles.dotsRow}>
-          {ONBOARDING_DATA.map((_, idx) => {
-            const isSelected = idx === activeIndex;
-            return (
-              <View
-                key={idx}
-                style={[
-                  styles.dotPill,
-                  {
-                    backgroundColor: isSelected
-                      ? theme.TEXT
-                      : theme.MODAL,
-                    width: isSelected ? 24 : 8,
-                  },
-                ]}
-              />
-            );
-          })}
+      <SlideIn key={`txt-${animKey}`} from={dir} style={[styles.footer, { paddingBottom: insets.bottom + 28 }]}>
+        <View style={styles.dots}>
+          {SLIDES.map((_, i) => (
+            <PageDot key={i} active={i === index} onPress={() => goTo(i, i > index ? 'right' : 'left')} />
+          ))}
         </View>
-
-        {/* Action Button */}
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={handleNext}
-          style={[styles.nextBtn, { backgroundColor: theme.TEXT }]}
-        >
-          <Text style={[styles.nextBtnText, { color: theme.BG }]}>
-            {activeIndex === ONBOARDING_DATA.length - 1
-              ? 'Get Started →'
-              : 'Continue →'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+        <Text style={styles.title}>{slide.title}</Text>
+        <Text style={styles.body}>{slide.body}</Text>
+        <PrimaryButton label={isLast ? 'Get started' : 'Continue'} onPress={next} />
+      </SlideIn>
     </View>
   );
 };
 
 export default OnboardingScreen;
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginBottom: 10,
-  },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  brandTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: -0.8,
-  },
-  skipBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 100,
-  },
-  skipText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  slidesContainer: {
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  slideCard: {
-    paddingHorizontal: 8,
-    justifyContent: 'center',
-  },
-  illustrationCard: {
-    height: 280,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    marginBottom: 32,
-  },
-  iconGlowCircle: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  floatingPill: {
-    position: 'absolute',
-    bottom: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 100,
-  },
-  dotIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  floatingPillText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  textSection: {
-    paddingHorizontal: 8,
-  },
-  stepTag: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  stepTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: -1,
-    lineHeight: 34,
-    marginBottom: 12,
-  },
-  stepDesc: {
-    fontSize: 14,
-    lineHeight: 22,
-  },
-  footerArea: {
-    paddingHorizontal: 24,
-    gap: 20,
-  },
-  dotsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-  },
-  dotPill: {
-    height: 8,
-    borderRadius: 4,
-  },
-  nextBtn: {
-    height: 54,
-    borderRadius: 27,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  nextBtnText: {
-    fontSize: 15,
-    fontWeight: '800',
-  },
+const dotStyles = StyleSheet.create({
+  dot: { height: 7, borderRadius: 100 },
 });
+
+const createStyles = (A: AuthPalette) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: A.BG,
+    },
+    flex: { flex: 1 },
+    topBar: {
+      height: 40,
+      boxSizing: 'content-box',
+      paddingHorizontal: 24,
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      alignItems: 'center',
+    },
+    skip: {
+      fontSize: 15,
+      color: A.MUTED,
+      fontWeight: '500',
+      paddingVertical: 6,
+    },
+    illustrationWrap: {
+      paddingTop: 16,
+      paddingHorizontal: 24,
+    },
+    footer: {
+      paddingHorizontal: 24,
+    },
+    dots: {
+      flexDirection: 'row',
+      gap: 7,
+      marginBottom: 20,
+    },
+    title: {
+      fontSize: 26,
+      fontWeight: '700',
+      color: A.TEXT,
+      marginBottom: 10,
+      lineHeight: 31,
+      letterSpacing: -0.5,
+    },
+    body: {
+      fontSize: 15,
+      color: A.MUTED,
+      marginBottom: 28,
+      lineHeight: 24,
+      letterSpacing: -0.1,
+    },
+  });

@@ -16,7 +16,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
-import { forgotPassword } from '../../../services/authService';
 import Logo from '../../../components/Logo';
 
 export const ForgotPasswordScreen = () => {
@@ -28,28 +27,18 @@ export const ForgotPasswordScreen = () => {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleReset = async () => {
+  const handleReset = () => {
     if (!email.trim()) {
       showToast('Please enter your email address', 'error');
       return;
     }
 
     setIsLoading(true);
-    try {
-      await forgotPassword(email.trim());
+    setTimeout(() => {
+      setIsLoading(false);
       showToast('Password reset email sent! Check your inbox.', 'success');
       navigation.navigate('Login');
-    } catch (error: any) {
-      let errorMessage = 'An error occurred. Please try again.';
-      if (error.code === 'auth/user-not-found') {
-        errorMessage = 'No account found with this email address.';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Invalid email address format.';
-      }
-      showToast(errorMessage, 'error');
-    } finally {
-      setIsLoading(false);
-    }
+    }, 400);
   };
 
   return (

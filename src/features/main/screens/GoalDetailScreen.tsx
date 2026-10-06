@@ -4,7 +4,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Modal,
   Pressable,
   StyleSheet,
   StatusBar,
@@ -20,6 +19,7 @@ import {
   goalColor,
   goalPct,
 } from '../../../constants/savingsGoals';
+import { AnimatedModal } from '../../../components/AnimatedModal';
 
 export const GoalDetailScreen = () => {
   const navigation = useNavigation<any>();
@@ -242,7 +242,7 @@ export const GoalDetailScreen = () => {
       </ScrollView>
 
       {/* Streak celebration modal */}
-      <Modal
+      <AnimatedModal
         visible={streakVisible}
         transparent
         animationType="fade"
@@ -283,7 +283,7 @@ export const GoalDetailScreen = () => {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      </AnimatedModal>
     </View>
   );
 };
@@ -421,7 +421,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: 'transparent',
   },
   centerWrap: {
     position: 'absolute',

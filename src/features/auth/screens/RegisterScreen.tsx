@@ -1,504 +1,549 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
+  Animated,
+  Easing,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
-  Image,
-  StyleSheet,
+  Pressable,
+  ScrollView,
   StatusBar,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
-import Feather from 'react-native-vector-icons/Feather';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
-import { signUp, signInWithGoogle } from '../../../services/authService';
-import Logo from '../../../components/Logo';
+import { useAppDispatch } from '../../../store/hooks';
+import { setProfile } from '../../../store/slices/userSlice';
+import { AuthPalette, useAuthStyles } from '../components/authTheme';
+import { BackChevron, PrimaryButton, TextButton } from '../components/AuthButtons';
+import { GlassInput } from '../components/GlassInput';
+import { GlassDropdown } from '../components/GlassDropdown';
+import { Glow } from '../components/Glow';
+import { FadeUp, LogoReveal, SlideIn } from '../components/Entrance';
 
+type Step = 'name' | 'contact' | 'password' | 'income' | 'city' | 'filer' | 'done';
+type Filer = 'yes' | 'no' | 'unsure';
+
+const STEPS: Step[] = ['name', 'contact', 'password', 'income', 'city', 'filer', 'done'];
+const TOTAL = STEPS.length - 1; // "done" isn't counted in "n of 6"
+
+const INCOME_OPTIONS = [
+  { label: 'Under 25k', value: '< 25,000' },
+  { label: '25k to 50k', value: '25,000 to 50,000' },
+  { label: '50k to 100k', value: '50,000 to 100,000' },
+  { label: '100k to 150k', value: '100,000 to 150,000' },
+  { label: '150k and above', value: '> 150,000' },
+];
+
+const PROVINCES = [
+  { value: 'Punjab', label: 'Punjab' },
+  { value: 'Sindh', label: 'Sindh' },
+  { value: 'KPK', label: 'Khyber Pakhtunkhwa' },
+  { value: 'Balochistan', label: 'Balochistan' },
+  { value: 'ICT', label: 'Islamabad Capital Territory' },
+  { value: 'AJK', label: 'Azad Kashmir' },
+  { value: 'GB', label: 'Gilgit-Baltistan' },
+];
+
+const FILER_OPTIONS: { id: Filer; label: string }[] = [
+  { id: 'yes', label: 'Yes, I am a filer' },
+  { id: 'no', label: 'No, I am not a filer' },
+  { id: 'unsure', label: 'Not sure' },
+];
+
+function passwordStrength(pw: string, A: AuthPalette) {
+  if (!pw) return null;
+  if (pw.length < 8) return { label: 'Too short', color: A.RED, pct: '33%' as const };
+  if (pw.length < 12) return { label: 'Good', color: A.LINK, pct: '66%' as const };
+  return { label: 'Strong', color: A.EMERALD_TEXT, pct: '100%' as const };
+}
+
+function StepHeading({ title, hint }: { title: string; hint: string }) {
+  const { styles } = useAuthStyles(createStyles);
+  return (
+    <>
+      <Text style={styles.stepTitle}>{title}</Text>
+      <Text style={styles.stepHint}>{hint}</Text>
+    </>
+  );
+}
+
+/** Six-step sign-up (name → contact → password → income → location → filer) + success. */
 export const RegisterScreen = () => {
+  const { A, styles } = useAuthStyles(createStyles);
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const { theme } = useTheme();
   const { showToast } = useToast();
+  const dispatch = useAppDispatch();
 
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
+  const [stepIdx, setStepIdx] = useState(0);
+  const [dir, setDir] = useState<'right' | 'left'>('right');
+  const [animKey, setAnimKey] = useState(0);
+
+  const [name, setName] = useState('');
+  const [contact, setContact] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [agree, setAgree] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [income, setIncome] = useState('');
+  const [city, setCity] = useState('');
+  const [province, setProvince] = useState('');
+  const [filer, setFiler] = useState<Filer | ''>('');
+  const [showFilerInfo, setShowFilerInfo] = useState(false);
 
-  const handleRegister = async () => {
-    if (!fullName.trim() || !email.trim() || !password || !confirmPassword) {
-      showToast('Please fill in all account fields', 'error');
+  const step = STEPS[stepIdx];
+  const isDone = step === 'done';
+  const progress = Math.min(Math.round((stepIdx / TOTAL) * 100), 100);
+
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: progress,
+      duration: 350,
+      easing: Easing.bezier(0.34, 1.26, 0.64, 1),
+      useNativeDriver: false,
+    }).start();
+  }, [progress, progressAnim]);
+
+  const canContinue = (() => {
+    switch (step) {
+      case 'name':
+        return name.trim().length > 0;
+      case 'contact':
+        return contact.trim().length > 0;
+      case 'password':
+        return password.length >= 8;
+      case 'city':
+        return city.trim().length > 0 && province.length > 0;
+      default:
+        return true; // income & filer are optional
+    }
+  })();
+  const skippable = step === 'income' || step === 'filer';
+
+  const goNext = () => {
+    if (stepIdx >= STEPS.length - 1) return;
+    setDir('right');
+    setAnimKey(k => k + 1);
+    setStepIdx(i => i + 1);
+  };
+  const goBack = () => {
+    if (stepIdx === 0) {
+      navigation.goBack();
       return;
     }
-
-    if (password !== confirmPassword) {
-      showToast('Passwords do not match', 'error');
-      return;
-    }
-
-    if (password.length < 6) {
-      showToast('Password must be at least 6 characters', 'error');
-      return;
-    }
-
-    if (!agree) {
-      showToast('Please agree to the Terms & Service', 'error');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      await signUp(fullName.trim(), email.trim(), password);
-      showToast('Account created successfully! Welcome to EZFinance.', 'success');
-    } catch (error: any) {
-      let errorMessage = 'An error occurred during registration.';
-      if (error.code === 'auth/email-already-in-use') {
-        errorMessage = 'This email address is already registered.';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Invalid email address format.';
-      } else if (error.code === 'auth/weak-password') {
-        errorMessage = 'Password is too weak. Please use a stronger password.';
-      }
-      showToast(errorMessage, 'error');
-    } finally {
-      setIsLoading(false);
-    }
+    setDir('left');
+    setAnimKey(k => k + 1);
+    setStepIdx(i => i - 1);
   };
 
-  const handleGoogleSignIn = async () => {
-    setIsLoading(true);
-    try {
-      await signInWithGoogle();
-      showToast('Signed in with Google!', 'success');
-    } catch (error: any) {
-      if (error.code !== 'ASYNC_OP_IN_PROGRESS') {
-        showToast('Google Sign-In failed.', 'error');
-      }
-    } finally {
-      setIsLoading(false);
+  const finishSignUp = () => {
+    const value = contact.trim();
+    const isEmail = value.includes('@');
+    dispatch(
+      setProfile({
+        uid: 'usr_demo_01',
+        name: name.trim(),
+        email: isEmail ? value : '',
+        photoURL: null,
+        phone: isEmail ? null : value,
+        monthlyIncome: income || null,
+        city: city.trim() || null,
+        province: province || null,
+        filerStatus: filer || 'unsure',
+      }),
+    );
+    showToast('Account created successfully! Welcome to EZFinance.', 'success');
+  };
+
+  const strength = passwordStrength(password, A);
+
+  const renderStep = () => {
+    switch (step) {
+      case 'name':
+        return (
+          <>
+            <StepHeading title="What should we call you?" hint="This is how ezFinance will address you" />
+            <GlassInput size="lg" placeholder="Your name" value={name} onChangeText={setName} autoFocus autoCapitalize="words" textContentType="name" returnKeyType="next" onSubmitEditing={canContinue ? goNext : undefined} />
+          </>
+        );
+      case 'contact':
+        return (
+          <>
+            <StepHeading title="Phone or email?" hint="Used to log in and for important notifications" />
+            <GlassInput size="lg" placeholder="+92 3xx xxxx xxx or email" value={contact} onChangeText={setContact} autoFocus autoCapitalize="none" autoCorrect={false} keyboardType="email-address" textContentType="username" returnKeyType="next" onSubmitEditing={canContinue ? goNext : undefined} />
+          </>
+        );
+      case 'password':
+        return (
+          <>
+            <StepHeading title="Create a password" hint="Minimum 8 characters" />
+            <GlassInput size="lg" placeholder="Password" value={password} onChangeText={setPassword} password autoFocus textContentType="newPassword" returnKeyType="next" onSubmitEditing={canContinue ? goNext : undefined} />
+            {strength && (
+              <View style={styles.strengthRow}>
+                <View style={styles.strengthTrack}>
+                  <View style={[styles.strengthFill, { width: strength.pct, backgroundColor: strength.color, boxShadow: `0 0 8px ${strength.color}` }]} />
+                </View>
+                <Text style={[styles.strengthLabel, { color: strength.color }]}>{strength.label}</Text>
+              </View>
+            )}
+          </>
+        );
+      case 'income':
+        return (
+          <>
+            <StepHeading title="Monthly income" hint="Helps us set realistic budgets and tax estimates for you" />
+            <View style={styles.chips}>
+              {INCOME_OPTIONS.map(o => {
+                const active = income === o.value;
+                return (
+                  <Pressable
+                    key={o.value}
+                    onPress={() => setIncome(active ? '' : o.value)}
+                    style={({ pressed }) => [
+                      styles.chip,
+                      active && styles.chipActive,
+                      pressed && { transform: [{ scale: 0.97 }] },
+                    ]}
+                  >
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{o.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        );
+      case 'city':
+        return (
+          <>
+            <StepHeading title="Your location" hint="Tax rules vary by province" />
+            <View style={styles.cityFields}>
+              <GlassInput size="lg" placeholder="City (e.g. Lahore)" value={city} onChangeText={setCity} autoCapitalize="words" textContentType="addressCity" />
+              <GlassDropdown placeholder="Select province" value={province} onChange={setProvince} options={PROVINCES} />
+            </View>
+          </>
+        );
+      case 'filer':
+        return (
+          <>
+            <View style={styles.filerHead}>
+              <Text style={[styles.stepTitle, styles.filerTitle]}>Are you a tax filer?</Text>
+              <TextButton label="What is this?" onPress={() => setShowFilerInfo(v => !v)} textStyle={styles.whatIs} style={styles.whatIsBtn} />
+            </View>
+            {showFilerInfo && (
+              <FadeUp distance={-8} duration={220} style={styles.infoBox}>
+                <Text style={styles.infoText}>
+                  A <Text style={styles.infoStrong}>filer</Text> is registered with FBR and submits an annual income tax
+                  return. Filers pay lower withholding tax on bank transactions, property, and vehicles.
+                </Text>
+              </FadeUp>
+            )}
+            <Text style={[styles.stepHint, styles.filerHint]}>Defaults to not sure. You can update this later.</Text>
+            <View style={styles.filerList}>
+              {FILER_OPTIONS.map(o => {
+                const active = filer === o.id;
+                return (
+                  <Pressable
+                    key={o.id}
+                    onPress={() => setFiler(active ? '' : o.id)}
+                    style={[styles.filerOption, active && styles.filerOptionActive]}
+                  >
+                    <View style={[styles.radio, active && styles.radioActive]}>
+                      {active && <View style={styles.radioDot} />}
+                    </View>
+                    <Text style={[styles.filerLabel, active && styles.filerLabelActive]}>{o.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        );
+      default:
+        return null;
     }
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.BG }]}>
-      <StatusBar
-        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={theme.BG}
-      />
+    <View style={styles.container}>
+      <StatusBar barStyle={A.STATUS_BAR} backgroundColor={A.BG} />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
-      >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.scrollContent,
-            {
-              paddingTop: insets.top + 16,
-              paddingBottom: insets.bottom + 40,
-            },
-          ]}
-        >
-          {/* Top Navigation Header */}
+      {/* Header + progress */}
+      <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
+        {!isDone && (
           <View style={styles.headerRow}>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => navigation.goBack()}
-              style={[styles.backBtn, { backgroundColor: theme.CARD }]}
-            >
-              <Feather name="chevron-left" size={20} color={theme.TEXT} />
-            </TouchableOpacity>
-
-            <Logo size={48} />
-          </View>
-
-          {/* Hero Section */}
-          <View style={styles.sectionMargin}>
-            <Text style={[styles.heroTag, { color: theme.ACTIVE }]}>
-              START YOUR FINANCIAL JOURNEY
-            </Text>
-            <Text style={[styles.heroTitle, { color: theme.TEXT }]}>
-              Create Account
-            </Text>
-            <Text style={[styles.heroSubtitle, { color: theme.MUTED }]}>
-              Join the elite circle of serious investors and take control of your wealth.
+            <Pressable onPress={goBack} hitSlop={10} style={({ pressed }) => [styles.headerBack, pressed && { opacity: 0.6 }]}>
+              <BackChevron />
+            </Pressable>
+            <Text style={styles.headerTitle}>Create account</Text>
+            <Text style={styles.headerCount}>
+              {stepIdx + 1} of {TOTAL}
             </Text>
           </View>
+        )}
+        <View style={styles.progressTrack}>
+          <Animated.View
+            style={[
+              styles.progressFill,
+              { width: progressAnim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }) },
+            ]}
+          />
+        </View>
+      </View>
 
-          {/* Form Card */}
-          <View style={styles.sectionMargin}>
-            <View style={[styles.formCard, { backgroundColor: theme.CARD }]}>
-              {/* Full Name */}
-              <View style={styles.fieldGroup}>
-                <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
-                  FULL NAME
-                </Text>
-                <View
-                  style={[
-                    styles.inputInnerRow,
-                    { backgroundColor: theme.MODAL },
-                  ]}
-                >
-                  <Feather name="user" size={18} color={theme.MUTED} />
-                  <TextInput
-                    style={[styles.textInput, { color: theme.TEXT }]}
-                    value={fullName}
-                    onChangeText={setFullName}
-                    placeholder="Enter your full name"
-                    placeholderTextColor={theme.MUTED}
-                  />
-                </View>
-              </View>
+      {isDone ? (
+        <View style={[styles.done, { paddingBottom: insets.bottom + 28 }]}>
+          <LogoReveal style={styles.doneIconWrap}>
+            <Glow size={130} stops={[[0, '#00E68A', 0.22], [0.72, '#00E68A', 0]]} />
+            <View style={styles.doneIcon}>
+              <Svg width={40} height={40} viewBox="0 0 40 40" fill="none">
+                <Circle cx="20" cy="20" r="18" fill="rgba(0,230,138,0.2)" />
+                <Circle cx="20" cy="20" r="13" fill={A.EMERALD} />
+                <Path d="M13 20l5.5 5.5 9.5-10" stroke="#0D0D0E" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+            </View>
+          </LogoReveal>
+          <FadeUp delay={140} style={styles.doneText}>
+            <Text style={styles.doneTitle}>You are all set!</Text>
+            <Text style={styles.doneBody}>
+              Your ezFinance account is ready. Let us take control of your finances together.
+            </Text>
+          </FadeUp>
+          <FadeUp delay={260} style={styles.doneCta}>
+            <PrimaryButton label="Go to my dashboard" height={58} onPress={finishSignUp} />
+          </FadeUp>
+        </View>
+      ) : (
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
+          <ScrollView
+            style={styles.flex}
+            contentContainerStyle={styles.stepScroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <SlideIn key={animKey} from={dir} style={styles.stepBody}>
+              {renderStep()}
+            </SlideIn>
+          </ScrollView>
 
-              {/* Email Address */}
-              <View style={styles.fieldGroup}>
-                <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
-                  EMAIL ADDRESS
-                </Text>
-                <View
-                  style={[
-                    styles.inputInnerRow,
-                    { backgroundColor: theme.MODAL },
-                  ]}
-                >
-                  <Feather name="mail" size={18} color={theme.MUTED} />
-                  <TextInput
-                    style={[styles.textInput, { color: theme.TEXT }]}
-                    value={email}
-                    onChangeText={setEmail}
-                    placeholder="name@example.com"
-                    placeholderTextColor={theme.MUTED}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                  />
-                </View>
-              </View>
-
-              {/* Password */}
-              <View style={styles.fieldGroup}>
-                <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
-                  PASSWORD
-                </Text>
-                <View
-                  style={[
-                    styles.inputInnerRow,
-                    { backgroundColor: theme.MODAL },
-                  ]}
-                >
-                  <Feather name="lock" size={18} color={theme.MUTED} />
-                  <TextInput
-                    style={[styles.textInput, { color: theme.TEXT }]}
-                    value={password}
-                    onChangeText={setPassword}
-                    placeholder="••••••••"
-                    placeholderTextColor={theme.MUTED}
-                    secureTextEntry={!showPassword}
-                  />
-                  <TouchableOpacity
-                    activeOpacity={0.7}
-                    onPress={() => setShowPassword(!showPassword)}
-                  >
-                    <Feather
-                      name={showPassword ? 'eye' : 'eye-off'}
-                      size={18}
-                      color={theme.MUTED}
-                    />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Confirm Password */}
-              <View style={styles.fieldGroup}>
-                <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
-                  CONFIRM PASSWORD
-                </Text>
-                <View
-                  style={[
-                    styles.inputInnerRow,
-                    { backgroundColor: theme.MODAL },
-                  ]}
-                >
-                  <Feather name="check-circle" size={18} color={theme.MUTED} />
-                  <TextInput
-                    style={[styles.textInput, { color: theme.TEXT }]}
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                    placeholder="••••••••"
-                    placeholderTextColor={theme.MUTED}
-                    secureTextEntry={!showConfirm}
-                  />
-                  <TouchableOpacity
-                    activeOpacity={0.7}
-                    onPress={() => setShowConfirm(!showConfirm)}
-                  >
-                    <Feather
-                      name={showConfirm ? 'eye' : 'eye-off'}
-                      size={18}
-                      color={theme.MUTED}
-                    />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Checkbox Terms Agreement */}
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => setAgree(!agree)}
-                style={styles.checkboxRow}
-              >
-                <View
-                  style={[
-                    styles.checkboxBox,
-                    {
-                      borderColor: agree ? theme.TEXT : theme.BORDER,
-                      backgroundColor: agree ? theme.TEXT : 'transparent',
-                    },
-                  ]}
-                >
-                  {agree && (
-                    <Feather name="check" size={12} color={theme.BG} />
-                  )}
-                </View>
-                <Text style={[styles.termsText, { color: theme.MUTED }]}>
-                  By creating an account, I agree to the{' '}
-                  <Text style={{ color: theme.TEXT, fontWeight: '700' }}>
-                    Terms & Service
-                  </Text>
-                </Text>
-              </TouchableOpacity>
-
-              {/* Register Button */}
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={handleRegister}
-                disabled={isLoading}
-                style={[
-                  styles.submitBtn,
-                  {
-                    backgroundColor: agree ? theme.TEXT : theme.MODAL,
-                    opacity: agree ? 1 : 0.6,
-                  },
-                ]}
-              >
-                {isLoading ? (
-                  <ActivityIndicator color={theme.BG} />
-                ) : (
-                  <Text style={[styles.submitText, { color: theme.BG }]}>
-                    Create Vault Account →
-                  </Text>
-                )}
-              </TouchableOpacity>
+          <View style={[styles.bottom, { paddingBottom: insets.bottom + 20 }]}>
+            <PrimaryButton
+              label={stepIdx === TOTAL - 1 ? 'Finish' : 'Continue'}
+              onPress={goNext}
+              disabled={!canContinue}
+            />
+            {skippable && (
+              <TextButton label="Skip for now" onPress={goNext} style={styles.skipBtn} textStyle={styles.skipText} />
+            )}
+            <View style={styles.loginRow}>
+              <Text style={styles.loginText}>Already have an account? </Text>
+              <TextButton label="Log in" onPress={() => navigation.navigate('Login')} textStyle={styles.loginLink} />
             </View>
           </View>
-
-          {/* Social Sign-In */}
-          <View style={styles.sectionMargin}>
-            <View style={styles.dividerRow}>
-              <View style={[styles.divLine, { backgroundColor: theme.BORDER }]} />
-              <Text style={[styles.divText, { color: theme.MUTED }]}>
-                OR CONTINUE WITH
-              </Text>
-              <View style={[styles.divLine, { backgroundColor: theme.BORDER }]} />
-            </View>
-
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={handleGoogleSignIn}
-              disabled={isLoading}
-              style={[
-                styles.googleBtn,
-                { backgroundColor: theme.CARD, borderColor: theme.BORDER },
-              ]}
-            >
-              <Image
-                source={require('../../../assets/images/Logo-google-icon-PNG.png')}
-                style={styles.googleIcon}
-                resizeMode="contain"
-              />
-              <Text style={[styles.googleBtnText, { color: theme.TEXT }]}>
-                Continue with Google
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Login Link Footer */}
-          <View style={styles.footerRow}>
-            <Text style={[styles.footerText, { color: theme.MUTED }]}>
-              Already have an account?
-            </Text>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => navigation.navigate('Login')}
-            >
-              <Text style={[styles.loginLink, { color: theme.TEXT }]}>
-                Log In
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      )}
     </View>
   );
 };
 
 export default RegisterScreen;
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
+const createStyles = (A: AuthPalette) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: A.BG },
+  flex: { flex: 1 },
+
+  header: {
+    paddingHorizontal: 24,
+    paddingBottom: 14,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-    paddingHorizontal: 4,
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sectionMargin: {
-    marginBottom: 20,
-  },
-  heroTag: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    marginBottom: 8,
-    paddingHorizontal: 4,
-  },
-  heroTitle: {
-    fontSize: 40,
-    fontWeight: '800',
-    letterSpacing: -1.8,
-    marginBottom: 8,
-    paddingHorizontal: 4,
-  },
-  heroSubtitle: {
-    fontSize: 14,
-    lineHeight: 22,
-    paddingHorizontal: 4,
-  },
-  formCard: {
-    borderRadius: 28,
-    padding: 24,
-  },
-  fieldGroup: {
+    gap: 10,
     marginBottom: 14,
   },
-  fieldLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    marginBottom: 8,
-  },
-  inputInnerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    height: 50,
-  },
-  textInput: {
+  headerBack: { padding: 4 },
+  headerTitle: {
     flex: 1,
     fontSize: 15,
     fontWeight: '600',
-    padding: 0,
+    color: A.TEXT,
+    letterSpacing: -0.2,
   },
-  checkboxRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginVertical: 14,
+  headerCount: {
+    fontSize: 13,
+    color: A.FAINT,
+    fontWeight: '500',
   },
-  checkboxBox: {
-    width: 20,
-    height: 20,
-    borderRadius: 6,
-    borderWidth: 1.8,
-    alignItems: 'center',
-    justifyContent: 'center',
+  progressTrack: {
+    height: 2,
+    backgroundColor: A.DIVIDER,
+    borderRadius: 100,
   },
-  termsText: {
-    fontSize: 12,
-    flex: 1,
+  progressFill: {
+    height: 2,
+    borderRadius: 100,
+    backgroundColor: A.SKY,
+    boxShadow: '0 0 8px rgba(14,165,233,0.8)',
   },
-  submitBtn: {
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 4,
+
+  stepScroll: { flexGrow: 1 },
+  stepBody: {
+    paddingHorizontal: 24,
+    paddingTop: 48,
+    paddingBottom: 16,
   },
-  submitText: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-    paddingHorizontal: 8,
-  },
-  divLine: {
-    flex: 1,
-    height: 1,
-  },
-  divText: {
-    fontSize: 9,
+  stepTitle: {
+    fontSize: 26,
     fontWeight: '700',
-    letterSpacing: 1.2,
+    color: A.TEXT,
+    marginBottom: 10,
+    letterSpacing: -0.5,
+    lineHeight: 31,
   },
-  googleBtn: {
+  stepHint: {
+    fontSize: 14,
+    color: A.HINT,
+    marginBottom: 28,
+    lineHeight: 22,
+  },
+
+  strengthRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    height: 52,
-    borderRadius: 26,
+    gap: 10,
+    marginTop: 14,
+  },
+  strengthTrack: {
+    flex: 1,
+    height: 2,
+    borderRadius: 100,
+    backgroundColor: A.DIVIDER,
+    overflow: 'hidden',
+  },
+  strengthFill: { height: '100%', borderRadius: 100 },
+  strengthLabel: { fontSize: 12, fontWeight: '600', minWidth: 60 },
+
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  chip: {
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 100,
     borderWidth: 1,
+    borderColor: A.GLASS_BORDER,
+    backgroundColor: A.GLASS,
   },
-  googleIcon: {
-    width: 20,
-    height: 20,
+  chipActive: {
+    borderColor: 'rgba(14,165,233,0.6)',
+    backgroundColor: 'rgba(14,165,233,0.14)',
+    boxShadow: '0 0 14px rgba(14,165,233,0.22)',
   },
-  googleBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  footerRow: {
+  chipText: { fontSize: 15, color: A.INK(0.7) },
+  chipTextActive: { color: A.LINK, fontWeight: '600' },
+
+  cityFields: { gap: 12 },
+
+  filerHead: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 10,
+  },
+  filerTitle: { flex: 1, marginBottom: 0 },
+  whatIsBtn: { marginTop: 8 },
+  whatIs: { color: A.LINK, fontSize: 13, fontWeight: '500' },
+  infoBox: {
+    backgroundColor: 'rgba(14,165,233,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(14,165,233,0.2)',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+  },
+  infoText: { fontSize: 13, color: A.INK(0.65), lineHeight: 21 },
+  infoStrong: { color: A.INK(0.9), fontWeight: '700' },
+  filerHint: { marginBottom: 20 },
+  filerList: { gap: 10 },
+  filerOption: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 4,
+    gap: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: A.INK(0.1),
+    backgroundColor: A.INK(0.04),
   },
-  footerText: {
-    fontSize: 13,
+  filerOptionActive: {
+    borderColor: 'rgba(14,165,233,0.5)',
+    backgroundColor: 'rgba(14,165,233,0.1)',
+    boxShadow: '0 0 20px rgba(14,165,233,0.14)',
   },
-  loginLink: {
-    fontSize: 13,
-    fontWeight: '800',
+  radio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: A.INK(0.25),
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  radioActive: {
+    borderColor: A.SKY,
+    backgroundColor: A.SKY,
+    boxShadow: '0 0 10px rgba(14,165,233,0.4)',
+  },
+  radioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFFFFF' }, // on the sky radio
+  filerLabel: { fontSize: 16, color: A.INK(0.7) },
+  filerLabelActive: { color: A.TEXT, fontWeight: '600' },
+
+  bottom: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    gap: 12,
+  },
+  skipBtn: { alignItems: 'center', paddingVertical: 4 },
+  skipText: { color: A.FAINT, fontSize: 14, fontWeight: '500' },
+  loginRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+  loginText: { fontSize: 13, color: A.FAINT },
+  loginLink: { fontSize: 13, color: A.LINK, fontWeight: '600' },
+
+  done: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    gap: 28,
+  },
+  doneIconWrap: { alignItems: 'center', justifyContent: 'center' },
+  doneIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: 26,
+    backgroundColor: 'rgba(0,230,138,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,230,138,0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 0 48px rgba(0,230,138,0.22)',
+  },
+  doneText: { alignItems: 'center' },
+  doneTitle: {
+    fontSize: 30,
+    fontWeight: '700',
+    color: A.TEXT,
+    letterSpacing: -0.7,
+  },
+  doneBody: {
+    fontSize: 16,
+    color: A.MUTED,
+    lineHeight: 26,
+    maxWidth: 260,
+    marginTop: 14,
+    textAlign: 'center',
+  },
+  doneCta: { width: '100%', marginTop: 8 },
 });

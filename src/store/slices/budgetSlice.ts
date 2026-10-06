@@ -14,9 +14,52 @@ interface BudgetState {
   totalMonthlyBudget: number;
 }
 
+const initialCategories: BudgetCategory[] = [
+  {
+    id: 'cat_housing',
+    name: 'Housing & Rent',
+    icon: 'home',
+    limit: 60000,
+    color: '#0047AB',
+    isMain: true,
+  },
+  {
+    id: 'cat_groceries',
+    name: 'Groceries & Dining',
+    icon: 'coffee',
+    limit: 35000,
+    color: '#00C853',
+    isMain: true,
+  },
+  {
+    id: 'cat_transport',
+    name: 'Transportation & Fuel',
+    icon: 'truck',
+    limit: 15000,
+    color: '#FF9500',
+    isMain: true,
+  },
+  {
+    id: 'cat_utilities',
+    name: 'Utilities & Bills',
+    icon: 'zap',
+    limit: 18000,
+    color: '#5AC8FA',
+    isMain: false,
+  },
+  {
+    id: 'cat_shopping',
+    name: 'Shopping & Essentials',
+    icon: 'shopping-bag',
+    limit: 12000,
+    color: '#AF52DE',
+    isMain: false,
+  },
+];
+
 const initialState: BudgetState = {
-  totalMonthlyBudget: 10000,
-  categories: [],
+  totalMonthlyBudget: 150000,
+  categories: initialCategories,
 };
 
 const budgetSlice = createSlice({

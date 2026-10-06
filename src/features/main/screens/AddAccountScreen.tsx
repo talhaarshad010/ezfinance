@@ -16,7 +16,6 @@ import { PakistaniBank } from '../../../constants/pakistaniBanks';
 import { useToast } from '../../../context/ToastContext';
 import { useAppDispatch } from '../../../store/hooks';
 import { addAccount as addAccountAction } from '../../../store/slices/bankAccountsSlice';
-import { saveAccount } from '../../../services/bankAccountService';
 
 const AddAccountScreen = () => {
   const navigation = useNavigation<any>();
@@ -50,30 +49,28 @@ const AddAccountScreen = () => {
     return true;
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!validate()) return;
 
     setSaving(true);
-    try {
-      await saveAccount({
-        bankId: selectedBank!.id,
-        bankName: selectedBank!.shortName,
-        bankColor: selectedBank!.color,
-        bankAbbreviation: selectedBank!.abbreviation,
-        accountTitle: accountTitle.trim(),
-        accountNumber: accountNumber.trim(),
-        balance: parseFloat(balance),
-        createdAt: Date.now(),
-      });
-
+    setTimeout(() => {
+      dispatch(
+        addAccountAction({
+          id: 'acc_' + Date.now(),
+          bankId: selectedBank!.id,
+          bankName: selectedBank!.shortName,
+          bankColor: selectedBank!.color,
+          bankAbbreviation: selectedBank!.abbreviation,
+          accountTitle: accountTitle.trim(),
+          accountNumber: accountNumber.trim(),
+          balance: parseFloat(balance),
+          createdAt: Date.now(),
+        }),
+      );
+      setSaving(false);
       showToast('Account added successfully!', 'success', 'Success');
       navigation.goBack();
-    } catch (err) {
-      console.error('Save account error:', err);
-      showToast('Failed to save account', 'error', 'Error');
-    } finally {
-      setSaving(false);
-    }
+    }, 200);
   };
 
   return (

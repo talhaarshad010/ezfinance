@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +10,7 @@ import {
 import Feather from 'react-native-vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
+import { AnimatedModal } from './AnimatedModal';
 
 interface BottomSheetProps {
   visible: boolean;
@@ -54,7 +54,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   );
 
   return (
-    <Modal
+    <AnimatedModal
       visible={visible}
       transparent
       animationType="slide"
@@ -97,7 +97,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
 
         {body}
       </View>
-    </Modal>
+    </AnimatedModal>
   );
 };
 
@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'transparent',
   },
   sheet: {
     position: 'absolute',

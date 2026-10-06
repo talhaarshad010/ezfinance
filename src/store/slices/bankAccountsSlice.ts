@@ -30,9 +30,91 @@ interface BankAccountsState {
   error: string | null;
 }
 
+const initialAccounts: BankAccount[] = [
+  {
+    id: 'acc_meezan_01',
+    bankId: 'meezan',
+    bankName: 'Meezan Bank',
+    bankColor: '#004B87',
+    bankAbbreviation: 'MBL',
+    accountTitle: 'Talha Arshad',
+    accountNumber: '0201010349281',
+    balance: 245000,
+    createdAt: Date.now() - 30 * 86400000,
+  },
+  {
+    id: 'acc_hbl_02',
+    bankId: 'hbl',
+    bankName: 'Habib Bank',
+    bankColor: '#008248',
+    bankAbbreviation: 'HBL',
+    accountTitle: 'Talha Arshad',
+    accountNumber: '230491829104',
+    balance: 137000,
+    createdAt: Date.now() - 60 * 86400000,
+  },
+];
+
+const initialTransactions: Record<string, Transaction[]> = {
+  acc_meezan_01: [
+    {
+      id: 'tx_01',
+      accountId: 'acc_meezan_01',
+      description: 'Consulting Retainer Income',
+      amount: 150000,
+      type: 'income',
+      category: 'Income',
+      date: new Date(Date.now() - 2 * 86400000).toISOString(),
+      createdAt: Date.now() - 2 * 86400000,
+    },
+    {
+      id: 'tx_02',
+      accountId: 'acc_meezan_01',
+      description: 'Metro Cash & Carry Grocery',
+      amount: 18500,
+      type: 'expense',
+      category: 'Groceries',
+      date: new Date(Date.now() - 4 * 86400000).toISOString(),
+      createdAt: Date.now() - 4 * 86400000,
+    },
+    {
+      id: 'tx_03',
+      accountId: 'acc_meezan_01',
+      description: 'Electricity Bill LESCO',
+      amount: 24500,
+      type: 'expense',
+      category: 'Utilities',
+      date: new Date(Date.now() - 7 * 86400000).toISOString(),
+      createdAt: Date.now() - 7 * 86400000,
+    },
+  ],
+  acc_hbl_02: [
+    {
+      id: 'tx_04',
+      accountId: 'acc_hbl_02',
+      description: 'Shell Fuel Station',
+      amount: 8000,
+      type: 'expense',
+      category: 'Transport',
+      date: new Date(Date.now() - 1 * 86400000).toISOString(),
+      createdAt: Date.now() - 1 * 86400000,
+    },
+    {
+      id: 'tx_05',
+      accountId: 'acc_hbl_02',
+      description: 'Dividends Payout',
+      amount: 45000,
+      type: 'income',
+      category: 'Income',
+      date: new Date(Date.now() - 10 * 86400000).toISOString(),
+      createdAt: Date.now() - 10 * 86400000,
+    },
+  ],
+};
+
 const initialState: BankAccountsState = {
-  accounts: [],
-  transactions: {},
+  accounts: initialAccounts,
+  transactions: initialTransactions,
   loading: false,
   error: null,
 };

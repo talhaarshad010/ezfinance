@@ -1,0 +1,4 @@
+<resources>
+    <!-- Launch window colour; matches the first frame of the animated logo splash. -->
+    <color name="splash_background">#F9FAFB</color>
+</resources>

@@ -5,7 +5,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Modal,
   StyleSheet,
   StatusBar,
   Dimensions,
@@ -16,6 +15,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
+import { AnimatedModal } from '../../../components/AnimatedModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -396,7 +396,7 @@ export const StockMarketScreen = () => {
       </ScrollView>
 
       {/* Trade Modal Sheet */}
-      <Modal
+      <AnimatedModal
         visible={tradeModalVisible}
         transparent
         animationType="slide"
@@ -474,7 +474,7 @@ export const StockMarketScreen = () => {
             </View>
           </TouchableOpacity>
         </TouchableOpacity>
-      </Modal>
+      </AnimatedModal>
     </View>
   );
 };
@@ -740,7 +740,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   sheetContent: {

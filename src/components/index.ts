@@ -11,3 +11,5 @@ export {default as BottomSheet} from './BottomSheet';
 export {default as Toggle} from './Toggle';
 export * from './CalendarPicker';
 export * from './LoadingOverlay';
+export {default as AnimatedModal} from './AnimatedModal';
+export {default as FadeInView} from './FadeInView';

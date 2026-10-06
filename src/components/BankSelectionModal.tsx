@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import {
   View,
   StyleSheet,
-  Modal,
   TextInput,
   TouchableOpacity,
   FlatList,
@@ -12,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Feather from 'react-native-vector-icons/Feather';
 import Typography from './Typography';
 import PAKISTANI_BANKS, { PakistaniBank } from '../constants/pakistaniBanks';
+import { AnimatedModal } from './AnimatedModal';
 
 interface BankSelectionModalProps {
   visible: boolean;
@@ -60,7 +60,7 @@ const BankSelectionModal: React.FC<BankSelectionModalProps> = ({ visible, onClos
   );
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <AnimatedModal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={[styles.container, { paddingTop: insets.top }]}>
         {/* Header */}
         <View style={styles.header}>
@@ -110,7 +110,7 @@ const BankSelectionModal: React.FC<BankSelectionModalProps> = ({ visible, onClos
           }
         />
       </View>
-    </Modal>
+    </AnimatedModal>
   );
 };
 

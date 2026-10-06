@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView, Modal } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { Typography, Button } from '.';
+import { AnimatedModal } from './AnimatedModal';
 
 interface CalendarPickerProps {
   visible: boolean;
@@ -149,7 +150,7 @@ export const CalendarPicker: React.FC<CalendarPickerProps> = ({ visible, onClose
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide">
+    <AnimatedModal visible={visible} transparent animationType="slide">
       <View style={styles.modalBg}>
         <View style={styles.modalContent}>
           
@@ -187,14 +188,14 @@ export const CalendarPicker: React.FC<CalendarPickerProps> = ({ visible, onClose
 
         </View>
       </View>
-    </Modal>
+    </AnimatedModal>
   );
 };
 
 const styles = StyleSheet.create({
   modalBg: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   modalContent: {

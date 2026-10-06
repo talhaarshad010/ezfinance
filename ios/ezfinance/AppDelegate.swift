@@ -24,6 +24,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     reactNativeFactory = factory
 
     window = UIWindow(frame: UIScreen.main.bounds)
+    window?.backgroundColor = splashBackground
 
     factory.startReactNative(
       withModuleName: "ezfinance",
@@ -35,7 +36,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   }
 }
 
+/// Matches LaunchScreen.storyboard and the JS splash (#F9FAFB), so launch → JS is one continuous colour.
+let splashBackground = UIColor(red: 249 / 255, green: 250 / 255, blue: 251 / 255, alpha: 1)
+
 class ReactNativeDelegate: RCTDefaultReactNativeFactoryDelegate {
+  override func customize(_ rootView: RCTRootView) {
+    super.customize(rootView)
+    // Default is systemBackgroundColor, which flashes white (or black in dark mode) while JS loads.
+    rootView.backgroundColor = splashBackground
+  }
+
   override func sourceURL(for bridge: RCTBridge) -> URL? {
     self.bundleURL()
   }

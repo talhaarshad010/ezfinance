@@ -8,16 +8,15 @@ import {
   Animated,
   StyleSheet,
   StatusBar,
-  Modal,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
+import Svg, { Polyline, Defs, Pattern, Circle, Rect } from 'react-native-svg';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useAppSelector } from '../../../store/hooks';
 import { useToast } from '../../../context/ToastContext';
-import auth from '@react-native-firebase/auth';
-import { ProgressRing } from '../../../components';
+import { ProgressRing, FadeInView } from '../../../components';
 import {
   SAVINGS_GOALS,
   goalColor,
@@ -28,8 +27,10 @@ import {
   MONTHLY_INCOME_POOL,
   UNASSIGNED_CASH,
 } from '../../../constants/envelopes';
+import { AnimatedModal } from '../../../components/AnimatedModal';
 
 type DashTab = 'live' | 'monthly' | 'health' | 'insights';
+const DASH_TAB_ORDER: DashTab[] = ['live', 'monthly', 'health', 'insights'];
 
 type DashOverlay =
   | null
@@ -268,7 +269,7 @@ function CategoryDetailSheet({
   const barColor = pct >= 100 ? theme.RED : pct > 75 ? '#FF9500' : theme.GREEN;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <AnimatedModal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
         <TouchableOpacity style={styles.modalBackdropTap} activeOpacity={1} onPress={onClose} />
         <View style={[styles.sheetContainer, { backgroundColor: theme.CARD, maxHeight: '82%' }]}>
@@ -371,7 +372,29 @@ function CategoryDetailSheet({
           </ScrollView>
         </View>
       </View>
-    </Modal>
+    </AnimatedModal>
+  );
+}
+
+const TEAL = '#00BFA5';
+const RUNWAY_MONTHS = 3.2;
+const RUNWAY_MAX_MONTHS = 6;
+const RUNWAY_SEGMENTS = 6;
+const runwayFilledSegs = Math.round(
+  (RUNWAY_MONTHS / RUNWAY_MAX_MONTHS) * RUNWAY_SEGMENTS,
+);
+
+// Faint teal dot texture behind the light-mode metric tiles
+function DotGrid({ id }: { id: string }) {
+  return (
+    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%" pointerEvents="none">
+      <Defs>
+        <Pattern id={id} width={5} height={5} patternUnits="userSpaceOnUse">
+          <Circle cx={2.5} cy={2.5} r={1} fill={TEAL} fillOpacity={0.055} />
+        </Pattern>
+      </Defs>
+      <Rect width="100%" height="100%" fill={`url(#${id})`} />
+    </Svg>
   );
 }
 
@@ -382,6 +405,15 @@ export const DashboardScreen = () => {
   const { showToast } = useToast();
 
   const [subTab, setSubTab] = useState<DashTab>('live');
+  // Slide sub-tab content in from the side of the tab being moved toward
+  const prevSubTab = useRef(subTab);
+  const subTabDir =
+    DASH_TAB_ORDER.indexOf(subTab) >= DASH_TAB_ORDER.indexOf(prevSubTab.current)
+      ? 'forward'
+      : 'back';
+  useEffect(() => {
+    prevSubTab.current = subTab;
+  }, [subTab]);
   const [overlay, setOverlay] = useState<DashOverlay>(null);
   const [envelopes, setEnvelopes] = useState(ENVELOPE_CATS);
   const [quickDepositGoalId, setQuickDepositGoalId] = useState(
@@ -392,16 +424,20 @@ export const DashboardScreen = () => {
   const [accountModalVisible, setAccountModalVisible] = useState(false);
   const [metricBreakModalVisible, setMetricBreakModalVisible] = useState(false);
   const [actionInsight, setActionInsight] = useState<InsightItem | null>(null);
+  // Keep the last insight around so the dialog can animate out with its content
+  const lastActionInsight = useRef<InsightItem | null>(null);
+  if (actionInsight) lastActionInsight.current = actionInsight;
+  const shownInsight = actionInsight ?? lastActionInsight.current;
 
   const profile = useAppSelector(state => state.user.profile);
-  const firebaseUser = auth().currentUser;
-  const userName =
-    profile?.name?.split(' ')[0] ||
-    firebaseUser?.displayName?.split(' ')[0] ||
-    '';
+  const userName = profile?.name?.split(' ')[0] || 'Talha';
 
   const { accounts } = useAppSelector(state => state.bankAccounts);
   const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
+
+  // Privacy toggle for the Net Worth card amounts
+  const [amountsHidden, setAmountsHidden] = useState(false);
+  const mask = (value: string) => (amountsHidden ? '••••••' : value);
 
   const displayBalance =
     totalBalance > 0
@@ -414,7 +450,7 @@ export const DashboardScreen = () => {
     'July', 'August', 'September', 'October', 'November', 'December',
   ];
   const planMonthLabel = `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
-  const planMonthShort = MONTH_NAMES[now.getMonth()].slice(0, 3);
+  const planMonthName = MONTH_NAMES[now.getMonth()];
 
   const allocated = envelopes.reduce((sum, e) => sum + e.amount, 0);
   const unallocated = MONTHLY_INCOME_POOL - allocated;
@@ -429,9 +465,57 @@ export const DashboardScreen = () => {
       ),
     );
 
+  // Inline envelope amount editing (single row or "Edit all")
+  const [editingEnvIdx, setEditingEnvIdx] = useState<number | null>(null);
+  const [editEnvVal, setEditEnvVal] = useState('');
+  const [editAllEnvelopes, setEditAllEnvelopes] = useState(false);
+  const [editEnvVals, setEditEnvVals] = useState<string[]>([]);
+
+  const parseAmount = (v: string) => parseInt(v.replace(/,/g, ''), 10);
+
+  const startEnvelopeEdit = (idx: number) => {
+    setEditingEnvIdx(idx);
+    setEditEnvVal(String(envelopes[idx].amount));
+  };
+  const commitEnvelopeEdit = () => {
+    if (editingEnvIdx === null) return;
+    const parsed = parseAmount(editEnvVal);
+    if (!isNaN(parsed) && parsed >= 0) {
+      setEnvelopes(list =>
+        list.map((e, i) => (i === editingEnvIdx ? { ...e, amount: parsed } : e)),
+      );
+    }
+    setEditingEnvIdx(null);
+  };
+  const startEditAllEnvelopes = () => {
+    setEditingEnvIdx(null);
+    setEditAllEnvelopes(true);
+    setEditEnvVals(envelopes.map(e => String(e.amount)));
+  };
+  const commitAllEnvelopes = () => {
+    setEnvelopes(list =>
+      list.map((e, i) => {
+        if (e.locked) return e;
+        const parsed = parseAmount(editEnvVals[i] ?? '');
+        return !isNaN(parsed) && parsed >= 0 ? { ...e, amount: parsed } : e;
+      }),
+    );
+    setEditAllEnvelopes(false);
+  };
+
   const quickDepositAmounts = [5000, 10000, 25000];
   const quickDepositGoal =
     SAVINGS_GOALS.find(g => g.id === quickDepositGoalId) ?? SAVINGS_GOALS[0];
+
+  const metricTileBg = theme.isDark ? theme.CARD : '#FAFAF8';
+  const spendBarAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(spendBarAnim, {
+      toValue: 1,
+      duration: 1000,
+      useNativeDriver: false,
+    }).start();
+  }, [spendBarAnim]);
 
   const burnPct = 53;
   const burnColor =
@@ -585,6 +669,7 @@ export const DashboardScreen = () => {
         </ScrollView>
 
         {/* TAB CONTENTS */}
+        <FadeInView key={subTab} from={subTabDir} distance={24}>
 
         {/* 1. LIVE VIEW */}
         {subTab === 'live' && (
@@ -617,9 +702,7 @@ export const DashboardScreen = () => {
                   </View>
                 </View>
                 <View style={[styles.planBannerPill, { backgroundColor: theme.ACTIVE }]}>
-                  <Text style={styles.planBannerPillText}>
-                    Plan {planMonthShort}
-                  </Text>
+                  <Text style={styles.planBannerPillText}>Budget</Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -627,93 +710,179 @@ export const DashboardScreen = () => {
             {/* Hero Card */}
             <View style={styles.sectionMargin}>
               <View style={[styles.heroCard, { backgroundColor: theme.HERO_BG }]}>
-                <View
-                  style={[
-                    styles.statusDot,
-                    { backgroundColor: theme.ACTIVE },
-                  ]}
-                />
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => setAmountsHidden(h => !h)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={amountsHidden ? 'Show amounts' : 'Hide amounts'}
+                  style={styles.privacyBtn}
+                >
+                  <Feather
+                    name={amountsHidden ? 'eye-off' : 'eye'}
+                    size={16}
+                    color="rgba(255,255,255,0.8)"
+                  />
+                </TouchableOpacity>
                 <Text style={styles.heroSubhead}>Net Worth · May 2026</Text>
-                <Text style={styles.heroAmount}>{displayBalance}</Text>
+                <Text style={styles.heroAmount}>{mask(displayBalance)}</Text>
                 <Text style={styles.heroCurrency}>PKR</Text>
 
                 <View style={styles.heroDividerRow}>
                   <View style={styles.heroStatCol}>
                     <Text style={styles.heroStatLabel}>Income</Text>
                     <Text style={[styles.heroStatValue, { color: theme.GREEN }]}>
-                      1,50,000
+                      {mask('1,50,000')}
                     </Text>
                   </View>
 
                   <View style={styles.heroStatColBordered}>
                     <Text style={styles.heroStatLabel}>Spent</Text>
                     <Text style={[styles.heroStatValue, { color: theme.RED }]}>
-                      80,000
+                      {mask('80,000')}
                     </Text>
                   </View>
 
                   <View style={styles.heroStatColBordered}>
                     <Text style={styles.heroStatLabel}>Saved</Text>
                     <Text style={[styles.heroStatValue, { color: '#FFFFFF' }]}>
-                      30,000
+                      {mask('30,000')}
                     </Text>
                   </View>
                 </View>
               </View>
             </View>
 
-            {/* Second stat row: Investments + Cash on Hand */}
+            {/* Metric grid */}
+            <View style={[styles.twoColRow, styles.sectionMargin]}>
+              {/* Monthly Spending */}
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => setSubTab('monthly')}
+                style={[styles.metricTile, { backgroundColor: metricTileBg }]}
+              >
+                {!theme.isDark && <DotGrid id="dotsSpend" />}
+                <Text style={[styles.metricTileLabel, { color: theme.MUTED }]}>
+                  MONTHLY SPENDING
+                </Text>
+                <Text style={[styles.metricTileValue, { color: theme.TEXT, lineHeight: 30, marginBottom: 3 }]}>
+                  80,000
+                </Text>
+                <Text style={[styles.metricTileSub, { color: theme.MUTED }]}>
+                  of PKR 1,50,000
+                </Text>
+                <View style={{ marginTop: 'auto' }}>
+                  <View style={styles.metricTileBarHead}>
+                    <Text style={{ fontSize: 9, color: theme.MUTED }}>PKR 70k left</Text>
+                    <Text style={[styles.metricTileAccent, { color: TEAL }]}>53%</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.metricTileTrack,
+                      { backgroundColor: theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)' },
+                    ]}
+                  >
+                    <Animated.View
+                      style={{
+                        height: '100%',
+                        borderRadius: 3,
+                        backgroundColor: TEAL,
+                        width: spendBarAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ['0%', '53%'],
+                        }),
+                      }}
+                    />
+                  </View>
+                </View>
+              </TouchableOpacity>
+
+              {/* Tax Saved */}
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => navigation.navigate('AI Advisor')}
+                style={[styles.metricTile, { backgroundColor: metricTileBg }]}
+              >
+                {!theme.isDark && <DotGrid id="dotsTax" />}
+                <View style={[styles.metricTileBadge, { backgroundColor: TEAL }]}>
+                  <Feather name="check" size={13} color="#FFFFFF" />
+                </View>
+                <Text style={[styles.metricTileLabel, { color: theme.MUTED, paddingRight: 36 }]}>
+                  TAX SAVED THIS YEAR
+                </Text>
+                <Text style={[styles.metricTileValue, { color: theme.TEXT, marginBottom: 6 }]}>
+                  18,400
+                </Text>
+                <View style={{ marginTop: 'auto' }}>
+                  <Text style={[styles.metricTileAccent, { color: TEAL }]}>FBR Filer</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
             <View style={[styles.twoColRow, styles.sectionMargin]}>
               {/* Investments */}
               <TouchableOpacity
                 activeOpacity={0.85}
                 onPress={() => navigation.navigate('Investments')}
-                style={[styles.duoCard, { backgroundColor: theme.CARD, minHeight: 158 }]}
+                style={[styles.metricTile, { backgroundColor: metricTileBg }]}
               >
-                <Text style={[styles.duoCardLabel, { color: theme.MUTED }]}>
+                {!theme.isDark && <DotGrid id="dotsInvest" />}
+                <Text style={[styles.metricTileLabel, { color: theme.MUTED }]}>
                   INVESTMENTS
                 </Text>
-                <Text style={[styles.statLargeVal, { color: theme.TEXT }]}>
+                <Text style={[styles.metricTileValue, { color: theme.TEXT, marginBottom: 8 }]}>
                   2,48,000
                 </Text>
-                <View style={{ marginTop: 'auto', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Feather
-                    name="arrow-up-right"
-                    size={12}
-                    color={theme.GREEN}
-                  />
-                  <Text style={{ fontSize: 11, fontWeight: '600', color: theme.GREEN }}>
-                    +14.8%
-                  </Text>
+                <View style={{ marginTop: 'auto' }}>
+                  <Svg width="100%" height={36} viewBox="0 0 100 36" preserveAspectRatio="none" style={{ marginBottom: 6 }}>
+                    <Polyline
+                      points="0,32 14,28 28,30 40,22 54,18 66,20 78,11 92,7 100,4"
+                      fill="none"
+                      stroke={TEAL}
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </Svg>
+                  <Text style={[styles.metricTileAccent, { color: TEAL }]}>+14.8%</Text>
                 </View>
               </TouchableOpacity>
 
               {/* Cash on Hand */}
-              <View style={[styles.duoCard, { backgroundColor: theme.CARD, minHeight: 158 }]}>
-                <Text style={[styles.duoCardLabel, { color: theme.MUTED }]}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => navigation.navigate('AgeOfMoney')}
+                style={[styles.metricTile, { backgroundColor: metricTileBg }]}
+              >
+                {!theme.isDark && <DotGrid id="dotsCash" />}
+                <Text style={[styles.metricTileLabel, { color: theme.MUTED }]}>
                   CASH ON HAND
                 </Text>
-                <Text style={[styles.statLargeVal, { color: theme.TEXT }]}>
+                <Text style={[styles.metricTileValue, { color: theme.TEXT, lineHeight: 30, marginBottom: 4 }]}>
                   48 Days
                 </Text>
-                <Text style={[styles.duoCardSub, { color: theme.MUTED }]}>
+                <Text style={[styles.metricTileSub, { color: theme.MUTED }]}>
                   3.2 months without income
                 </Text>
-                <View style={{ marginTop: 'auto' }}>
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => navigation.navigate('AgeOfMoney')}
-                    style={[
-                      styles.simulateBtn,
-                      { borderColor: `${theme.ACTIVE}40` },
-                    ]}
-                  >
-                    <Text style={[styles.simulateBtnText, { color: theme.ACTIVE }]}>
-                      Simulate →
-                    </Text>
-                  </TouchableOpacity>
+                <View style={styles.runwaySegRow}>
+                  {Array.from({ length: RUNWAY_SEGMENTS }).map((_, idx) => (
+                    <View
+                      key={idx}
+                      style={[
+                        styles.runwaySeg,
+                        {
+                          backgroundColor:
+                            idx < runwayFilledSegs
+                              ? TEAL
+                              : theme.isDark
+                              ? 'rgba(255,255,255,0.08)'
+                              : 'rgba(0,0,0,0.08)',
+                        },
+                      ]}
+                    />
+                  ))}
                 </View>
-              </View>
+              </TouchableOpacity>
             </View>
 
             {/* Active Savings Goals — compact rings */}
@@ -873,7 +1042,7 @@ export const DashboardScreen = () => {
               <View
                 style={[
                   styles.newCaCard,
-                  { backgroundColor: theme.CARD, borderColor: theme.BORDER },
+                  { backgroundColor: theme.CARD },
                 ]}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 14 }}>
@@ -1110,7 +1279,7 @@ export const DashboardScreen = () => {
               <TouchableOpacity
                 activeOpacity={0.8}
                 onPress={() => setDateRangeModalVisible(true)}
-                style={[styles.actionPillButton, { backgroundColor: theme.CARD }]}
+                style={[styles.actionPillButton, { backgroundColor: theme.MODAL }]}
               >
                 <Feather name="calendar" size={14} color={theme.ACTIVE} />
                 <Text style={[styles.actionPillText, { color: theme.TEXT }]}>
@@ -1121,7 +1290,7 @@ export const DashboardScreen = () => {
               <TouchableOpacity
                 activeOpacity={0.8}
                 onPress={() => setAccountModalVisible(true)}
-                style={[styles.actionPillButton, { backgroundColor: theme.CARD }]}
+                style={[styles.actionPillButton, { backgroundColor: theme.MODAL }]}
               >
                 <Feather name="briefcase" size={14} color={theme.ACTIVE} />
                 <Text style={[styles.actionPillText, { color: theme.TEXT }]}>
@@ -1188,7 +1357,7 @@ export const DashboardScreen = () => {
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={() => setMetricBreakModalVisible(true)}
-              style={[styles.actionPillButtonFull, { backgroundColor: theme.CARD }]}
+              style={[styles.actionPillButtonFull, { backgroundColor: theme.MODAL }]}
             >
               <Feather name="info" size={15} color={theme.ACTIVE} />
               <Text style={[styles.actionPillText, { color: theme.TEXT }]}>
@@ -1304,12 +1473,13 @@ export const DashboardScreen = () => {
             })}
           </View>
         )}
+        </FadeInView>
       </ScrollView>
 
       {/* MODALS */}
 
       {/* 1. Date Range Sheet Modal */}
-      <Modal
+      <AnimatedModal
         visible={dateRangeModalVisible}
         transparent
         animationType="slide"
@@ -1411,10 +1581,10 @@ export const DashboardScreen = () => {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      </AnimatedModal>
 
       {/* 2. Account Sheet Modal */}
-      <Modal
+      <AnimatedModal
         visible={accountModalVisible}
         transparent
         animationType="slide"
@@ -1563,7 +1733,7 @@ export const DashboardScreen = () => {
                     <TouchableOpacity
                       activeOpacity={0.8}
                       onPress={() => setAddingNewAcc(false)}
-                      style={[styles.modalBtnHalf, { backgroundColor: theme.CARD }]}
+                      style={[styles.modalBtnHalf, { backgroundColor: theme.MODAL }]}
                     >
                       <Text style={[styles.modalBtnText, { color: theme.MUTED }]}>Cancel</Text>
                     </TouchableOpacity>
@@ -1599,7 +1769,7 @@ export const DashboardScreen = () => {
             </ScrollView>
           </View>
         </View>
-      </Modal>
+      </AnimatedModal>
 
       {/* Category Detail Sheet Modal */}
       {selectedCat && (
@@ -1625,7 +1795,7 @@ export const DashboardScreen = () => {
       )}
 
       {/* 3. How We Calculate Metric Breakdown Modal */}
-      <Modal
+      <AnimatedModal
         visible={metricBreakModalVisible}
         transparent
         animationType="slide"
@@ -1698,10 +1868,10 @@ export const DashboardScreen = () => {
             </ScrollView>
           </View>
         </View>
-      </Modal>
+      </AnimatedModal>
 
       {/* 4. Action Confirm Modal */}
-      <Modal
+      <AnimatedModal
         visible={actionInsight !== null}
         transparent
         animationType="fade"
@@ -1713,7 +1883,7 @@ export const DashboardScreen = () => {
             activeOpacity={1}
             onPress={() => setActionInsight(null)}
           />
-          {actionInsight && (
+          {shownInsight && (
             <View style={[styles.centerModalCard, { backgroundColor: theme.CARD }]}>
               <View style={styles.confirmHeader}>
                 <View style={[styles.confirmCheckIcon, { backgroundColor: `${theme.GREEN}22` }]}>
@@ -1727,7 +1897,7 @@ export const DashboardScreen = () => {
               <Text style={[styles.confirmBody, { color: theme.MUTED }]}>
                 You are about to:{' '}
                 <Text style={{ color: theme.TEXT, fontWeight: '600' }}>
-                  {actionInsight.action}
+                  {shownInsight.action}
                 </Text>
               </Text>
 
@@ -1737,7 +1907,7 @@ export const DashboardScreen = () => {
                     Estimated Impact
                   </Text>
                   <Text style={[styles.confirmMetaValue, { color: theme.GREEN }]}>
-                    {actionInsight.impact}
+                    {shownInsight.impact}
                   </Text>
                 </View>
                 <View style={styles.confirmMetaRow}>
@@ -1745,7 +1915,7 @@ export const DashboardScreen = () => {
                     Category
                   </Text>
                   <Text style={[styles.confirmMetaValue, { color: theme.TEXT }]}>
-                    {actionInsight.tag}
+                    {shownInsight.tag}
                   </Text>
                 </View>
               </View>
@@ -1781,10 +1951,10 @@ export const DashboardScreen = () => {
             </View>
           )}
         </View>
-      </Modal>
+      </AnimatedModal>
 
       {/* 5. Monthly Planning Ritual — Envelope Allocation */}
-      <Modal
+      <AnimatedModal
         visible={overlay === 'envelopeBudget'}
         transparent
         animationType="slide"
@@ -1804,18 +1974,37 @@ export const DashboardScreen = () => {
           <View style={styles.sheetHeaderRow}>
             <View style={styles.flexShrink}>
               <Text style={[styles.envelopeEyebrow, { color: theme.ACTIVE }]}>
-                {planMonthLabel.toUpperCase()} ENVELOPE ALLOCATION
+                {planMonthLabel.toUpperCase()}
               </Text>
               <Text style={[styles.sheetTitle, { color: theme.TEXT }]}>
-                Monthly Planning Ritual
+                Monthly Planning
               </Text>
             </View>
-            <TouchableOpacity
-              onPress={() => setOverlay(null)}
-              style={[styles.sheetCloseBtn, { backgroundColor: theme.MODAL }]}
-            >
-              <Feather name="x" size={14} color={theme.MUTED} />
-            </TouchableOpacity>
+            <View style={styles.envelopeHeaderActions}>
+              {!editAllEnvelopes ? (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={startEditAllEnvelopes}
+                  style={[styles.editAllBtn, { borderColor: theme.BORDER, borderWidth: 1 }]}
+                >
+                  <Text style={[styles.editAllText, { color: theme.MUTED }]}>Edit all</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={commitAllEnvelopes}
+                  style={[styles.editAllBtn, { backgroundColor: theme.ACTIVE }]}
+                >
+                  <Text style={[styles.editAllText, { color: '#FFFFFF', fontWeight: '700' }]}>Done</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                onPress={() => setOverlay(null)}
+                style={[styles.sheetCloseBtn, { backgroundColor: theme.MODAL }]}
+              >
+                <Feather name="x" size={14} color={theme.MUTED} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Income pool */}
@@ -1886,9 +2075,38 @@ export const DashboardScreen = () => {
                       <Feather name="minus" size={12} color={theme.TEXT} />
                     </TouchableOpacity>
                   )}
-                  <Text style={[styles.envelopeAmount, { color: theme.TEXT }]}>
-                    {env.amount.toLocaleString()}
-                  </Text>
+                  {!env.locked && (editAllEnvelopes || editingEnvIdx === i) ? (
+                    <TextInput
+                      autoFocus={editingEnvIdx === i}
+                      keyboardType="number-pad"
+                      value={editAllEnvelopes ? editEnvVals[i] ?? '' : editEnvVal}
+                      onChangeText={t =>
+                        editAllEnvelopes
+                          ? setEditEnvVals(vs => vs.map((v, j) => (j === i ? t : v)))
+                          : setEditEnvVal(t)
+                      }
+                      onBlur={editAllEnvelopes ? undefined : commitEnvelopeEdit}
+                      onSubmitEditing={editAllEnvelopes ? undefined : commitEnvelopeEdit}
+                      style={[
+                        styles.envelopeAmountInput,
+                        {
+                          color: theme.ACTIVE,
+                          backgroundColor: `${theme.ACTIVE}10`,
+                          borderColor: `${theme.ACTIVE}50`,
+                        },
+                      ]}
+                    />
+                  ) : (
+                    <TouchableOpacity
+                      activeOpacity={env.locked ? 1 : 0.7}
+                      disabled={env.locked}
+                      onPress={() => startEnvelopeEdit(i)}
+                    >
+                      <Text style={[styles.envelopeAmount, { color: theme.TEXT }]}>
+                        {env.amount.toLocaleString()}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                   {!env.locked && (
                     <TouchableOpacity
                       activeOpacity={0.8}
@@ -1946,14 +2164,14 @@ export const DashboardScreen = () => {
             >
               {overAllocated
                 ? 'Rebalance First'
-                : `Lock ${planMonthShort} Budget & Zero Out`}
+                : `Confirm ${planMonthName} Budget`}
             </Text>
           </TouchableOpacity>
         </View>
-      </Modal>
+      </AnimatedModal>
 
       {/* 6. Goal Milestone Celebration */}
-      <Modal
+      <AnimatedModal
         visible={overlay === 'goalMilestone'}
         transparent
         animationType="fade"
@@ -2022,10 +2240,10 @@ export const DashboardScreen = () => {
             </View>
           </View>
         </View>
-      </Modal>
+      </AnimatedModal>
 
       {/* 7. Goal Quick Deposit Sheet */}
-      <Modal
+      <AnimatedModal
         visible={overlay === 'quickDeposit'}
         transparent
         animationType="slide"
@@ -2143,10 +2361,10 @@ export const DashboardScreen = () => {
             </Text>
           </TouchableOpacity>
         </View>
-      </Modal>
+      </AnimatedModal>
 
       {/* 8. Quick Rebalance Sheet */}
-      <Modal
+      <AnimatedModal
         visible={overlay === 'rebalanceSheet'}
         transparent
         animationType="slide"
@@ -2236,10 +2454,10 @@ export const DashboardScreen = () => {
             </Text>
           </TouchableOpacity>
         </View>
-      </Modal>
+      </AnimatedModal>
 
       {/* 9. Over-Budget Alert */}
-      <Modal
+      <AnimatedModal
         visible={overlay === 'overBudgetAlert'}
         transparent
         animationType="fade"
@@ -2303,10 +2521,10 @@ export const DashboardScreen = () => {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      </AnimatedModal>
 
       {/* 10. Unassigned Income Warning */}
-      <Modal
+      <AnimatedModal
         visible={overlay === 'unassignedWarning'}
         transparent
         animationType="fade"
@@ -2375,7 +2593,7 @@ export const DashboardScreen = () => {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      </AnimatedModal>
     </View>
   );
 };
@@ -2451,6 +2669,83 @@ const styles = StyleSheet.create({
   },
   duoCardFoot: { fontSize: 10 },
   duoCardPct: { fontSize: 11, fontWeight: '700' },
+  envelopeHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  editAllBtn: {
+    height: 30,
+    paddingHorizontal: 12,
+    borderRadius: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editAllText: { fontSize: 11, fontWeight: '600' },
+  envelopeAmountInput: {
+    fontSize: 14,
+    fontWeight: '700',
+    minWidth: 72,
+    maxWidth: 86,
+    textAlign: 'center',
+    borderWidth: 1.5,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+  },
+  metricTile: {
+    flex: 1,
+    borderRadius: 24,
+    paddingHorizontal: 15,
+    paddingTop: 16,
+    paddingBottom: 15,
+    minHeight: 158,
+    overflow: 'hidden',
+  },
+  metricTileLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.9,
+    marginBottom: 10,
+  },
+  metricTileValue: {
+    fontSize: 29,
+    fontWeight: '800',
+    letterSpacing: -1.5,
+  },
+  metricTileSub: { fontSize: 10 },
+  metricTileAccent: { fontSize: 11, fontWeight: '700' },
+  metricTileBarHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 5,
+  },
+  metricTileTrack: {
+    height: 5,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  metricTileBadge: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  runwaySegRow: {
+    marginTop: 'auto',
+    flexDirection: 'row',
+    gap: 4,
+  },
+  runwaySeg: {
+    flex: 1,
+    height: 7,
+    borderRadius: 4,
+  },
   simulateBtn: {
     borderWidth: 1,
     borderRadius: 10,
@@ -2772,13 +3067,17 @@ const styles = StyleSheet.create({
     padding: 24,
     position: 'relative',
   },
-  statusDot: {
+  privacyBtn: {
     position: 'absolute',
-    top: 24,
-    right: 24,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    top: 16,
+    right: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
   },
   heroSubhead: {
     fontSize: 10,
@@ -3257,7 +3556,7 @@ const styles = StyleSheet.create({
   /* Modal & Sheet Styles */
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   modalBackdropTap: {
@@ -3427,7 +3726,7 @@ const styles = StyleSheet.create({
   /* Center Confirm Modal */
   centerModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 20,
@@ -3530,7 +3829,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 18,
     paddingVertical: 16,
-    borderWidth: 1,
   },
   newCaTag: {
     fontSize: 10,

@@ -72,7 +72,7 @@ export const AgeOfMoneyScreen = () => {
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={() => navigation.goBack()}
-            style={[styles.backButton, { backgroundColor: theme.CARD }]}
+            style={[styles.backButton, { backgroundColor: theme.MODAL }]}
           >
             <Feather name="chevron-left" size={18} color={theme.TEXT} />
           </TouchableOpacity>

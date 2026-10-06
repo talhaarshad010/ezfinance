@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
+import { FadeInView } from '../../../components';
 import {
   TRANSACTIONS as SEED_TXS,
   RECURRING,
@@ -41,6 +42,7 @@ import {
 import StatementImportModal from './expenses/StatementImportModal';
 
 type LedgerTab = 'transactions' | 'recurring' | 'debts';
+const LEDGER_TAB_ORDER: LedgerTab[] = ['transactions', 'recurring', 'debts'];
 type TxFilter = 'all' | 'in' | 'out' | 'transfers';
 type RecurringSubTab = 'history' | 'calendar';
 
@@ -68,6 +70,15 @@ export const ExpensesScreen = () => {
 
   // Primary State
   const [tab, setTab] = useState<LedgerTab>('transactions');
+  // Slide tab content in from the side of the tab being moved toward
+  const prevTab = useRef(tab);
+  const tabDir =
+    LEDGER_TAB_ORDER.indexOf(tab) >= LEDGER_TAB_ORDER.indexOf(prevTab.current)
+      ? 'forward'
+      : 'back';
+  useEffect(() => {
+    prevTab.current = tab;
+  }, [tab]);
   const [txFilter, setTxFilter] = useState<TxFilter>('all');
   const [search, setSearch] = useState('');
   const [recurringSub, setRecurringSub] = useState<RecurringSubTab>('history');
@@ -260,7 +271,7 @@ export const ExpensesScreen = () => {
         <View style={styles.tabBar}>
           {[
             { key: 'transactions' as LedgerTab, label: 'Transactions', icon: 'list' },
-            { key: 'recurring' as LedgerTab, label: 'Recurring', icon: 'clock' },
+            { key: 'recurring' as LedgerTab, label: 'Repeated', icon: 'clock' },
             { key: 'debts' as LedgerTab, label: 'Loans', icon: 'credit-card' },
           ].map(t => {
             const isActive = tab === t.key;
@@ -297,6 +308,7 @@ export const ExpensesScreen = () => {
           })}
         </View>
 
+        <FadeInView key={tab} from={tabDir} distance={24}>
         {/* ── TAB 1: TRANSACTIONS ── */}
         {tab === 'transactions' && (
           <View>
@@ -543,6 +555,7 @@ export const ExpensesScreen = () => {
               })}
             </View>
 
+            <FadeInView key={recurringSub} distance={10}>
             {recurringSub === 'history' && (
               <View>
                 {/* Monthly Commitments Header Card */}
@@ -812,6 +825,7 @@ export const ExpensesScreen = () => {
                 </View>
               </View>
             )}
+            </FadeInView>
           </View>
         )}
 
@@ -1057,6 +1071,7 @@ export const ExpensesScreen = () => {
             </TouchableOpacity>
           </View>
         )}
+        </FadeInView>
       </ScrollView>
 
       {/* ── MODALS & SHEETS ── */}

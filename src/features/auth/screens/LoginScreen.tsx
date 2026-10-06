@@ -1,293 +1,147 @@
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
-  Image,
-  StyleSheet,
+  ScrollView,
   StatusBar,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
-import Feather from 'react-native-vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
-import { signIn, signInWithGoogle } from '../../../services/authService';
-import Logo from '../../../components/Logo';
+import { useAppDispatch } from '../../../store/hooks';
+import { setProfile } from '../../../store/slices/userSlice';
+import { AuthPalette, useAuthStyles } from '../components/authTheme';
+import { BackChevron, PrimaryButton, TextButton } from '../components/AuthButtons';
+import { GlassInput } from '../components/GlassInput';
+import { FadeUp } from '../components/Entrance';
 
 export const LoginScreen = () => {
+  const { A, styles } = useAuthStyles(createStyles);
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const { theme } = useTheme();
   const { showToast } = useToast();
+  const dispatch = useAppDispatch();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = async () => {
+  const canSubmit = email.trim().length > 0 && password.length > 0;
+
+  const handleLogin = () => {
     if (!email.trim() || !password) {
       showToast('Please enter both email and password', 'error');
       return;
     }
 
     setIsLoading(true);
-    try {
-      await signIn(email.trim(), password);
+    setTimeout(() => {
+      dispatch(
+        setProfile({
+          uid: 'usr_demo_01',
+          name: 'Muhammad Talha Arshad',
+          email: email.trim(),
+          photoURL: null,
+          phone: '+92 300 1234567',
+        }),
+      );
+      setIsLoading(false);
       showToast('Welcome back! Vault unlocked.', 'success');
-    } catch (error: any) {
-      let errorMessage = 'An error occurred during login.';
-      if (
-        error.code === 'auth/user-not-found' ||
-        error.code === 'auth/wrong-password' ||
-        error.code === 'auth/invalid-credential'
-      ) {
-        errorMessage = 'Incorrect email or password.';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Invalid email address format.';
-      } else if (error.code === 'auth/user-disabled') {
-        errorMessage = 'This account has been disabled.';
-      }
-      showToast(errorMessage, 'error');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    setIsLoading(true);
-    try {
-      await signInWithGoogle();
-      showToast('Signed in with Google!', 'success');
-    } catch (error: any) {
-      if (error.code !== 'ASYNC_OP_IN_PROGRESS') {
-        showToast('Google Sign-In failed.', 'error');
-      }
-    } finally {
-      setIsLoading(false);
-    }
+    }, 400);
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.BG }]}>
-      <StatusBar
-        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={theme.BG}
-      />
+    <View style={styles.container}>
+      <StatusBar barStyle={A.STATUS_BAR} backgroundColor={A.BG} />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
+        style={styles.flex}
       >
         <ScrollView
+          bounces={false}
+          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
-            styles.scrollContent,
-            {
-              paddingTop: insets.top + 16,
-              paddingBottom: insets.bottom + 40,
-            },
+            styles.scroll,
+            { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24 },
           ]}
         >
-          {/* Top Brand Header */}
-          <View style={styles.headerRow}>
-            <Logo size={52} />
-          </View>
-
-          {/* Hero Headline Section */}
-          <View style={styles.sectionMargin}>
-            <Text style={[styles.heroTag, { color: theme.ACTIVE }]}>
-              EXCLUSIVELY FOR INVESTORS
-            </Text>
-            <Text style={[styles.heroTitle, { color: theme.TEXT }]}>
-              Elevated{'\n'}Wealth Authority.
-            </Text>
-            <Text style={[styles.heroSubtitle, { color: theme.MUTED }]}>
-              Experience financial clarity through organic minimalism, PSX feeds, and AI-grade analytics.
-            </Text>
-
-            {/* Social Trust Proof */}
-            <View style={styles.trustRow}>
-              <View style={styles.avatarStack}>
-                <View
-                  style={[
-                    styles.avatarDot,
-                    { backgroundColor: theme.ACTIVE, borderColor: theme.BG },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.avatarDot,
-                    {
-                      backgroundColor: theme.GREEN,
-                      borderColor: theme.BG,
-                      marginLeft: -10,
-                    },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.avatarCountDot,
-                    { backgroundColor: theme.TEXT, borderColor: theme.BG },
-                  ]}
-                >
-                  <Text style={[styles.avatarCountText, { color: theme.BG }]}>
-                    +10k
-                  </Text>
-                </View>
+          {/* Back */}
+          <TextButton
+            onPress={() => navigation.goBack()}
+            style={styles.backBtn}
+            label={
+              <View style={styles.backRow}>
+                <BackChevron />
+                <Text style={styles.backText}>Back</Text>
               </View>
-              <Text style={[styles.trustText, { color: theme.MUTED }]}>
-                Trusted by serious investors nationwide
-              </Text>
-            </View>
-          </View>
+            }
+          />
 
-          {/* Credentials Login Card */}
-          <View style={styles.sectionMargin}>
-            <View style={[styles.formCard, { backgroundColor: theme.CARD }]}>
-              <Text style={[styles.cardTitle, { color: theme.TEXT }]}>
-                Sign In
-              </Text>
-              <Text style={[styles.cardSub, { color: theme.MUTED }]}>
-                Enter your registered credentials to access your financial vault.
-              </Text>
+          {/* Heading */}
+          <FadeUp style={styles.heading}>
+            <Text style={styles.title}>Welcome back</Text>
+            <Text style={styles.subtitle}>Log in to your ezFinance account</Text>
+          </FadeUp>
 
-              {/* Email Address Input */}
-              <View style={styles.fieldGroup}>
-                <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
-                  EMAIL ADDRESS
-                </Text>
-                <View
-                  style={[
-                    styles.inputInnerRow,
-                    { backgroundColor: theme.MODAL },
-                  ]}
-                >
-                  <Feather name="mail" size={18} color={theme.MUTED} />
-                  <TextInput
-                    style={[styles.textInput, { color: theme.TEXT }]}
-                    value={email}
-                    onChangeText={setEmail}
-                    placeholder="name@example.com"
-                    placeholderTextColor={theme.MUTED}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                  />
-                </View>
-              </View>
-
-              {/* Password Input */}
-              <View style={styles.fieldGroup}>
-                <View style={styles.labelForgotRow}>
-                  <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
-                    PASSWORD
-                  </Text>
-                  <TouchableOpacity
-                    activeOpacity={0.7}
+          {/* Glass form card */}
+          <FadeUp delay={140} style={styles.card}>
+            <View style={styles.cardEdge} />
+            <GlassInput
+              label="Email or phone number"
+              placeholder="you@example.com"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              textContentType="username"
+              returnKeyType="next"
+            />
+            <GlassInput
+              label="Password"
+              placeholder="Enter your password"
+              value={password}
+              onChangeText={setPassword}
+              password
+              textContentType="password"
+              returnKeyType="go"
+              onSubmitEditing={canSubmit ? handleLogin : undefined}
+              suffix={
+                <View style={styles.forgotRow}>
+                  <TextButton
+                    label="Forgot password?"
                     onPress={() => navigation.navigate('ForgotPassword')}
-                  >
-                    <Text style={[styles.forgotText, { color: theme.TEXT }]}>
-                      Forgot Password?
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View
-                  style={[
-                    styles.inputInnerRow,
-                    { backgroundColor: theme.MODAL },
-                  ]}
-                >
-                  <Feather name="lock" size={18} color={theme.MUTED} />
-                  <TextInput
-                    style={[styles.textInput, { color: theme.TEXT }]}
-                    value={password}
-                    onChangeText={setPassword}
-                    placeholder="••••••••"
-                    placeholderTextColor={theme.MUTED}
-                    secureTextEntry={!showPassword}
+                    textStyle={styles.link}
                   />
-                  <TouchableOpacity
-                    activeOpacity={0.7}
-                    onPress={() => setShowPassword(!showPassword)}
-                  >
-                    <Feather
-                      name={showPassword ? 'eye' : 'eye-off'}
-                      size={18}
-                      color={theme.MUTED}
-                    />
-                  </TouchableOpacity>
                 </View>
-              </View>
+              }
+            />
+          </FadeUp>
 
-              {/* Login Action Button */}
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={handleLogin}
-                disabled={isLoading}
-                style={[styles.submitBtn, { backgroundColor: theme.TEXT }]}
-              >
-                {isLoading ? (
-                  <ActivityIndicator color={theme.BG} />
-                ) : (
-                  <Text style={[styles.submitText, { color: theme.BG }]}>
-                    Sign In to Vault →
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
+          <View style={styles.flex} />
 
-          {/* Social Sign-In Section */}
-          <View style={styles.sectionMargin}>
-            <View style={styles.dividerRow}>
-              <View style={[styles.divLine, { backgroundColor: theme.BORDER }]} />
-              <Text style={[styles.divText, { color: theme.MUTED }]}>
-                OR CONTINUE WITH
-              </Text>
-              <View style={[styles.divLine, { backgroundColor: theme.BORDER }]} />
-            </View>
-
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={handleGoogleSignIn}
-              disabled={isLoading}
-              style={[
-                styles.googleBtn,
-                { backgroundColor: theme.CARD, borderColor: theme.BORDER },
-              ]}
-            >
-              <Image
-                source={require('../../../assets/images/Logo-google-icon-PNG.png')}
-                style={styles.googleIcon}
-                resizeMode="contain"
+          {/* Actions */}
+          <FadeUp delay={260} style={styles.actions}>
+            <PrimaryButton
+              label="Log in"
+              onPress={handleLogin}
+              disabled={!canSubmit}
+              loading={isLoading}
+            />
+            <View style={styles.footerRow}>
+              <Text style={styles.footerText}>Don't have an account? </Text>
+              <TextButton
+                label="Create one"
+                onPress={() => navigation.navigate('Register')}
+                textStyle={[styles.link, styles.footerLink]}
               />
-              <Text style={[styles.googleBtnText, { color: theme.TEXT }]}>
-                Continue with Google
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Bottom Register Account Link */}
-          <View style={styles.footerRow}>
-            <Text style={[styles.footerText, { color: theme.MUTED }]}>
-              New to EZFinance?
-            </Text>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => navigation.navigate('Register')}
-            >
-              <Text style={[styles.signupLink, { color: theme.TEXT }]}>
-                Create Account
-              </Text>
-            </TouchableOpacity>
-          </View>
+            </View>
+          </FadeUp>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -296,178 +150,88 @@ export const LoginScreen = () => {
 
 export default LoginScreen;
 
-const styles = StyleSheet.create({
+const createStyles = (A: AuthPalette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: A.BG,
   },
-  scrollContent: {
-    paddingHorizontal: 16,
+  flex: { flex: 1 },
+  scroll: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
   },
-  headerRow: {
-    marginBottom: 20,
-    paddingHorizontal: 4,
+  backBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
   },
-  sectionMargin: {
-    marginBottom: 20,
-  },
-  heroTag: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    marginBottom: 8,
-    paddingHorizontal: 4,
-  },
-  heroTitle: {
-    fontSize: 40,
-    fontWeight: '800',
-    letterSpacing: -1.8,
-    lineHeight: 46,
-    marginBottom: 12,
-    paddingHorizontal: 4,
-  },
-  heroSubtitle: {
-    fontSize: 14,
-    lineHeight: 22,
-    paddingHorizontal: 4,
-    marginBottom: 20,
-  },
-  trustRow: {
+  backRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 4,
+    gap: 5,
   },
-  avatarStack: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatarDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
-  },
-  avatarCountDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    marginLeft: -10,
-  },
-  avatarCountText: {
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  trustText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  formCard: {
-    borderRadius: 28,
-    padding: 24,
-  },
-  cardTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    letterSpacing: -0.8,
-    marginBottom: 4,
-  },
-  cardSub: {
-    fontSize: 12,
-    lineHeight: 18,
-    marginBottom: 20,
-  },
-  fieldGroup: {
-    marginBottom: 16,
-  },
-  fieldLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    marginBottom: 8,
-  },
-  labelForgotRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  forgotText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  inputInnerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    height: 50,
-  },
-  textInput: {
-    flex: 1,
+  backText: {
+    color: A.MUTED,
     fontSize: 15,
-    fontWeight: '600',
-    padding: 0,
   },
-  submitBtn: {
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
+  heading: { marginTop: 24 },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: A.TEXT,
+    letterSpacing: -0.6,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: A.MUTED,
     marginTop: 8,
+    letterSpacing: -0.1,
   },
-  submitText: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-    paddingHorizontal: 8,
-  },
-  divLine: {
-    flex: 1,
-    height: 1,
-  },
-  divText: {
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-  },
-  googleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    height: 52,
-    borderRadius: 26,
+  card: {
+    marginTop: 28,
+    backgroundColor: A.CARD,
     borderWidth: 1,
+    borderColor: A.CARD_BORDER,
+    borderRadius: 24,
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    boxShadow: A.CARD_SHADOW,
+    gap: 14,
   },
-  googleIcon: {
-    width: 20,
-    height: 20,
+  cardEdge: {
+    position: 'absolute',
+    top: 0,
+    left: '10%',
+    right: '10%',
+    height: 1,
+    experimental_backgroundImage:
+      `linear-gradient(90deg, transparent, ${A.INK(0.12)}, transparent)`,
   },
-  googleBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
+  forgotRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 2,
+  },
+  link: {
+    color: A.LINK,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  actions: {
+    gap: 16,
+    marginTop: 28,
   },
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 4,
   },
   footerText: {
-    fontSize: 13,
+    fontSize: 14,
+    color: A.MUTED,
   },
-  signupLink: {
-    fontSize: 13,
-    fontWeight: '800',
+  footerLink: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

@@ -4,7 +4,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Modal,
   Pressable,
   StyleSheet,
   StatusBar,
@@ -23,6 +22,7 @@ import {
   goalPct,
   totalEarmarked,
 } from '../../../constants/savingsGoals';
+import { AnimatedModal } from '../../../components/AnimatedModal';
 
 type GoalOverlay = null | 'streak' | 'options' | 'yield' | 'activity' | 'archive';
 
@@ -340,7 +340,7 @@ export const GoalsScreen = () => {
       </ScrollView>
 
       {/* ── Options action sheet ── */}
-      <Modal
+      <AnimatedModal
         visible={overlay === 'options'}
         transparent
         animationType="slide"
@@ -386,10 +386,10 @@ export const GoalsScreen = () => {
             </TouchableOpacity>
           ))}
         </View>
-      </Modal>
+      </AnimatedModal>
 
       {/* ── Yield projection sheet ── */}
-      <Modal
+      <AnimatedModal
         visible={overlay === 'yield'}
         transparent
         animationType="slide"
@@ -438,10 +438,10 @@ export const GoalsScreen = () => {
             </View>
           ))}
         </View>
-      </Modal>
+      </AnimatedModal>
 
       {/* ── Contribution activity sheet ── */}
-      <Modal
+      <AnimatedModal
         visible={overlay === 'activity'}
         transparent
         animationType="slide"
@@ -498,10 +498,10 @@ export const GoalsScreen = () => {
             </View>
           ))}
         </View>
-      </Modal>
+      </AnimatedModal>
 
       {/* ── Archive confirmation ── */}
-      <Modal
+      <AnimatedModal
         visible={overlay === 'archive'}
         transparent
         animationType="fade"
@@ -547,7 +547,7 @@ export const GoalsScreen = () => {
             </View>
           </View>
         </View>
-      </Modal>
+      </AnimatedModal>
     </View>
   );
 };
@@ -683,7 +683,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'transparent',
   },
   sheet: {
     position: 'absolute',

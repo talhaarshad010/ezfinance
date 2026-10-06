@@ -81,7 +81,7 @@ export const LogContributionScreen = () => {
         <TouchableOpacity
           activeOpacity={0.85}
           onPress={() => navigation.goBack()}
-          style={[styles.backButton, { backgroundColor: theme.CARD }]}
+          style={[styles.backButton, { backgroundColor: theme.MODAL }]}
         >
           <Feather name="chevron-left" size={16} color={theme.TEXT} />
         </TouchableOpacity>
@@ -169,7 +169,7 @@ export const LogContributionScreen = () => {
                   key={v}
                   activeOpacity={0.85}
                   onPress={() => setAmount(String(v))}
-                  style={[styles.quickBtn, { backgroundColor: theme.CARD }]}
+                  style={[styles.quickBtn, { backgroundColor: theme.MODAL }]}
                 >
                   <Text style={[styles.quickText, { color: theme.ACTIVE }]}>
                     +{(v / 1000).toFixed(0)}k
@@ -185,7 +185,7 @@ export const LogContributionScreen = () => {
                   key={k}
                   activeOpacity={0.8}
                   onPress={() => tapKey(k)}
-                  style={[styles.key, { backgroundColor: theme.CARD }]}
+                  style={[styles.key, { backgroundColor: theme.MODAL }]}
                 >
                   <Text
                     style={[

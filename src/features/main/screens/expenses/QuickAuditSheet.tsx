@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Modal,
   StyleSheet,
   Pressable,
   TextInput,
@@ -14,6 +13,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../../context/ThemeContext';
 import { LedgerTransaction } from '../../../../constants/ledgerData';
+import { AnimatedModal } from '../../../../components/AnimatedModal';
 
 interface QuickAuditSheetProps {
   visible: boolean;
@@ -53,7 +53,7 @@ export default function QuickAuditSheet({
   ];
 
   return (
-    <Modal
+    <AnimatedModal
       visible={visible}
       transparent
       animationType="slide"
@@ -155,7 +155,7 @@ export default function QuickAuditSheet({
           </View>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
@@ -186,7 +186,7 @@ export function TransactionDetailModal({
   ];
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <AnimatedModal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
           style={[
@@ -257,7 +257,7 @@ export function TransactionDetailModal({
           </View>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
@@ -309,7 +309,7 @@ export function EditTxModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <AnimatedModal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
           style={[
@@ -393,7 +393,7 @@ export function EditTxModal({
           </TouchableOpacity>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
@@ -421,7 +421,7 @@ export function SplitTxModal({
   if (!tx) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <AnimatedModal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
           style={[
@@ -478,7 +478,7 @@ export function SplitTxModal({
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 }}>
               <TouchableOpacity
                 onPress={() => setSplit1(Math.max(0, split1 - 500))}
-                style={[styles.stepBtn, { backgroundColor: theme.CARD }]}
+                style={[styles.stepBtn, { backgroundColor: theme.MODAL }]}
               >
                 <Text style={{ color: theme.TEXT, fontSize: 16 }}>−</Text>
               </TouchableOpacity>
@@ -487,7 +487,7 @@ export function SplitTxModal({
               </Text>
               <TouchableOpacity
                 onPress={() => setSplit1(Math.min(total, split1 + 500))}
-                style={[styles.stepBtn, { backgroundColor: theme.CARD }]}
+                style={[styles.stepBtn, { backgroundColor: theme.MODAL }]}
               >
                 <Text style={{ color: theme.TEXT, fontSize: 16 }}>+</Text>
               </TouchableOpacity>
@@ -537,7 +537,7 @@ export function SplitTxModal({
           </TouchableOpacity>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
@@ -557,7 +557,7 @@ export function DeleteConfirmModal({
   if (!tx) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <AnimatedModal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.centerBackdrop} onPress={onClose}>
         <Pressable
           style={[styles.dialogCard, { backgroundColor: theme.CARD }]}
@@ -602,19 +602,19 @@ export function DeleteConfirmModal({
           </View>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   centerBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,

@@ -12,7 +12,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Typography, Button, Logo } from '../../../components';
 import { colors } from '../../../theme/colors';
 import { useToast } from '../../../context/ToastContext';
-import { verifyOTP, generateOTP } from '../../../services/authService';
 import Feather from 'react-native-vector-icons/Feather';
 
 interface OTPVerificationScreenProps {
@@ -76,7 +75,7 @@ const OTPVerificationScreen: React.FC<OTPVerificationScreenProps> = ({
     }
   };
 
-  const handleVerify = async () => {
+  const handleVerify = () => {
     const code = otp.join('');
     if (code.length !== OTP_LENGTH) {
       showToast('Please enter the complete 6-digit code.', 'error');
@@ -84,31 +83,20 @@ const OTPVerificationScreen: React.FC<OTPVerificationScreenProps> = ({
     }
 
     setIsLoading(true);
-    try {
-      await verifyOTP(uid, code);
+    setTimeout(() => {
+      setIsLoading(false);
       showToast('Verification successful!', 'success');
       onVerified();
-    } catch (error: any) {
-      showToast(error.message || 'Invalid OTP code.', 'error');
-      setOtp(Array(OTP_LENGTH).fill(''));
-      inputRefs.current[0]?.focus();
-    } finally {
-      setIsLoading(false);
-    }
+    }, 400);
   };
 
-  const handleResend = async () => {
+  const handleResend = () => {
     if (resendTimer > 0) return;
-    try {
-      const newOtp = await generateOTP(uid);
-      // DEV SIMULATION: Show OTP in toast (replace with email sending in production)
-      showToast(`Your OTP code is: ${newOtp}`, 'info', 'Verification Code', 15000);
-      setResendTimer(RESEND_COOLDOWN);
-      setOtp(Array(OTP_LENGTH).fill(''));
-      inputRefs.current[0]?.focus();
-    } catch (error) {
-      showToast('Failed to resend code.', 'error');
-    }
+    const newOtp = '123456';
+    showToast(`Your demo OTP code is: ${newOtp}`, 'info', 'Verification Code', 15000);
+    setResendTimer(RESEND_COOLDOWN);
+    setOtp(Array(OTP_LENGTH).fill(''));
+    inputRefs.current[0]?.focus();
   };
 
   const maskedEmail = email.replace(/(.{2})(.*)(@.*)/, '$1***$3');

@@ -5,7 +5,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Modal,
   Pressable,
   ActivityIndicator,
   StyleSheet,
@@ -22,10 +21,7 @@ import {
   updateCategory,
   BudgetCategory,
 } from '../../../store/slices/budgetSlice';
-import {
-  saveCategory,
-  updateCategory as updateCategoryInDb,
-} from '../../../services/budgetService';
+import { AnimatedModal } from '../../../components/AnimatedModal';
 
 const ICONS = [
   'coffee',
@@ -110,7 +106,7 @@ export const AddCategoryScreen = () => {
     }
 
     setIsSaving(true);
-    try {
+    setTimeout(() => {
       if (editingCategory) {
         const categoryData: BudgetCategory = {
           id: editingCategory.id,
@@ -120,27 +116,23 @@ export const AddCategoryScreen = () => {
           color,
           isMain: editingCategory.isMain || false,
         };
-        await updateCategoryInDb(categoryData);
         dispatch(updateCategory(categoryData));
         showToast('Category updated successfully.', 'success', 'Success');
       } else {
-        const categoryData: Omit<BudgetCategory, 'id'> = {
+        const categoryData: BudgetCategory = {
+          id: 'cat_' + Date.now(),
           name: name.trim(),
           limit: parseFloat(limit),
           icon,
           color,
           isMain: false,
         };
-        const savedCategory = await saveCategory(categoryData);
-        dispatch(addCategory(savedCategory));
+        dispatch(addCategory(categoryData));
         showToast('New category added successfully.', 'success', 'Success');
       }
-      navigation.goBack();
-    } catch (e) {
-      showToast('Failed to save category. Please try again.', 'error', 'Error');
-    } finally {
       setIsSaving(false);
-    }
+      navigation.goBack();
+    }, 200);
   };
 
   return (
@@ -328,7 +320,7 @@ export const AddCategoryScreen = () => {
       </ScrollView>
 
       {/* Icon Picker Bottom Sheet Modal */}
-      <Modal
+      <AnimatedModal
         visible={showIconPicker}
         transparent
         animationType="slide"
@@ -390,7 +382,7 @@ export const AddCategoryScreen = () => {
             </TouchableOpacity>
           </Pressable>
         </Pressable>
-      </Modal>
+      </AnimatedModal>
     </View>
   );
 };
@@ -570,7 +562,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   sheetContent: {

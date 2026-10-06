@@ -4,7 +4,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Modal,
   Pressable,
   Animated,
   StyleSheet,
@@ -14,6 +13,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
+import { AnimatedModal } from '../../../components/AnimatedModal';
 
 interface LoanItem {
   id: number;
@@ -124,6 +124,8 @@ function PaymentKeypad({
   const [method, setMethod] = useState('1link');
   const [val, setVal] = useState(String(loan.emi));
   const [done, setDone] = useState(false);
+  const [open, setOpen] = useState(true);
+  const close = () => setOpen(false);
 
   const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '000', '0', '⌫'];
 
@@ -140,12 +142,18 @@ function PaymentKeypad({
       'success',
       'EMI Payment',
     );
-    setTimeout(onClose, 1800);
+    setTimeout(close, 1800);
   }
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.modalOverlay} onPress={onClose}>
+    <AnimatedModal
+      visible={open}
+      transparent
+      animationType="slide"
+      onRequestClose={close}
+      onDismissed={onClose}
+    >
+      <Pressable style={styles.modalOverlay} onPress={close}>
         <Pressable
           style={[styles.sheetContent, { backgroundColor: theme.CARD }]}
           onPress={e => e.stopPropagation()}
@@ -160,7 +168,7 @@ function PaymentKeypad({
               </Text>
             </View>
             <TouchableOpacity
-              onPress={onClose}
+              onPress={close}
               style={[styles.closeBtn, { backgroundColor: theme.MODAL }]}
             >
               <Feather name="x" size={16} color={theme.MUTED} />
@@ -258,7 +266,7 @@ function PaymentKeypad({
           )}
         </Pressable>
       </Pressable>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
@@ -644,7 +652,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   sheetContent: {

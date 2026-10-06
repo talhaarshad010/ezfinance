@@ -1,9 +1,30 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
+import Svg, { Path, Line } from 'react-native-svg';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
+
+type IconProps = { size: number; color: string; strokeWidth: number };
+
+// Thin outline Home icon
+const HomeIcon = ({ size, color, strokeWidth }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z" />
+    <Path d="M9 21V12h6v9" />
+  </Svg>
+);
+
+// Thin outline Receipt icon
+const ReceiptIcon = ({ size, color, strokeWidth }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M4 2h16v22l-2.5-1.5L15 22l-2.5-1.5L10 22l-2.5-1.5L5 22 4 22V2z" />
+    <Line x1="8" y1="8" x2="16" y2="8" />
+    <Line x1="8" y1="12" x2="16" y2="12" />
+    <Line x1="8" y1="16" x2="12" y2="16" />
+  </Svg>
+);
 
 export const CustomBottomNav = ({
   state,
@@ -15,9 +36,9 @@ export const CustomBottomNav = ({
   const getIconName = (routeName: string) => {
     switch (routeName) {
       case 'Home':
-        return 'grid';
+        return 'home';
       case 'Expenses':
-        return 'list';
+        return 'receipt';
       case 'AI Advisor':
         return 'message-square';
       case 'Investments':
@@ -42,6 +63,7 @@ export const CustomBottomNav = ({
       {state.routes.map((route, index) => {
         const isFocused = state.index === index;
         const iconName = getIconName(route.name);
+        const iconColor = isFocused ? '#FFFFFF' : theme.DOCK_INACTIVE;
 
         const onPress = () => {
           const event = navigation.emit({
@@ -67,11 +89,17 @@ export const CustomBottomNav = ({
               },
             ]}
           >
-            <Feather
-              name={iconName}
-              size={17}
-              color={isFocused ? '#FFFFFF' : theme.DOCK_INACTIVE}
-            />
+            {iconName === 'home' ? (
+              <HomeIcon size={17} strokeWidth={isFocused ? 2.2 : 1.7} color={iconColor} />
+            ) : iconName === 'receipt' ? (
+              <ReceiptIcon size={17} strokeWidth={isFocused ? 2.2 : 1.7} color={iconColor} />
+            ) : (
+              <Feather
+                name={iconName}
+                size={17}
+                color={iconColor}
+              />
+            )}
           </TouchableOpacity>
         );
       })}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 import Feather from 'react-native-vector-icons/Feather';
 import Svg, { Path, Defs, LinearGradient, Stop, Polyline } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import {
@@ -32,6 +33,8 @@ import {
   FundItem,
 } from '../../../constants/investmentData';
 
+import { InvestmentComingSoon } from './investments/InvestmentComingSoon';
+import { FadeInView } from '../../../components';
 import {
   RiskSelectorSheet,
   FundCompareSheet,
@@ -117,7 +120,7 @@ function SvgAreaChart({
 
 // ── Main Screen ──────────────────────────────────────────────────────────────
 
-export const InvestmentsScreen = () => {
+const InvestmentHub = () => {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { showToast } = useToast();
@@ -146,15 +149,26 @@ export const InvestmentsScreen = () => {
   const view = viewStack[viewStack.length - 1];
   const isRoot = ['dashboard', 'marketplace', 'secp0'].includes(view);
 
-  const nav = (v: WealthView) => setViewStack(s => [...s, v]);
-  const back = () =>
+  // Direction of the last in-hub navigation, used for the view transition
+  const navDir = useRef<'forward' | 'back' | 'up'>('up');
+
+  const nav = (v: WealthView) => {
+    navDir.current = 'forward';
+    setViewStack(s => [...s, v]);
+  };
+  const back = () => {
+    navDir.current = 'back';
     setViewStack(s => {
       if (s.length > 1) {
         return s.slice(0, -1);
       }
       return ['dashboard'];
     });
-  const root = (v: WealthView) => setViewStack([v]);
+  };
+  const root = (v: WealthView) => {
+    navDir.current = 'up';
+    setViewStack([v]);
+  };
 
   const selectedFund = ALL_FUNDS.find(f => f.id === selectedFundId) ?? ALL_FUNDS[0];
   const selectedAmc = AMCS.find(a => a.id === selectedAmcId) ?? AMCS[0];
@@ -292,6 +306,7 @@ export const InvestmentsScreen = () => {
           },
         ]}
       >
+        <FadeInView key={view} from={navDir.current} distance={28}>
         {/* Top Header */}
         <View style={styles.headerWrapper}>
           {view !== 'dashboard' && (
@@ -319,7 +334,9 @@ export const InvestmentsScreen = () => {
                   onPress={() => root('dashboard')}
                   style={[
                     styles.iconBtn,
-                    { backgroundColor: view === 'dashboard' ? theme.TEXT : theme.CARD },
+                    {
+                      backgroundColor: view === 'dashboard' ? theme.TEXT : theme.CARD,
+                    },
                   ]}
                 >
                   <Feather
@@ -337,7 +354,9 @@ export const InvestmentsScreen = () => {
                   }}
                   style={[
                     styles.iconBtn,
-                    { backgroundColor: view === 'marketplace' ? theme.TEXT : theme.CARD },
+                    {
+                      backgroundColor: view === 'marketplace' ? theme.TEXT : theme.CARD,
+                    },
                   ]}
                 >
                   <Feather
@@ -355,7 +374,9 @@ export const InvestmentsScreen = () => {
                   }}
                   style={[
                     styles.iconBtn,
-                    { backgroundColor: view.startsWith('secp') ? theme.TEXT : theme.CARD },
+                    {
+                      backgroundColor: view.startsWith('secp') ? theme.TEXT : theme.CARD,
+                    },
                   ]}
                 >
                   <Feather
@@ -1905,6 +1926,7 @@ export const InvestmentsScreen = () => {
             </TouchableOpacity>
           </View>
         )}
+        </FadeInView>
       </ScrollView>
 
       {/* ── OVERLAYS ── */}
@@ -1943,6 +1965,7 @@ export const InvestmentsScreen = () => {
         amount={investAmount}
         onClose={() => {
           setOverlay(null);
+          navDir.current = 'forward';
           setViewStack(['dashboard', 'positions']);
         }}
       />
@@ -1963,6 +1986,26 @@ export const InvestmentsScreen = () => {
         }}
       />
     </View>
+  );
+};
+
+// Shows the "Coming Soon" splash first; resets every time the tab is left,
+// so returning to Investments always lands on the splash again.
+export const InvestmentsScreen = () => {
+  const [revealed, setRevealed] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => setRevealed(false);
+    }, []),
+  );
+
+  return revealed ? (
+    <FadeInView style={{ flex: 1 }} duration={380}>
+      <InvestmentHub />
+    </FadeInView>
+  ) : (
+    <InvestmentComingSoon onExplore={() => setRevealed(true)} />
   );
 };
 

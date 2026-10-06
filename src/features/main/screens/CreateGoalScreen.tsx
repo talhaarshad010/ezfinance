@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
-import { CalendarPicker } from '../../../components';
+import { CalendarPicker, FadeInView } from '../../../components';
 import { GOAL_ICONS } from '../../../constants/savingsGoals';
 
 type CreateStep = 1 | 2 | 3;
@@ -35,6 +35,11 @@ export const CreateGoalScreen = () => {
   const { showToast } = useToast();
 
   const [step, setStep] = useState<CreateStep>(1);
+  const prevStep = useRef(step);
+  const stepDir = step >= prevStep.current ? 'forward' : 'back';
+  useEffect(() => {
+    prevStep.current = step;
+  }, [step]);
   const [iconIdx, setIconIdx] = useState(0);
   const [name, setName] = useState('');
   const [targetAmt, setTargetAmt] = useState('');
@@ -133,7 +138,7 @@ export const CreateGoalScreen = () => {
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={() => (step === 1 ? navigation.goBack() : setStep((step - 1) as CreateStep))}
-            style={[styles.backButton, { backgroundColor: theme.CARD }]}
+            style={[styles.backButton, { backgroundColor: theme.MODAL }]}
           >
             <Feather name="chevron-left" size={16} color={theme.TEXT} />
           </TouchableOpacity>
@@ -161,6 +166,7 @@ export const CreateGoalScreen = () => {
         </View>
 
         {/* ── Step 1 ── */}
+        <FadeInView key={step} from={stepDir} distance={24}>
         {step === 1 && (
           <View style={styles.body}>
             <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
@@ -229,7 +235,7 @@ export const CreateGoalScreen = () => {
                   key={k}
                   activeOpacity={0.8}
                   onPress={() => tapKey(k)}
-                  style={[styles.key, { backgroundColor: theme.CARD }]}
+                  style={[styles.key, { backgroundColor: theme.MODAL }]}
                 >
                   <Text
                     style={[
@@ -372,6 +378,7 @@ export const CreateGoalScreen = () => {
             </TouchableOpacity>
           </View>
         )}
+        </FadeInView>
       </ScrollView>
 
       <CalendarPicker

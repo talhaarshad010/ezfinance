@@ -9,8 +9,8 @@ import { ToastProvider } from './context/ToastContext';
 import Toast from './components/Toast';
 import { Provider } from 'react-redux';
 import { store } from './store';
-import { FirebaseSyncProvider } from './components/FirebaseSyncProvider';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { hideNativeSplash } from './utils/nativeSplash';
 
 function NavigationWrapper() {
   const { theme } = useTheme();
@@ -27,7 +27,7 @@ function NavigationWrapper() {
   };
 
   return (
-    <NavigationContainer theme={customNavTheme}>
+    <NavigationContainer theme={customNavTheme} onReady={hideNativeSplash}>
       <AppNavigator />
     </NavigationContainer>
   );
@@ -37,12 +37,10 @@ function App(): React.JSX.Element {
   return (
     <Provider store={store}>
       <ThemeProvider>
-        <FirebaseSyncProvider>
-          <ToastProvider>
-            <NavigationWrapper />
-            <Toast />
-          </ToastProvider>
-        </FirebaseSyncProvider>
+        <ToastProvider>
+          <NavigationWrapper />
+          <Toast />
+        </ToastProvider>
       </ThemeProvider>
     </Provider>
   );

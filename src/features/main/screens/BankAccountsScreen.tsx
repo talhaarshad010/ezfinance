@@ -1,35 +1,28 @@
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Modal,
   Pressable,
   StyleSheet,
   StatusBar,
   ActivityIndicator,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import { useAppSelector, useAppDispatch } from '../../../store/hooks';
 import {
-  setAccounts,
-  setLoading,
   removeAccount,
   updateAccountBalance,
   BankAccount,
 } from '../../../store/slices/bankAccountsSlice';
-import {
-  fetchAccounts,
-  deleteAccount,
-  updateBalance,
-} from '../../../services/bankAccountService';
 import { getBankById } from '../../../constants/pakistaniBanks';
+import { AnimatedModal } from '../../../components/AnimatedModal';
 
 function maskAccountNumber(accNo: string): string {
   if (!accNo) return '•••• 0000';
@@ -54,22 +47,6 @@ export const BankAccountsScreen = () => {
   const [newBalanceInput, setNewBalanceInput] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
 
-  const loadAccounts = useCallback(async () => {
-    try {
-      dispatch(setLoading(true));
-      const data = await fetchAccounts();
-      dispatch(setAccounts(data));
-    } catch (e) {
-      console.error('Failed to load accounts:', e);
-    }
-  }, [dispatch]);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadAccounts();
-    }, [loadAccounts]),
-  );
-
   const totalBalance = accounts.reduce((acc, a) => acc + a.balance, 0);
 
   const handleOpenBalanceModal = (acc: BankAccount) => {
@@ -78,7 +55,7 @@ export const BankAccountsScreen = () => {
     setBalanceModalVisible(true);
   };
 
-  const handleSaveBalance = async () => {
+  const handleSaveBalance = () => {
     if (!selectedAccount) return;
     const val = parseFloat(newBalanceInput);
     if (isNaN(val) || val < 0) {
@@ -87,37 +64,28 @@ export const BankAccountsScreen = () => {
     }
 
     setIsUpdating(true);
-    try {
-      await updateBalance(selectedAccount.id, val);
+    setTimeout(() => {
       dispatch(
         updateAccountBalance({ accountId: selectedAccount.id, balance: val }),
       );
       setBalanceModalVisible(false);
+      setIsUpdating(false);
       showToast(
         `Balance for ${selectedAccount.bankName} updated to PKR ${val.toLocaleString()}`,
         'success',
         'Balance Updated',
       );
-    } catch (e) {
-      showToast('Failed to update balance.', 'error', 'Error');
-    } finally {
-      setIsUpdating(false);
-    }
+    }, 200);
   };
 
-  const handleConfirmRemove = async (acc: BankAccount) => {
-    try {
-      setActionMenuVisible(false);
-      await deleteAccount(acc.id);
-      dispatch(removeAccount(acc.id));
-      showToast(
-        `${acc.bankName} account removed successfully.`,
-        'success',
-        'Account Removed',
-      );
-    } catch (e) {
-      showToast('Failed to remove account.', 'error', 'Error');
-    }
+  const handleConfirmRemove = (acc: BankAccount) => {
+    setActionMenuVisible(false);
+    dispatch(removeAccount(acc.id));
+    showToast(
+      `${acc.bankName} account removed successfully.`,
+      'success',
+      'Account Removed',
+    );
   };
 
   return (
@@ -372,7 +340,7 @@ export const BankAccountsScreen = () => {
       </ScrollView>
 
       {/* Edit / Update Balance Modal Sheet */}
-      <Modal
+      <AnimatedModal
         visible={balanceModalVisible}
         transparent
         animationType="slide"
@@ -437,10 +405,10 @@ export const BankAccountsScreen = () => {
             </TouchableOpacity>
           </Pressable>
         </Pressable>
-      </Modal>
+      </AnimatedModal>
 
       {/* Account Options Menu Modal */}
-      <Modal
+      <AnimatedModal
         visible={actionMenuVisible}
         transparent
         animationType="fade"
@@ -485,7 +453,7 @@ export const BankAccountsScreen = () => {
             </TouchableOpacity>
           </View>
         </Pressable>
-      </Modal>
+      </AnimatedModal>
     </View>
   );
 };
@@ -706,7 +674,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   sheetContent: {

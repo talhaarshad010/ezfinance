@@ -1,5 +1,9 @@
 import React from 'react';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Easing } from 'react-native';
+import {
+  createBottomTabNavigator,
+  BottomTabNavigationOptions,
+} from '@react-navigation/bottom-tabs';
 
 import DashboardScreen from '../features/main/screens/DashboardScreen';
 import ExpensesScreen from '../features/main/screens/ExpensesScreen';
@@ -11,6 +15,30 @@ import { useTheme } from '../context/ThemeContext';
 
 const Tab = createBottomTabNavigator();
 
+// Soft cross-fade with a slight horizontal glide toward the selected tab.
+const tabTransition: BottomTabNavigationOptions = {
+  transitionSpec: {
+    animation: 'timing',
+    config: { duration: 280, easing: Easing.bezier(0.22, 1, 0.36, 1) },
+  },
+  sceneStyleInterpolator: ({ current }) => ({
+    sceneStyle: {
+      opacity: current.progress.interpolate({
+        inputRange: [-1, -0.5, 0, 0.5, 1],
+        outputRange: [0, 0, 1, 0, 0],
+      }),
+      transform: [
+        {
+          translateX: current.progress.interpolate({
+            inputRange: [-1, 0, 1],
+            outputRange: [-28, 0, 28],
+          }),
+        },
+      ],
+    },
+  }),
+};
+
 export const MainNavigator = () => {
   const { theme } = useTheme();
 
@@ -19,7 +47,7 @@ export const MainNavigator = () => {
       tabBar={props => <CustomBottomNav {...props} />}
       screenOptions={{
         headerShown: false,
-        animation: 'fade',
+        ...tabTransition,
         sceneStyle: { backgroundColor: theme.BG },
       }}
     >

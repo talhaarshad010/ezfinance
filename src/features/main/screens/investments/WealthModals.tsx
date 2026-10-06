@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Modal,
   StyleSheet,
   Pressable,
   ActivityIndicator,
@@ -12,6 +11,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../../context/ThemeContext';
 import { ALL_FUNDS, FundItem } from '../../../../constants/investmentData';
+import { AnimatedModal } from '../../../../components/AnimatedModal';
 
 // ── 1. Risk Selector Sheet ───────────────────────────────────────────────────
 export function RiskSelectorSheet({
@@ -36,7 +36,7 @@ export function RiskSelectorSheet({
   const activeSnap = value <= 4 ? 0 : value <= 7 ? 1 : 2;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <AnimatedModal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
           style={[
@@ -158,7 +158,7 @@ export function RiskSelectorSheet({
           </TouchableOpacity>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
@@ -192,7 +192,7 @@ export function FundCompareSheet({
   ];
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <AnimatedModal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
           style={[
@@ -259,7 +259,7 @@ export function FundCompareSheet({
           </View>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
@@ -301,7 +301,7 @@ export function InvestKeypadSheet({
   const estMonthly = Math.round((num * ((fund.yieldPct ?? 12.8) / 100)) / 12);
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <AnimatedModal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
           style={[
@@ -388,7 +388,7 @@ export function InvestKeypadSheet({
           </TouchableOpacity>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
@@ -409,7 +409,7 @@ export function ExecSuccessModal({
   const { theme } = useTheme();
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <AnimatedModal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.centerBackdrop} onPress={onClose}>
         <Pressable
           style={[styles.successCard, { backgroundColor: theme.CARD }]}
@@ -447,7 +447,7 @@ export function ExecSuccessModal({
           </TouchableOpacity>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
@@ -482,7 +482,7 @@ export function BiometricSheet({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <AnimatedModal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
           style={[
@@ -573,7 +573,7 @@ export function BiometricSheet({
           </TouchableOpacity>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
@@ -610,7 +610,7 @@ export function VerifyPendingDialog({
   const done = progress >= 100;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <AnimatedModal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.centerBackdrop} onPress={done ? onClose : undefined}>
         <Pressable
           style={[styles.successCard, { backgroundColor: theme.CARD }]}
@@ -659,19 +659,19 @@ export function VerifyPendingDialog({
           )}
         </Pressable>
       </Pressable>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   centerBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,

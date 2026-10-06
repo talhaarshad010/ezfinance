@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Modal,
   Pressable,
   ScrollView,
   StatusBar,
@@ -19,6 +18,7 @@ import {
   EXPENSE_CATEGORIES,
   LINKED_ACCOUNTS,
 } from '../../../../constants/ledgerData';
+import { AnimatedModal } from '../../../../components/AnimatedModal';
 
 type AddMode = 'out' | 'in' | 'transfer';
 type CaptureStep =
@@ -194,7 +194,7 @@ function CameraViewfinderSheet({
   const [flashOn, setFlashOn] = useState(false);
 
   return (
-    <Modal
+    <AnimatedModal
       visible={visible}
       animationType="fade"
       onRequestClose={onClose}
@@ -258,7 +258,7 @@ function CameraViewfinderSheet({
           </TouchableOpacity>
         </View>
       </View>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
@@ -293,7 +293,7 @@ function OcrResultSheet({
   ];
 
   return (
-    <Modal
+    <AnimatedModal
       visible={visible}
       animationType="slide"
       onRequestClose={onClose}
@@ -316,7 +316,7 @@ function OcrResultSheet({
           </View>
           <TouchableOpacity
             onPress={onClose}
-            style={[styles.ocrCloseBtn, { backgroundColor: theme.CARD }]}
+            style={[styles.ocrCloseBtn, { backgroundColor: theme.MODAL }]}
           >
             <Feather name="x" size={14} color={theme.MUTED} />
           </TouchableOpacity>
@@ -400,7 +400,7 @@ function OcrResultSheet({
           <TouchableOpacity
             activeOpacity={0.9}
             onPress={onEdit}
-            style={[styles.ocrBtn, { backgroundColor: theme.CARD }]}
+            style={[styles.ocrBtn, { backgroundColor: theme.MODAL }]}
           >
             <Text style={[styles.ocrBtnText, { color: theme.TEXT }]}>
               Edit Fields
@@ -417,7 +417,7 @@ function OcrResultSheet({
           </TouchableOpacity>
         </View>
       </View>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
@@ -550,7 +550,7 @@ function RecurringSetupSheet({
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={() => setRemindDays(d => Math.max(1, d - 1))}
-            style={[styles.stepBtn, { backgroundColor: theme.CARD }]}
+            style={[styles.stepBtn, { backgroundColor: theme.MODAL }]}
           >
             <Feather name="minus" size={14} color={theme.TEXT} />
           </TouchableOpacity>
@@ -560,7 +560,7 @@ function RecurringSetupSheet({
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={() => setRemindDays(d => Math.min(14, d + 1))}
-            style={[styles.stepBtn, { backgroundColor: theme.CARD }]}
+            style={[styles.stepBtn, { backgroundColor: theme.MODAL }]}
           >
             <Feather name="plus" size={14} color={theme.TEXT} />
           </TouchableOpacity>
@@ -692,7 +692,7 @@ export function AddEntrySheet({
 
   return (
     <>
-      <Modal
+      <AnimatedModal
         visible={visible}
         transparent
         animationType="slide"
@@ -889,7 +889,7 @@ export function AddEntrySheet({
                             {
                               backgroundColor: proofAttached
                                 ? `${theme.GREEN}22`
-                                : theme.CARD,
+                                : theme.MODAL,
                             },
                           ]}
                         >
@@ -921,7 +921,7 @@ export function AddEntrySheet({
                               'Proof Saved',
                             );
                           }}
-                          style={[styles.proofBtn, { backgroundColor: theme.CARD }]}
+                          style={[styles.proofBtn, { backgroundColor: theme.MODAL }]}
                         >
                           <Feather name="paperclip" size={12} color={theme.MUTED} />
                           <Text
@@ -1011,7 +1011,7 @@ export function AddEntrySheet({
             </View>
           </ScrollView>
         </View>
-      </Modal>
+      </AnimatedModal>
 
       {/* Inner pickers */}
       <CategoryPickerSheet
@@ -1090,7 +1090,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'transparent',
   },
 
   /* Entry sheet shell */
@@ -1294,7 +1294,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
@@ -1360,7 +1360,7 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 23,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1383,7 +1383,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 11,
     borderRadius: 100,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.16)',
   },
   cameraPhotosText: { fontSize: 11, fontWeight: '600', color: '#FFFFFF' },
 

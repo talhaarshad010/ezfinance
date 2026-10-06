@@ -5,7 +5,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Modal,
   Pressable,
   StyleSheet,
   StatusBar,
@@ -17,6 +16,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
+import { AnimatedModal } from '../../../components/AnimatedModal';
 
 interface Msg {
   id: number;
@@ -73,12 +73,20 @@ const MEMORY = [
 ];
 
 function MemorySheet({ onClose }: { onClose: () => void }) {
+  const [open, setOpen] = useState(true);
+  const close = () => setOpen(false);
   const { theme } = useTheme();
   const { showToast } = useToast();
 
   return (
-    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable style={styles.modalOverlay} onPress={onClose}>
+    <AnimatedModal
+      visible={open}
+      animationType="slide"
+      transparent
+      onRequestClose={close}
+      onDismissed={onClose}
+    >
+      <Pressable style={styles.modalOverlay} onPress={close}>
         <Pressable
           style={[styles.sheetContent, { backgroundColor: theme.CARD }]}
           onPress={e => e.stopPropagation()}
@@ -94,7 +102,7 @@ function MemorySheet({ onClose }: { onClose: () => void }) {
             </View>
             <TouchableOpacity
               activeOpacity={0.7}
-              onPress={onClose}
+              onPress={close}
               style={[styles.closeBtn, { backgroundColor: theme.MODAL }]}
             >
               <Feather name="x" size={14} color={theme.MUTED} />
@@ -147,7 +155,7 @@ function MemorySheet({ onClose }: { onClose: () => void }) {
           </TouchableOpacity>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
@@ -237,6 +245,7 @@ export const AIAdvisorScreen = () => {
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
   const [showMem, setShowMem] = useState(false);
+  const [selectedQuick, setSelectedQuick] = useState<string | null>(null);
 
   const scrollRef = useRef<ScrollView>(null);
 
@@ -249,6 +258,7 @@ export const AIAdvisorScreen = () => {
   function send(text?: string) {
     const q = (text ?? input).trim();
     if (!q) return;
+    if (text) setSelectedQuick(text);
 
     const userMsg: Msg = { id: Date.now(), role: 'user', text: q };
     setMsgs(m => [...m, userMsg]);
@@ -310,18 +320,24 @@ export const AIAdvisorScreen = () => {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.quickContentContainer}
           >
-            {QUICK.map(q => (
-              <TouchableOpacity
-                key={q}
-                activeOpacity={0.8}
-                onPress={() => send(q)}
-                style={[styles.quickPill, { backgroundColor: theme.CARD }]}
-              >
-                <Text style={[styles.quickPillText, { color: theme.TEXT }]}>
-                  {q}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {QUICK.map(q => {
+              const active = selectedQuick === q;
+              return (
+                <TouchableOpacity
+                  key={q}
+                  activeOpacity={0.8}
+                  onPress={() => send(q)}
+                  style={[
+                    styles.quickPill,
+                    { backgroundColor: active ? theme.ACTIVE : theme.CARD },
+                  ]}
+                >
+                  <Text style={[styles.quickPillText, { color: active ? '#FFFFFF' : theme.TEXT }]}>
+                    {q}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
 
@@ -478,7 +494,7 @@ const styles = StyleSheet.create({
   },
   quickPillText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   chatScrollContent: {
     paddingHorizontal: 20,
@@ -562,7 +578,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   sheetContent: {

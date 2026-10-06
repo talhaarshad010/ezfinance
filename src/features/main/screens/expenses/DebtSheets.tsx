@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Modal,
   StyleSheet,
   Pressable,
   TextInput,
@@ -14,6 +13,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../../context/ThemeContext';
 import { DebtEntry } from '../../../../constants/ledgerData';
+import { AnimatedModal } from '../../../../components/AnimatedModal';
 
 interface AddDebtSheetProps {
   visible: boolean;
@@ -92,7 +92,7 @@ export function AddDebtSheet({
   const REMIND_OPTIONS = [1, 3, 5, 7];
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <AnimatedModal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
           style={[
@@ -326,7 +326,7 @@ export function AddDebtSheet({
           </TouchableOpacity>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
@@ -350,7 +350,7 @@ export function DebtReminderSheet({
   const earlyDate = `${earlyDay} ${currentMonth.split(' ')[0]}`;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <AnimatedModal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
           style={[
@@ -443,14 +443,14 @@ export function DebtReminderSheet({
           </View>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   sheet: {

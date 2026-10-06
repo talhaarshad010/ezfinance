@@ -5,7 +5,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Modal,
   Pressable,
   Animated,
   StyleSheet,
@@ -22,10 +21,7 @@ import {
   setTotalMonthlyBudget,
   BudgetCategory as IBudgetCategory,
 } from '../../../store/slices/budgetSlice';
-import {
-  updateMonthlyBudget,
-  deleteCategoryFromDb,
-} from '../../../services/budgetService';
+import { AnimatedModal } from '../../../components/AnimatedModal';
 
 const MONTHS = [
   'JANUARY',
@@ -153,18 +149,13 @@ export const BudgetPlannerScreen = () => {
     navigation.navigate('AddCategory', { category });
   };
 
-  const handleDeleteCategory = async (id: string) => {
-    try {
-      setMenuVisible(false);
-      await deleteCategoryFromDb(id);
-      dispatch(deleteCategory(id));
-      showToast('Category envelope deleted successfully.', 'success', 'Deleted');
-    } catch (e) {
-      showToast('Failed to delete category.', 'error', 'Error');
-    }
+  const handleDeleteCategory = (id: string) => {
+    setMenuVisible(false);
+    dispatch(deleteCategory(id));
+    showToast('Category envelope deleted successfully.', 'success', 'Deleted');
   };
 
-  const handleUpdateTotalBudget = async () => {
+  const handleUpdateTotalBudget = () => {
     const val = parseFloat(newBudgetInput);
     if (isNaN(val) || val < 0) {
       showToast('Please enter a valid budget amount.', 'error', 'Invalid Input');
@@ -180,18 +171,13 @@ export const BudgetPlannerScreen = () => {
       return;
     }
 
-    try {
-      await updateMonthlyBudget(val);
-      dispatch(setTotalMonthlyBudget(val));
-      setEditBudgetVisible(false);
-      showToast(
-        `Total monthly budget updated to PKR ${val.toLocaleString()}`,
-        'success',
-        'Budget Updated',
-      );
-    } catch (e) {
-      showToast('Failed to update budget.', 'error', 'Error');
-    }
+    dispatch(setTotalMonthlyBudget(val));
+    setEditBudgetVisible(false);
+    showToast(
+      `Total monthly budget updated to PKR ${val.toLocaleString()}`,
+      'success',
+      'Budget Updated',
+    );
   };
 
   return (
@@ -405,7 +391,7 @@ export const BudgetPlannerScreen = () => {
       </ScrollView>
 
       {/* Edit Budget Modal Sheet */}
-      <Modal
+      <AnimatedModal
         visible={editBudgetVisible}
         transparent
         animationType="slide"
@@ -480,10 +466,10 @@ export const BudgetPlannerScreen = () => {
             </TouchableOpacity>
           </Pressable>
         </Pressable>
-      </Modal>
+      </AnimatedModal>
 
       {/* Category Options Modal */}
-      <Modal
+      <AnimatedModal
         visible={menuVisible}
         transparent
         animationType="fade"
@@ -527,7 +513,7 @@ export const BudgetPlannerScreen = () => {
             </TouchableOpacity>
           </View>
         </Pressable>
-      </Modal>
+      </AnimatedModal>
     </View>
   );
 };
@@ -733,7 +719,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   sheetContent: {

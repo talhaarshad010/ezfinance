@@ -1,52 +1,28 @@
-import auth from '@react-native-firebase/auth';
-import database from '@react-native-firebase/database';
+/**
+ * Mock Budget Service (Pure UI Mode - No Backend/Database)
+ */
 import { BudgetCategory } from '../store/slices/budgetSlice';
 
-const getUid = (): string => {
-  const user = auth().currentUser;
-  if (!user) throw new Error('Not authenticated');
-  return user.uid;
-};
-
 export const fetchBudget = async (): Promise<{ categories: BudgetCategory[], totalMonthlyBudget: number }> => {
-  const uid = getUid();
-  const snapshot = await database().ref(`/users/${uid}/budget`).once('value');
-  const data = snapshot.val();
-  
-  if (!data) {
-    return { categories: [], totalMonthlyBudget: 10000 };
-  }
-
-  const categories = data.categories 
-    ? Object.entries(data.categories).map(([id, val]: [string, any]) => ({ id, ...val }))
-    : [];
-
   return {
-    categories,
-    totalMonthlyBudget: data.totalMonthlyBudget || 10000
+    categories: [],
+    totalMonthlyBudget: 150000,
   };
 };
 
 export const saveCategory = async (category: Omit<BudgetCategory, 'id'>): Promise<BudgetCategory> => {
-  const uid = getUid();
-  const ref = database().ref(`/users/${uid}/budget/categories`).push();
-  const id = ref.key!;
-  const newCategory = { ...category, id };
-  await ref.set(newCategory);
-  return newCategory;
+  const id = 'cat_' + Date.now();
+  return { ...category, id };
 };
 
-export const updateCategory = async (category: BudgetCategory): Promise<void> => {
-  const uid = getUid();
-  await database().ref(`/users/${uid}/budget/categories/${category.id}`).set(category);
+export const updateCategory = async (_category: BudgetCategory): Promise<void> => {
+  return Promise.resolve();
 };
 
-export const deleteCategoryFromDb = async (categoryId: string): Promise<void> => {
-  const uid = getUid();
-  await database().ref(`/users/${uid}/budget/categories/${categoryId}`).remove();
+export const deleteCategoryFromDb = async (_categoryId: string): Promise<void> => {
+  return Promise.resolve();
 };
 
-export const updateMonthlyBudget = async (amount: number): Promise<void> => {
-  const uid = getUid();
-  await database().ref(`/users/${uid}/budget/totalMonthlyBudget`).set(amount);
+export const updateMonthlyBudget = async (_amount: number): Promise<void> => {
+  return Promise.resolve();
 };

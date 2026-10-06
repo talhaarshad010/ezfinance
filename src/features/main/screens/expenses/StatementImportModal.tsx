@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Modal,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
@@ -16,6 +15,7 @@ import {
   MOCK_STATEMENT_TXS,
   LedgerTransaction,
 } from '../../../../constants/ledgerData';
+import { AnimatedModal } from '../../../../components/AnimatedModal';
 
 interface StatementImportModalProps {
   visible: boolean;
@@ -105,7 +105,7 @@ export default function StatementImportModal({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <AnimatedModal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View
         style={[
           styles.container,
@@ -120,7 +120,7 @@ export default function StatementImportModal({
         <View style={styles.navBar}>
           <TouchableOpacity
             onPress={step === 'upload' ? onClose : () => setStep('upload')}
-            style={[styles.navBtn, { backgroundColor: theme.CARD }]}
+            style={[styles.navBtn, { backgroundColor: theme.MODAL }]}
           >
             <Feather
               name={step === 'upload' ? 'x' : 'chevron-left'}
@@ -343,7 +343,7 @@ export default function StatementImportModal({
           </View>
         )}
       </View>
-    </Modal>
+    </AnimatedModal>
   );
 }
 

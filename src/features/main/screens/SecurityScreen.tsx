@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -15,15 +15,36 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
-import { setTwoFactorEnabled } from '../../../services/authService';
-import {
-  getActiveSessions,
-  terminateSession,
-  UserSession,
-} from '../../../services/sessionService';
-import auth from '@react-native-firebase/auth';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
 import { setTwoFactor } from '../../../store/slices/settingsSlice';
+
+export interface UserSession {
+  id: string;
+  deviceName: string;
+  platform: string;
+  osVersion: string;
+  lastActive: number;
+  isCurrent: boolean;
+}
+
+const INITIAL_SESSIONS: UserSession[] = [
+  {
+    id: 'session_ios_curr',
+    deviceName: 'iPhone 15 Pro Max (Lahore, PK)',
+    platform: 'iOS',
+    osVersion: 'iOS 17.5',
+    lastActive: Date.now(),
+    isCurrent: true,
+  },
+  {
+    id: 'session_mac_02',
+    deviceName: 'MacBook Pro 16" (Karachi, PK)',
+    platform: 'macOS',
+    osVersion: 'macOS 14.4',
+    lastActive: Date.now() - 3600000 * 5,
+    isCurrent: false,
+  },
+];
 
 export const SecurityScreen = () => {
   const navigation = useNavigation<any>();
@@ -36,52 +57,26 @@ export const SecurityScreen = () => {
   const twoFactor = useAppSelector(state => state.settings.twoFactorEnabled);
 
   const [isLoading2FA, setIsLoading2FA] = useState(false);
-  const [sessions, setSessions] = useState<UserSession[]>([]);
+  const [sessions, setSessions] = useState<UserSession[]>(INITIAL_SESSIONS);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
 
-  useEffect(() => {
-    loadSessions();
-  }, []);
-
-  const loadSessions = async () => {
-    const user = auth().currentUser;
-    if (user) {
-      setIsLoadingSessions(true);
-      const data = await getActiveSessions(user.uid);
-      setSessions(data);
-      setIsLoadingSessions(false);
-    }
-  };
-
-  const handleToggle2FA = async (enabled: boolean) => {
+  const handleToggle2FA = (enabled: boolean) => {
     setIsLoading2FA(true);
-    try {
-      await setTwoFactorEnabled(enabled);
+    setTimeout(() => {
       dispatch(setTwoFactor(enabled));
+      setIsLoading2FA(false);
       showToast(
         enabled
           ? 'Two-Factor Authentication enabled!'
           : 'Two-Factor Authentication disabled.',
         enabled ? 'success' : 'info',
       );
-    } catch (error) {
-      showToast('Failed to update 2FA setting.', 'error');
-    } finally {
-      setIsLoading2FA(false);
-    }
+    }, 200);
   };
 
-  const handleRemoveDevice = async (sessionId: string) => {
-    const user = auth().currentUser;
-    if (!user) return;
-
-    try {
-      await terminateSession(user.uid, sessionId);
-      showToast('Device logged out successfully.', 'success');
-      setSessions(prev => prev.filter(s => s.id !== sessionId));
-    } catch (error) {
-      showToast('Failed to remove device.', 'error');
-    }
+  const handleRemoveDevice = (sessionId: string) => {
+    setSessions(prev => prev.filter(s => s.id !== sessionId));
+    showToast('Device logged out successfully.', 'success');
   };
 
   const getInitials = () => {

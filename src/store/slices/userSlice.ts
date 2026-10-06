@@ -6,6 +6,11 @@ interface UserProfile {
   email: string;
   photoURL: string | null;
   phone?: string | null;
+  // Collected during sign-up onboarding (all optional / skippable)
+  monthlyIncome?: string | null;
+  city?: string | null;
+  province?: string | null;
+  filerStatus?: 'yes' | 'no' | 'unsure' | null;
 }
 
 interface UserState {
@@ -14,11 +19,13 @@ interface UserState {
   error: string | null;
 }
 
+// No one is signed in at launch, so the app always opens on the onboarding flow.
 const initialState: UserState = {
   profile: null,
   loading: false,
   error: null,
 };
+
 
 const userSlice = createSlice({
   name: 'user',

@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Modal,
   StyleSheet,
   Pressable,
   TextInput,
@@ -13,6 +12,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../../context/ThemeContext';
 import { UpcomingBill } from '../../../../constants/ledgerData';
+import { AnimatedModal } from '../../../../components/AnimatedModal';
 
 // ── Add Recurring Bill Sheet ──────────────────────────────────────────────────
 interface AddRecurringBillSheetProps {
@@ -69,7 +69,7 @@ export function AddRecurringBillSheet({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <AnimatedModal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
           style={[
@@ -167,14 +167,14 @@ export function AddRecurringBillSheet({
                 <View style={styles.stepperControls}>
                   <TouchableOpacity
                     onPress={() => setDueDay(d => Math.max(1, d - 1))}
-                    style={[styles.stepBtn, { backgroundColor: theme.CARD }]}
+                    style={[styles.stepBtn, { backgroundColor: theme.MODAL }]}
                   >
                     <Text style={[styles.stepBtnText, { color: theme.TEXT }]}>−</Text>
                   </TouchableOpacity>
                   <Text style={[styles.stepValue, { color: theme.TEXT }]}>{dueDay}</Text>
                   <TouchableOpacity
                     onPress={() => setDueDay(d => Math.min(31, d + 1))}
-                    style={[styles.stepBtn, { backgroundColor: theme.CARD }]}
+                    style={[styles.stepBtn, { backgroundColor: theme.MODAL }]}
                   >
                     <Text style={[styles.stepBtnText, { color: theme.TEXT }]}>+</Text>
                   </TouchableOpacity>
@@ -188,14 +188,14 @@ export function AddRecurringBillSheet({
                 <View style={styles.stepperControls}>
                   <TouchableOpacity
                     onPress={() => setRemindDays(d => Math.max(1, d - 1))}
-                    style={[styles.stepBtn, { backgroundColor: theme.CARD }]}
+                    style={[styles.stepBtn, { backgroundColor: theme.MODAL }]}
                   >
                     <Text style={[styles.stepBtnText, { color: theme.TEXT }]}>−</Text>
                   </TouchableOpacity>
                   <Text style={[styles.stepValue, { color: theme.TEXT }]}>{remindDays}d</Text>
                   <TouchableOpacity
                     onPress={() => setRemindDays(d => Math.min(14, d + 1))}
-                    style={[styles.stepBtn, { backgroundColor: theme.CARD }]}
+                    style={[styles.stepBtn, { backgroundColor: theme.MODAL }]}
                   >
                     <Text style={[styles.stepBtnText, { color: theme.TEXT }]}>+</Text>
                   </TouchableOpacity>
@@ -241,7 +241,7 @@ export function AddRecurringBillSheet({
           </TouchableOpacity>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
@@ -266,7 +266,7 @@ export function BillQuickActionSheet({
   if (!bill) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <AnimatedModal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
           style={[
@@ -381,7 +381,7 @@ export function BillQuickActionSheet({
           </TouchableOpacity>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
@@ -408,7 +408,7 @@ export function MarkAsPaidSheet({
   ];
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <AnimatedModal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
           style={[
@@ -471,14 +471,14 @@ export function MarkAsPaidSheet({
           ))}
         </Pressable>
       </Pressable>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   sheet: {

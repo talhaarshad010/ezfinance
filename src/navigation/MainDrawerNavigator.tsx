@@ -3,7 +3,15 @@ import { createDrawerNavigator, useDrawerProgress } from '@react-navigation/draw
 import { MainNavigator } from './MainNavigator';
 import { DrawerContent } from './DrawerContent';
 import { View, StyleSheet } from 'react-native';
-import Animated, { useAnimatedStyle, interpolate, Extrapolation } from 'react-native-reanimated';
+import { useNavigationState, useRoute } from '@react-navigation/native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+  interpolate,
+  Extrapolation,
+  Easing,
+} from 'react-native-reanimated';
 import StockMarketScreen from '../features/main/screens/StockMarketScreen';
 import AddExpenseScreen from '../features/main/screens/AddExpenseScreen';
 import AnalyticsScreen from '../features/main/screens/AnalyticsScreen';
@@ -23,6 +31,25 @@ const SceneWrapper = React.memo(({ children }: { children: React.ReactNode }) =>
   const progress = useDrawerProgress();
   const { theme } = useTheme();
 
+  // Drawer screens swap instantly by default; fade + rise the newly active one.
+  // Only the drawer's own active route is tracked, so pushing a root-stack
+  // screen on top (which blurs this one) doesn't hide it mid-transition.
+  const routeKey = useRoute().key;
+  const isActive = useNavigationState(
+    state => state.routes[state.index]?.key === routeKey,
+  );
+  const enter = useSharedValue(isActive ? 0 : 1);
+
+  React.useEffect(() => {
+    if (isActive) {
+      enter.value = 0;
+      enter.value = withTiming(1, {
+        duration: 340,
+        easing: Easing.bezier(0.22, 1, 0.36, 1),
+      });
+    }
+  }, [isActive, enter]);
+
   const animatedStyle = useAnimatedStyle(() => {
     const scale = interpolate(
       progress.value,
@@ -39,7 +66,11 @@ const SceneWrapper = React.memo(({ children }: { children: React.ReactNode }) =>
     );
 
     return {
-      transform: [{ scale }],
+      opacity: interpolate(enter.value, [0, 1], [0, 1]),
+      transform: [
+        { translateY: interpolate(enter.value, [0, 1], [18, 0]) },
+        { scale },
+      ],
       borderRadius,
     };
   });

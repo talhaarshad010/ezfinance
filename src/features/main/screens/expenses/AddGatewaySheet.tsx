@@ -3,13 +3,13 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Modal,
   StyleSheet,
   Pressable,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../../context/ThemeContext';
+import { AnimatedModal } from '../../../../components/AnimatedModal';
 
 interface AddGatewaySheetProps {
   visible: boolean;
@@ -30,7 +30,7 @@ export default function AddGatewaySheet({
   const insets = useSafeAreaInsets();
 
   return (
-    <Modal
+    <AnimatedModal
       visible={visible}
       transparent
       animationType="slide"
@@ -146,14 +146,14 @@ export default function AddGatewaySheet({
           </View>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   sheetContainer: {

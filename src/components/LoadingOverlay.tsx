@@ -3,10 +3,10 @@ import {
   View,
   StyleSheet,
   ActivityIndicator,
-  Modal,
 } from 'react-native';
 import Typography from './Typography';
 import { colors } from '../theme/colors';
+import { AnimatedModal } from './AnimatedModal';
 
 interface LoadingOverlayProps {
   visible: boolean;
@@ -18,10 +18,11 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
   message = 'Processing secure login...',
 }) => {
   return (
-    <Modal
+    <AnimatedModal
       transparent
       animationType="fade"
       visible={visible}
+      backdropColor="rgba(255, 255, 255, 0.8)"
       statusBarTranslucent
     >
       <View style={styles.overlay}>
@@ -32,14 +33,14 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
           </Typography>
         </View>
       </View>
-    </Modal>
+    </AnimatedModal>
   );
 };
 
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
   },

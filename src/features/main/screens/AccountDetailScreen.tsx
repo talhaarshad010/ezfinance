@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -9,19 +9,14 @@ import {
   Image,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
-import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Typography, Card } from '../../../components';
 import { useAppSelector, useAppDispatch } from '../../../store/hooks';
 import {
-  setTransactions,
   removeTransaction as removeTransactionAction,
   updateAccountBalance,
+  Transaction,
 } from '../../../store/slices/bankAccountsSlice';
-import {
-  fetchTransactions,
-  deleteTransaction,
-} from '../../../services/bankAccountService';
-import { Transaction } from '../../../store/slices/bankAccountsSlice';
 import { useToast } from '../../../context/ToastContext';
 import { getBankById } from '../../../constants/pakistaniBanks';
 
@@ -40,25 +35,11 @@ const AccountDetailScreen = () => {
   );
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadTransactions = useCallback(async () => {
-    try {
-      const data = await fetchTransactions(accountId);
-      dispatch(setTransactions({ accountId, transactions: data }));
-    } catch (e) {
-      console.error('Failed to load transactions:', e);
-    }
-  }, [accountId, dispatch]);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadTransactions();
-    }, [loadTransactions]),
-  );
-
-  const onRefresh = async () => {
+  const onRefresh = () => {
     setRefreshing(true);
-    await loadTransactions();
-    setRefreshing(false);
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 400);
   };
 
   const handleDelete = (tx: Transaction) => {
@@ -70,13 +51,15 @@ const AccountDetailScreen = () => {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteTransaction(accountId, tx.id);
-              showToast('Transaction deleted', 'success', 'Done');
-            } catch (e) {
-              showToast('Failed to delete', 'error', 'Error');
+          onPress: () => {
+            dispatch(removeTransactionAction({ accountId, transactionId: tx.id }));
+            if (account) {
+              const newBal = tx.type === 'income'
+                ? account.balance - tx.amount
+                : account.balance + tx.amount;
+              dispatch(updateAccountBalance({ accountId, balance: newBal }));
             }
+            showToast('Transaction deleted', 'success', 'Done');
           },
         },
       ],

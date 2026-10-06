@@ -13,8 +13,6 @@ import { Typography } from '../../../components';
 import { useToast } from '../../../context/ToastContext';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
 import { addTransaction as addTransactionAction, updateAccountBalance } from '../../../store/slices/bankAccountsSlice';
-import { saveTransaction } from '../../../services/bankAccountService';
-
 
 const AddTransactionScreen = () => {
   const navigation = useNavigation<any>();
@@ -34,37 +32,39 @@ const AddTransactionScreen = () => {
   const [selectedCategoryId, setSelectedCategoryId] = useState(budgetCategories[0]?.id || 'other');
   const [saving, setSaving] = useState(false);
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!description.trim()) {
       showToast('Enter a description', 'error', 'Missing Info');
       return;
     }
-    if (!amount.trim() || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+    const numAmount = parseFloat(amount);
+    if (!amount.trim() || isNaN(numAmount) || numAmount <= 0) {
       showToast('Enter a valid amount', 'error', 'Missing Info');
       return;
     }
 
     setSaving(true);
-    try {
+    setTimeout(() => {
       const txData = {
+        id: 'tx_' + Date.now(),
+        accountId,
         description: description.trim(),
-        amount: parseFloat(amount),
+        amount: numAmount,
         type,
         category: budgetCategories.find(c => c.id === selectedCategoryId)?.name || 'Other',
         date: new Date().toISOString().split('T')[0],
         createdAt: Date.now(),
       };
 
-      await saveTransaction(accountId, txData);
-
+      dispatch(addTransactionAction(txData));
+      if (account) {
+        const newBal = type === 'income' ? account.balance + numAmount : account.balance - numAmount;
+        dispatch(updateAccountBalance({ accountId, balance: newBal }));
+      }
+      setSaving(false);
       showToast('Transaction added!', 'success', 'Success');
       navigation.goBack();
-    } catch (e) {
-      console.error('Save transaction error:', e);
-      showToast('Failed to save transaction', 'error', 'Error');
-    } finally {
-      setSaving(false);
-    }
+    }, 200);
   };
 
   return (

@@ -19,4 +19,15 @@ buildscript {
     }
 }
 
+// Force every native library onto the NDK declared above. Libraries that don't
+// pin their own ndkVersion (e.g. react-native-worklets-core) otherwise fall back
+// to the Android Gradle Plugin default and trigger a second NDK download.
+subprojects {
+    plugins.withId("com.android.library") {
+        android {
+            ndkVersion rootProject.ext.ndkVersion
+        }
+    }
+}
+
 apply plugin: "com.facebook.react.rootproject"

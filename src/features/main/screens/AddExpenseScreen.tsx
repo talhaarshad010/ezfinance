@@ -17,7 +17,7 @@ import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import { useAppSelector, useAppDispatch } from '../../../store/hooks';
 import { getBankById } from '../../../constants/pakistaniBanks';
-import { saveTransaction } from '../../../services/bankAccountService';
+import { addTransaction as addTransactionAction, updateAccountBalance } from '../../../store/slices/bankAccountsSlice';
 import { CalendarPicker } from '../../../components';
 
 const CATEGORIES = [
@@ -69,7 +69,7 @@ export const AddExpenseScreen = () => {
     setAmount((current + num).toString());
   }
 
-  const handleSave = async () => {
+  const handleSave = () => {
     const numAmount = parseFloat(amount);
     if (!amount || isNaN(numAmount) || numAmount <= 0) {
       showToast('Please enter a valid transaction amount', 'error', 'Invalid Amount');
@@ -81,9 +81,11 @@ export const AddExpenseScreen = () => {
     }
 
     setIsSaving(true);
-    try {
-      const targetAccountId = selectedAccountId || 'default_acc';
+    setTimeout(() => {
+      const targetAccountId = selectedAccountId || accounts[0]?.id || 'acc_meezan_01';
       const txData = {
+        id: 'tx_' + Date.now(),
+        accountId: targetAccountId,
         description: description.trim() || category,
         amount: numAmount,
         type: txType,
@@ -92,20 +94,21 @@ export const AddExpenseScreen = () => {
         createdAt: Date.now(),
       };
 
-      await saveTransaction(targetAccountId, txData);
+      dispatch(addTransactionAction(txData));
+      const targetAcc = accounts.find(a => a.id === targetAccountId);
+      if (targetAcc) {
+        const newBal = txType === 'income' ? targetAcc.balance + numAmount : targetAcc.balance - numAmount;
+        dispatch(updateAccountBalance({ accountId: targetAccountId, balance: newBal }));
+      }
 
+      setIsSaving(false);
       showToast(
         `${txType === 'expense' ? 'Expense' : 'Income'} of PKR ${numAmount.toLocaleString()} saved!`,
         'success',
         'Transaction Recorded',
       );
       navigation.goBack();
-    } catch (e) {
-      console.error('Save expense error:', e);
-      showToast('Failed to save transaction. Please try again.', 'error', 'Error');
-    } finally {
-      setIsSaving(false);
-    }
+    }, 200);
   };
 
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);

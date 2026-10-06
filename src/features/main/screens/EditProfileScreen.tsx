@@ -7,7 +7,6 @@ import {
   TextInput,
   StyleSheet,
   StatusBar,
-  Modal,
   Image,
   ActivityIndicator,
   Pressable,
@@ -23,11 +22,7 @@ import {
   updatePhone,
   updatePhoto,
 } from '../../../store/slices/userSlice';
-import {
-  updateUserProfile,
-  updateProfilePhoto,
-  deleteProfilePhoto,
-} from '../../../services/authService';
+import { AnimatedModal } from '../../../components/AnimatedModal';
 
 export const EditProfileScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
@@ -47,23 +42,19 @@ export const EditProfileScreen = ({ navigation }: any) => {
   const [showPhotoSheet, setShowPhotoSheet] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!name.trim()) {
       showToast('Full name cannot be empty', 'error');
       return;
     }
     setIsLoading(true);
-    try {
-      await updateUserProfile({ name: name.trim(), phone: phone.trim() });
+    setTimeout(() => {
       dispatch(updateName(name.trim()));
       dispatch(updatePhone(phone.trim()));
+      setIsLoading(false);
       showToast('Profile saved successfully!', 'success');
       navigation.goBack();
-    } catch (error) {
-      showToast('Failed to update profile details', 'error');
-    } finally {
-      setIsLoading(false);
-    }
+    }, 200);
   };
 
   const handleUploadPhoto = () => {
@@ -85,7 +76,6 @@ export const EditProfileScreen = ({ navigation }: any) => {
           const dataUri = `data:${asset.type || 'image/jpeg'};base64,${
             asset.base64
           }`;
-          await updateProfilePhoto(dataUri);
           setPhotoURL(dataUri);
           dispatch(updatePhoto(dataUri));
           showToast('Profile picture updated!', 'success');
@@ -117,7 +107,6 @@ export const EditProfileScreen = ({ navigation }: any) => {
           const dataUri = `data:${asset.type || 'image/jpeg'};base64,${
             asset.base64
           }`;
-          await updateProfilePhoto(dataUri);
           setPhotoURL(dataUri);
           dispatch(updatePhoto(dataUri));
           showToast('Photo captured & updated!', 'success');
@@ -130,16 +119,11 @@ export const EditProfileScreen = ({ navigation }: any) => {
     }, 400);
   };
 
-  const handleDeletePhoto = async () => {
+  const handleDeletePhoto = () => {
     setShowPhotoSheet(false);
-    try {
-      await deleteProfilePhoto();
-      setPhotoURL(null);
-      dispatch(updatePhoto(null));
-      showToast('Profile photo removed', 'info');
-    } catch (error) {
-      showToast('Failed to remove photo', 'error');
-    }
+    setPhotoURL(null);
+    dispatch(updatePhoto(null));
+    showToast('Profile photo removed', 'info');
   };
 
   const getInitials = () => {
@@ -301,7 +285,7 @@ export const EditProfileScreen = ({ navigation }: any) => {
                 />
               </View>
               <Text style={[styles.helperText, { color: theme.MUTED }]}>
-                Email address is verified via Firebase Auth and cannot be modified.
+                Email address is verified and cannot be modified.
               </Text>
             </View>
 
@@ -382,7 +366,7 @@ export const EditProfileScreen = ({ navigation }: any) => {
       </ScrollView>
 
       {/* Photo Picker Bottom Sheet Modal */}
-      <Modal
+      <AnimatedModal
         visible={showPhotoSheet}
         transparent
         animationType="slide"
@@ -450,7 +434,7 @@ export const EditProfileScreen = ({ navigation }: any) => {
             </TouchableOpacity>
           </Pressable>
         </Pressable>
-      </Modal>
+      </AnimatedModal>
     </View>
   );
 };
@@ -640,7 +624,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   sheetContent: {
