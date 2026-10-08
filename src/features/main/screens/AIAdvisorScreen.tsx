@@ -15,6 +15,8 @@ import {
 import Feather from 'react-native-vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
+import { useNetwork } from '../../../context/NetworkContext';
+import { AIOfflineNote } from '../newUser/NewUserScreens';
 import { useToast } from '../../../context/ToastContext';
 import { AnimatedModal } from '../../../components/AnimatedModal';
 
@@ -246,6 +248,7 @@ export const AIAdvisorScreen = () => {
   const [typing, setTyping] = useState(false);
   const [showMem, setShowMem] = useState(false);
   const [selectedQuick, setSelectedQuick] = useState<string | null>(null);
+  const { online } = useNetwork();
 
   const scrollRef = useRef<ScrollView>(null);
 
@@ -258,6 +261,7 @@ export const AIAdvisorScreen = () => {
   function send(text?: string) {
     const q = (text ?? input).trim();
     if (!q) return;
+    if (!online) return; // the assistant needs internet; typed text is kept
     if (text) setSelectedQuick(text);
 
     const userMsg: Msg = { id: Date.now(), role: 'user', text: q };
@@ -327,6 +331,7 @@ export const AIAdvisorScreen = () => {
                   key={q}
                   activeOpacity={0.8}
                   onPress={() => send(q)}
+                  disabled={!online}
                   style={[
                     styles.quickPill,
                     { backgroundColor: active ? theme.ACTIVE : theme.CARD },
@@ -399,8 +404,10 @@ export const AIAdvisorScreen = () => {
           {typing && <TypingDots />}
         </ScrollView>
 
+        {!online && <AIOfflineNote />}
+
         {/* Bottom Input Field */}
-        <View style={[styles.inputBox, { paddingBottom: insets.bottom + 80 }]}>
+        <View style={[styles.inputBox, { paddingBottom: insets.bottom + 80, opacity: online ? 1 : 0.45 }]}>
           <View
             style={[
               styles.inputInnerRow,
@@ -408,6 +415,7 @@ export const AIAdvisorScreen = () => {
             ]}
           >
             <TextInput
+              editable={online}
               value={input}
               onChangeText={setInput}
               onSubmitEditing={() => send()}
@@ -418,6 +426,8 @@ export const AIAdvisorScreen = () => {
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={() => send()}
+              disabled={!online}
+              accessibilityLabel="Send"
               style={[
                 styles.sendBtn,
                 {

@@ -17,6 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useToast } from '../../../context/ToastContext';
 import { useAppDispatch } from '../../../store/hooks';
 import { setProfile } from '../../../store/slices/userSlice';
+import { useUserMode } from '../../../context/UserModeContext';
 import { AuthPalette, useAuthStyles } from '../components/authTheme';
 import { BackChevron, PrimaryButton, TextButton } from '../components/AuthButtons';
 import { GlassInput } from '../components/GlassInput';
@@ -78,6 +79,7 @@ export const RegisterScreen = () => {
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const dispatch = useAppDispatch();
+  const { beginNewUser } = useUserMode();
 
   const [stepIdx, setStepIdx] = useState(0);
   const [dir, setDir] = useState<'right' | 'left'>('right');
@@ -141,6 +143,8 @@ export const RegisterScreen = () => {
   const finishSignUp = () => {
     const value = contact.trim();
     const isEmail = value.includes('@');
+    // A fresh account: empty states, Getting started checklist and the guided tour.
+    beginNewUser();
     dispatch(
       setProfile({
         uid: 'usr_demo_01',

@@ -35,6 +35,8 @@ import {
 
 import { InvestmentComingSoon } from './investments/InvestmentComingSoon';
 import { FadeInView } from '../../../components';
+import { LoadGate } from '../../../components/LoadGate';
+import { InvestmentsSkeleton } from '../../../components/Skeletons';
 import {
   RiskSelectorSheet,
   FundCompareSheet,
@@ -2002,7 +2004,9 @@ export const InvestmentsScreen = () => {
 
   return revealed ? (
     <FadeInView style={{ flex: 1 }} duration={380}>
-      <InvestmentHub />
+      <LoadGate id="investments" skeleton={<InvestmentsSkeleton />}>
+        <InvestmentHub />
+      </LoadGate>
     </FadeInView>
   ) : (
     <InvestmentComingSoon onExplore={() => setRevealed(true)} />

@@ -17,6 +17,17 @@ import { useTheme } from '../../../context/ThemeContext';
 import { useAppSelector } from '../../../store/hooks';
 import { useToast } from '../../../context/ToastContext';
 import { ProgressRing, FadeInView } from '../../../components';
+import { useLoadState } from '../../../context/LoadingContext';
+import { useNetwork } from '../../../context/NetworkContext';
+import { ErrorState } from '../../../components/Feedback';
+import {
+  DashHealthSkeleton,
+  DashInsightsSkeleton,
+  DashLiveSkeleton,
+  DashMonthlySkeleton,
+  InsightCardSkeleton,
+} from '../../../components/Skeletons';
+import { abbr } from '../../../utils/format';
 import {
   SAVINGS_GOALS,
   goalColor,
@@ -405,6 +416,10 @@ export const DashboardScreen = () => {
   const { showToast } = useToast();
 
   const [subTab, setSubTab] = useState<DashTab>('live');
+  const dashLoad = useLoadState('dashboard');
+  const dashReady = dashLoad.status === 'ready';
+  const insightLoad = useLoadState('dashboard-insight');
+  const { online } = useNetwork();
   // Slide sub-tab content in from the side of the tab being moved toward
   const prevSubTab = useRef(subTab);
   const subTabDir =
@@ -670,9 +685,15 @@ export const DashboardScreen = () => {
 
         {/* TAB CONTENTS */}
         <FadeInView key={subTab} from={subTabDir} distance={24}>
+        {/* Loads once per visit; sub-tabs share the screen's load and never replay it. */}
+        {dashLoad.status === 'error' && <ErrorState onRetry={dashLoad.retry} />}
+        {dashLoad.status === 'loading' && subTab === 'live' && <DashLiveSkeleton />}
+        {dashLoad.status === 'loading' && subTab === 'monthly' && <DashMonthlySkeleton />}
+        {dashLoad.status === 'loading' && subTab === 'health' && <DashHealthSkeleton />}
+        {dashLoad.status === 'loading' && subTab === 'insights' && <DashInsightsSkeleton />}
 
         {/* 1. LIVE VIEW */}
-        {subTab === 'live' && (
+        {dashReady && subTab === 'live' && (
           <View>
             {/* Monthly Planning Ritual Banner */}
             <TouchableOpacity
@@ -810,9 +831,17 @@ export const DashboardScreen = () => {
                 <Text style={[styles.metricTileLabel, { color: theme.MUTED, paddingRight: 36 }]}>
                   TAX SAVED THIS YEAR
                 </Text>
-                <Text style={[styles.metricTileValue, { color: theme.TEXT, marginBottom: 6 }]}>
-                  18,400
+                <Text style={[styles.metricTileValue, { color: theme.TEXT, marginBottom: 6 }]} numberOfLines={1}>
+                  {abbr(18400)}
                 </Text>
+                {!online && (
+                  <View style={styles.offlineNote}>
+                    <Feather name="wifi-off" size={10} color={theme.MUTED} />
+                    <Text style={[styles.offlineNoteText, { color: theme.MUTED }]} numberOfLines={1}>
+                      Last known figure · live rates need internet
+                    </Text>
+                  </View>
+                )}
                 <View style={{ marginTop: 'auto' }}>
                   <Text style={[styles.metricTileAccent, { color: TEAL }]}>FBR Filer</Text>
                 </View>
@@ -831,7 +860,7 @@ export const DashboardScreen = () => {
                   INVESTMENTS
                 </Text>
                 <Text style={[styles.metricTileValue, { color: theme.TEXT, marginBottom: 8 }]}>
-                  2,48,000
+                  {abbr(248000)}
                 </Text>
                 <View style={{ marginTop: 'auto' }}>
                   <Svg width="100%" height={36} viewBox="0 0 100 36" preserveAspectRatio="none" style={{ marginBottom: 6 }}>
@@ -957,7 +986,16 @@ export const DashboardScreen = () => {
               </View>
             </View>
 
-            {/* Smart Insight Banner */}
+            {/* Smart Insight Banner — loads on its own; a failure here never takes down the screen */}
+            {insightLoad.status === 'error' ? (
+              <View style={styles.sectionMargin}>
+                <ErrorState compact onRetry={insightLoad.retry} />
+              </View>
+            ) : insightLoad.status === 'loading' ? (
+              <View style={styles.sectionMargin}>
+                <InsightCardSkeleton />
+              </View>
+            ) : (
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={() =>
@@ -989,6 +1027,7 @@ export const DashboardScreen = () => {
                 </Text>
               </View>
             </TouchableOpacity>
+            )}
 
             {/* Category Spend Card */}
             <View style={styles.sectionMargin}>
@@ -1085,7 +1124,7 @@ export const DashboardScreen = () => {
         )}
 
         {/* 2. MONTHLY VIEW */}
-        {subTab === 'monthly' && (
+        {dashReady && subTab === 'monthly' && (
           <View style={styles.tabContentGap}>
             {/* Month Selector */}
             <View
@@ -1302,7 +1341,7 @@ export const DashboardScreen = () => {
         )}
 
         {/* 3. HEALTH VIEW */}
-        {subTab === 'health' && (
+        {dashReady && subTab === 'health' && (
           <View style={styles.tabContentGap}>
             {/* Score Badge Card */}
             <View style={[styles.card, styles.centerCard, { backgroundColor: theme.CARD }]}>
@@ -1368,7 +1407,7 @@ export const DashboardScreen = () => {
         )}
 
         {/* 4. AI INSIGHTS VIEW */}
-        {subTab === 'insights' && (
+        {dashReady && subTab === 'insights' && (
           <View style={styles.tabContentGap}>
             <Text style={[styles.cardTagLabel, { color: theme.MUTED, marginBottom: 4, paddingHorizontal: 4 }]}>
               AI Financial Insights
@@ -2693,6 +2732,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 4,
   },
+  offlineNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: -2,
+    marginBottom: 6,
+  },
+  offlineNoteText: { flexShrink: 1, fontSize: 10 },
   metricTile: {
     flex: 1,
     borderRadius: 24,

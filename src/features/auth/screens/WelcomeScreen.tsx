@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useToast } from '../../../context/ToastContext';
 import { useAppDispatch } from '../../../store/hooks';
 import { setProfile } from '../../../store/slices/userSlice';
+import { useUserMode } from '../../../context/UserModeContext';
 import { AuthPalette, useAuthStyles } from '../components/authTheme';
 import { AuthLogo } from '../components/AuthLogo';
 import { Glow } from '../components/Glow';
@@ -17,6 +18,7 @@ export const WelcomeScreen = () => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const dispatch = useAppDispatch();
+  const { beginNewUser, beginReturningUser } = useUserMode();
   const { showToast } = useToast();
   const [busy, setBusy] = useState(false);
 
@@ -25,6 +27,7 @@ export const WelcomeScreen = () => {
     if (busy) return;
     setBusy(true);
     setTimeout(() => {
+      beginReturningUser();
       dispatch(
         setProfile({
           uid: 'usr_demo_01',
@@ -39,7 +42,9 @@ export const WelcomeScreen = () => {
     }, 400);
   };
 
+  // Explore = first-run journey: empty states, getting-started checklist and the guided tour.
   const handleExplore = () => {
+    beginNewUser();
     dispatch(
       setProfile({
         uid: 'guest',
@@ -49,7 +54,6 @@ export const WelcomeScreen = () => {
         phone: null,
       }),
     );
-    showToast('Exploring as a guest. Create an account anytime.', 'info');
   };
 
   return (

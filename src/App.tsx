@@ -4,6 +4,10 @@ import {
   DarkTheme,
   DefaultTheme,
 } from '@react-navigation/native';
+import {
+  SafeAreaProvider,
+  initialWindowMetrics,
+} from 'react-native-safe-area-context';
 import { AppNavigator } from './navigation';
 import { ToastProvider } from './context/ToastContext';
 import Toast from './components/Toast';
@@ -11,6 +15,9 @@ import { Provider } from 'react-redux';
 import { store } from './store';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { hideNativeSplash } from './utils/nativeSplash';
+import { UserModeProvider } from './context/UserModeContext';
+import { LoadingProvider } from './context/LoadingContext';
+import { NetworkProvider } from './context/NetworkContext';
 
 function NavigationWrapper() {
   const { theme } = useTheme();
@@ -35,14 +42,23 @@ function NavigationWrapper() {
 
 function App(): React.JSX.Element {
   return (
-    <Provider store={store}>
-      <ThemeProvider>
-        <ToastProvider>
-          <NavigationWrapper />
-          <Toast />
-        </ToastProvider>
-      </ThemeProvider>
-    </Provider>
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+      <Provider store={store}>
+        <ThemeProvider>
+          <ToastProvider>
+            {/* New vs returning user → per-section loading → connectivity + offline sync */}
+            <UserModeProvider>
+              <LoadingProvider>
+                <NetworkProvider>
+                  <NavigationWrapper />
+                  <Toast />
+                </NetworkProvider>
+              </LoadingProvider>
+            </UserModeProvider>
+          </ToastProvider>
+        </ThemeProvider>
+      </Provider>
+    </SafeAreaProvider>
   );
 }
 

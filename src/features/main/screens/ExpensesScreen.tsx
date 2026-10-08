@@ -13,6 +13,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import { FadeInView } from '../../../components';
+import { useLoadState } from '../../../context/LoadingContext';
+import { ErrorState } from '../../../components/Feedback';
+import { ExpLoansSkeleton, ExpRecurringSkeleton, ExpTransactionsSkeleton } from '../../../components/Skeletons';
 import {
   TRANSACTIONS as SEED_TXS,
   RECURRING,
@@ -70,6 +73,9 @@ export const ExpensesScreen = () => {
 
   // Primary State
   const [tab, setTab] = useState<LedgerTab>('transactions');
+  // Loads once per visit; the three tabs share it.
+  const ledgerLoad = useLoadState('expenses');
+  const ledgerReady = ledgerLoad.status === 'ready';
   // Slide tab content in from the side of the tab being moved toward
   const prevTab = useRef(tab);
   const tabDir =
@@ -309,8 +315,11 @@ export const ExpensesScreen = () => {
         </View>
 
         <FadeInView key={tab} from={tabDir} distance={24}>
+        {ledgerLoad.status === 'loading' &&
+          (tab === 'transactions' ? <ExpTransactionsSkeleton /> : tab === 'recurring' ? <ExpRecurringSkeleton /> : <ExpLoansSkeleton />)}
+        {ledgerLoad.status === 'error' && <ErrorState onRetry={ledgerLoad.retry} />}
         {/* ── TAB 1: TRANSACTIONS ── */}
-        {tab === 'transactions' && (
+        {ledgerReady && tab === 'transactions' && (
           <View>
             {/* Sub-Filter Chips */}
             <View style={styles.filterRow}>
@@ -522,7 +531,7 @@ export const ExpensesScreen = () => {
         )}
 
         {/* ── TAB 2: RECURRING ── */}
-        {tab === 'recurring' && (
+        {ledgerReady && tab === 'recurring' && (
           <View>
             {/* Sub Tabs: History vs Upcoming Calendar */}
             <View style={styles.recurringSubTabs}>
@@ -830,7 +839,7 @@ export const ExpensesScreen = () => {
         )}
 
         {/* ── TAB 3: LOANS ── */}
-        {tab === 'debts' && (
+        {ledgerReady && tab === 'debts' && (
           <View>
             {/* DTI Banner */}
             <View

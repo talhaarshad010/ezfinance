@@ -14,6 +14,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import { CalendarPicker, FadeInView } from '../../../components';
+import { FieldError } from '../../../components/Feedback';
+import { MSG, SAVE_ERROR, isFuture, parseAmount, simulateSave, useFormErrors } from '../../../utils/validation';
+import { abbr, fullAmt } from '../../../utils/format';
 import { GOAL_ICONS } from '../../../constants/savingsGoals';
 
 type CreateStep = 1 | 2 | 3;
@@ -68,26 +71,42 @@ export const CreateGoalScreen = () => {
     setTargetAmt(v => (v + k).slice(0, 12));
   }
 
-  const handleCreate = () => {
-    if (!name.trim()) {
-      showToast('Give your goal a name first.', 'error', 'Name Required');
+  // Each step validates before moving on; errors show under the field (icon + text).
+  const nameErr = name.trim() ? undefined : MSG.name;
+  const amountErr = parseAmount(targetAmt) ? undefined : MSG.amount;
+  const dateErr = isFuture(targetDate) ? undefined : MSG.pastDeadline;
+  const step1 = useFormErrors<'name'>(() => ({ name: nameErr }));
+  const step2 = useFormErrors<'target' | 'deadline'>(() => ({ target: amountErr, deadline: dateErr }));
+  const [saving, setSaving] = useState(false);
+
+  const handleCreate = async () => {
+    if (saving) return;
+    if (nameErr) {
+      step1.submit(() => {});
       setStep(1);
       return;
     }
-    const amount = parseInt(targetAmt || '0', 10);
-    if (!amount) {
-      showToast('Enter a target amount.', 'error', 'Target Required');
+    if (amountErr || dateErr) {
+      step2.submit(() => {});
       setStep(2);
       return;
     }
-    showToast(
-      `${name.trim()} created — PKR ${amount.toLocaleString()} by ${formatTargetDate(
-        targetDate,
-      )}.`,
-      'success',
-      'Goal Created',
-    );
-    navigation.goBack();
+    setSaving(true);
+    try {
+      await simulateSave();
+      const amount = parseAmount(targetAmt)!;
+      showToast(
+        `${name.trim()} created — PKR ${abbr(amount)} by ${formatTargetDate(targetDate)}.`,
+        'success',
+        'Goal Created',
+      );
+      navigation.goBack();
+    } catch {
+      // The form stays open with everything the user typed.
+      showToast(SAVE_ERROR, 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const vehicleOptions = [
@@ -201,14 +220,16 @@ export const CreateGoalScreen = () => {
                 onChangeText={setName}
                 placeholder="e.g., House Down Payment…"
                 placeholderTextColor={theme.MUTED}
+                maxLength={40}
                 style={[styles.input, { color: theme.TEXT }]}
               />
             </View>
+            <FieldError msg={step1.errors.name} />
 
             <TouchableOpacity
               activeOpacity={0.9}
-              onPress={() => setStep(2)}
-              style={[styles.primaryBtn, { backgroundColor: theme.TEXT }]}
+              onPress={() => step1.submit(() => setStep(2))}
+              style={[styles.primaryBtn, { backgroundColor: theme.TEXT, opacity: step1.valid ? 1 : 0.4 }]}
             >
               <Text style={[styles.primaryBtnText, { color: theme.BG }]}>
                 Continue →
@@ -224,10 +245,11 @@ export const CreateGoalScreen = () => {
               <Text style={[styles.fieldLabelTight, { color: theme.MUTED }]}>
                 TARGET AMOUNT (PKR)
               </Text>
-              <Text style={[styles.amountValue, { color: theme.GREEN }]}>
-                {targetAmt ? parseInt(targetAmt, 10).toLocaleString() : '0'}
+              <Text style={[styles.amountValue, { color: theme.GREEN }]} numberOfLines={1} adjustsFontSizeToFit>
+                {targetAmt ? fullAmt(parseInt(targetAmt, 10)) : '0'}
               </Text>
             </View>
+            <FieldError msg={step2.errors.target} />
 
             <View style={styles.keypad}>
               {KEYS.map(k => (
@@ -264,11 +286,12 @@ export const CreateGoalScreen = () => {
                 <Feather name="calendar" size={14} color={theme.ACTIVE} />
               </View>
             </TouchableOpacity>
+            <FieldError msg={step2.errors.deadline} />
 
             <TouchableOpacity
               activeOpacity={0.9}
-              onPress={() => setStep(3)}
-              style={[styles.primaryBtn, { backgroundColor: theme.TEXT }]}
+              onPress={() => step2.submit(() => setStep(3))}
+              style={[styles.primaryBtn, { backgroundColor: theme.TEXT, opacity: step2.valid ? 1 : 0.4 }]}
             >
               <Text style={[styles.primaryBtnText, { color: theme.BG }]}>
                 Continue →
@@ -370,10 +393,14 @@ export const CreateGoalScreen = () => {
             <TouchableOpacity
               activeOpacity={0.9}
               onPress={handleCreate}
-              style={[styles.primaryBtn, { backgroundColor: theme.TEXT }]}
+              disabled={saving}
+              style={[
+                styles.primaryBtn,
+                { backgroundColor: theme.TEXT, opacity: !nameErr && !amountErr && !dateErr && !saving ? 1 : 0.4 },
+              ]}
             >
               <Text style={[styles.primaryBtnText, { color: theme.BG }]}>
-                Create Goal
+                {saving ? 'Saving…' : 'Create Goal'}
               </Text>
             </TouchableOpacity>
           </View>

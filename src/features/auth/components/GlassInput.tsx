@@ -36,6 +36,8 @@ interface GlassInputProps extends Omit<TextInputProps, 'style' | 'secureTextEntr
   password?: boolean;
   /** Rendered under the field (e.g. "Forgot password?"). */
   suffix?: React.ReactNode;
+  /** Inline error under the field; also turns the border red. */
+  error?: string;
 }
 
 /** Frosted text field that glows sky-blue while focused. */
@@ -44,6 +46,7 @@ export function GlassInput({
   size = 'md',
   password,
   suffix,
+  error,
   onFocus,
   onBlur,
   ...inputProps
@@ -61,9 +64,9 @@ export function GlassInput({
           styles.field,
           {
             borderRadius: lg ? 16 : 14,
-            borderColor: focused ? A.FOCUS_BORDER : A.GLASS_BORDER,
+            borderColor: error ? A.RED : focused ? A.FOCUS_BORDER : A.GLASS_BORDER,
             backgroundColor: focused ? A.FOCUS_BG : A.GLASS,
-            boxShadow: focused ? A.FOCUS_GLOW : A.REST_SHADOW,
+            boxShadow: error ? A.REST_SHADOW : focused ? A.FOCUS_GLOW : A.REST_SHADOW,
           },
         ]}
       >
@@ -102,6 +105,11 @@ export function GlassInput({
           </Pressable>
         )}
       </View>
+      {error ? (
+        <Text style={[styles.error, { color: A.RED }]} accessibilityLiveRegion="polite">
+          {error}
+        </Text>
+      ) : null}
       {suffix}
     </View>
   );
@@ -121,6 +129,7 @@ const styles = StyleSheet.create({
   input: {
     padding: 0,
   },
+  error: { fontSize: 12, marginTop: -1 },
   eye: {
     position: 'absolute',
     right: 14,

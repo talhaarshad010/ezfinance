@@ -36,15 +36,25 @@ const fadeScale: StackNavigationOptions = {
   },
 };
 
+// The splash + onboarding intro plays once per app launch. AuthStack mounts again
+// after sign-out, and that should land on Welcome instead of replaying the intro.
+let introShown = false;
+const introRoute = (): keyof AuthStackParamList => (HAS_NATIVE_SPLASH ? 'Onboarding' : 'Splash');
+
 export const AuthStack = () => {
   // Follows the app theme: light by default, dark once switched in Settings.
   const A = useAuthTheme();
+  const [initialRoute] = React.useState<keyof AuthStackParamList>(() => (introShown ? 'Welcome' : introRoute()));
+  React.useEffect(() => {
+    introShown = true;
+  }, []);
   return (
     <>
       <StatusBar barStyle={A.STATUS_BAR} backgroundColor={A.BG} translucent={false} />
       <Stack.Navigator
-        // Android plays the logo splash natively before JS is up; iOS uses the JS route.
-        initialRouteName={HAS_NATIVE_SPLASH ? 'Onboarding' : 'Splash'}
+        // First launch: Android plays the logo splash natively before JS is up, iOS uses
+        // the JS Splash route. After sign-out: straight to Welcome.
+        initialRouteName={initialRoute}
         screenOptions={{
           headerShown: false,
           gestureEnabled: true,

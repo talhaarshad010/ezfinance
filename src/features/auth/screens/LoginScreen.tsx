@@ -13,6 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useToast } from '../../../context/ToastContext';
 import { useAppDispatch } from '../../../store/hooks';
 import { setProfile } from '../../../store/slices/userSlice';
+import { useUserMode } from '../../../context/UserModeContext';
 import { AuthPalette, useAuthStyles } from '../components/authTheme';
 import { BackChevron, PrimaryButton, TextButton } from '../components/AuthButtons';
 import { GlassInput } from '../components/GlassInput';
@@ -24,6 +25,7 @@ export const LoginScreen = () => {
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const dispatch = useAppDispatch();
+  const { beginReturningUser } = useUserMode();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,6 +41,7 @@ export const LoginScreen = () => {
 
     setIsLoading(true);
     setTimeout(() => {
+      beginReturningUser();
       dispatch(
         setProfile({
           uid: 'usr_demo_01',

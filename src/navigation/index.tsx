@@ -42,6 +42,10 @@ import { clearProfile } from '../store/slices/userSlice';
 import { HeaderProfile } from '../components/HeaderProfile';
 import { resetSettings } from '../store/slices/settingsSlice';
 import { useTheme } from '../context/ThemeContext';
+import { useUserMode } from '../context/UserModeContext';
+import { useNetwork } from '../context/NetworkContext';
+import { OfflineBanner } from '../components/Feedback';
+import { FirstActionSheetHost, TransactionSheetHost } from '../features/main/newUser/sheets';
 
 const Stack = createStackNavigator();
 
@@ -50,6 +54,8 @@ export const AppNavigator = () => {
   const { theme } = useTheme();
   const profile = useAppSelector(state => state.user.profile);
   const isAuthenticated = !!profile;
+  const { beginReturningUser } = useUserMode();
+  const net = useNetwork();
 
   const [pendingOTP, setPendingOTP] = React.useState(false);
   const [otpUserData, setOtpUserData] = React.useState<{
@@ -61,11 +67,13 @@ export const AppNavigator = () => {
     const logoutListener = DeviceEventEmitter.addListener('LOGOUT', () => {
       dispatch(clearProfile());
       dispatch(resetSettings());
+      // A logged-out device never keeps the previous account's new-user data.
+      beginReturningUser();
       setPendingOTP(false);
       setOtpUserData(null);
     });
     return () => logoutListener.remove();
-  }, [dispatch]);
+  }, [dispatch, beginReturningUser]);
 
   const handleOTPVerified = () => {
     setPendingOTP(false);
@@ -156,6 +164,10 @@ export const AppNavigator = () => {
             <Stack.Screen name="AgeOfMoney" component={AgeOfMoneyScreen} options={{ headerShown: false }} />
             <Stack.Screen name="MoveMoney" component={MoveMoneyScreen} options={{ headerShown: false }} />
           </Stack.Navigator>
+          {/* Global sheets for the new-user flow (add / edit transaction, first transaction chooser) */}
+          <TransactionSheetHost />
+          <FirstActionSheetHost />
+          <OfflineBanner online={net.online} syncing={net.syncing} />
         </>
       ) : (
         <AuthStack />

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Easing } from 'react-native';
+import { Easing, View } from 'react-native';
 import {
   createBottomTabNavigator,
   BottomTabNavigationOptions,
@@ -12,6 +12,17 @@ import AIAdvisorScreen from '../features/main/screens/AIAdvisorScreen';
 import GoalsScreen from '../features/main/screens/GoalsScreen';
 import { CustomBottomNav } from './CustomBottomNav';
 import { useTheme } from '../context/ThemeContext';
+import { useUserMode } from '../context/UserModeContext';
+import { LoadGate } from '../components/LoadGate';
+import { AISkeleton, GoalsSkeleton, NewUserSkeleton } from '../components/Skeletons';
+import {
+  NewAI,
+  NewDashboard,
+  NewExpenses,
+  NewGoals,
+  NewInvestments,
+} from '../features/main/newUser/NewUserScreens';
+import { TourOverlay } from '../features/main/newUser/TourOverlay';
 
 const Tab = createBottomTabNavigator();
 
@@ -39,24 +50,85 @@ const tabTransition: BottomTabNavigationOptions = {
   }),
 };
 
+// Each tab: a fresh account gets the new-user screen (empty states, no sample
+// data); a returning user gets the regular screen. Both load behind a skeleton.
+// Home, Expenses and Investments show their skeletons inside the screen, so
+// their headers and sub-tabs stay put while each section loads.
+
+const HomeTab = () => {
+  const { isNewUser } = useUserMode();
+  return isNewUser ? (
+    <LoadGate id="home" skeleton={<NewUserSkeleton dashboard />}>
+      <NewDashboard />
+    </LoadGate>
+  ) : (
+    <DashboardScreen />
+  );
+};
+
+const ExpensesTab = () => {
+  const { isNewUser } = useUserMode();
+  return isNewUser ? (
+    <LoadGate id="expenses" skeleton={<NewUserSkeleton />}>
+      <NewExpenses />
+    </LoadGate>
+  ) : (
+    <ExpensesScreen />
+  );
+};
+
+const AITab = () => {
+  const { isNewUser } = useUserMode();
+  return (
+    <LoadGate id="ai" skeleton={isNewUser ? <NewUserSkeleton /> : <AISkeleton />}>
+      {isNewUser ? <NewAI /> : <AIAdvisorScreen />}
+    </LoadGate>
+  );
+};
+
+const InvestmentsTab = () => {
+  const { isNewUser } = useUserMode();
+  return isNewUser ? (
+    <LoadGate id="investments" skeleton={<NewUserSkeleton />}>
+      <NewInvestments />
+    </LoadGate>
+  ) : (
+    <InvestmentsScreen />
+  );
+};
+
+const GoalsTab = () => {
+  const { isNewUser } = useUserMode();
+  return (
+    <LoadGate id="goals" skeleton={isNewUser ? <NewUserSkeleton /> : <GoalsSkeleton />}>
+      {isNewUser ? <NewGoals /> : <GoalsScreen />}
+    </LoadGate>
+  );
+};
+
 export const MainNavigator = () => {
   const { theme } = useTheme();
+  const { isNewUser, tourOpen } = useUserMode();
 
   return (
-    <Tab.Navigator
-      tabBar={props => <CustomBottomNav {...props} />}
-      screenOptions={{
-        headerShown: false,
-        ...tabTransition,
-        sceneStyle: { backgroundColor: theme.BG },
-      }}
-    >
-      <Tab.Screen name="Home" component={DashboardScreen} />
-      <Tab.Screen name="Expenses" component={ExpensesScreen} />
-      <Tab.Screen name="AI Advisor" component={AIAdvisorScreen} />
-      <Tab.Screen name="Investments" component={InvestmentsScreen} />
-      <Tab.Screen name="Goals" component={GoalsScreen} />
-    </Tab.Navigator>
+    <View style={{ flex: 1 }}>
+      <Tab.Navigator
+        tabBar={props => <CustomBottomNav {...props} />}
+        screenOptions={{
+          headerShown: false,
+          ...tabTransition,
+          sceneStyle: { backgroundColor: theme.BG },
+        }}
+      >
+        <Tab.Screen name="Home" component={HomeTab} />
+        <Tab.Screen name="Expenses" component={ExpensesTab} />
+        <Tab.Screen name="AI Advisor" component={AITab} />
+        <Tab.Screen name="Investments" component={InvestmentsTab} />
+        <Tab.Screen name="Goals" component={GoalsTab} />
+      </Tab.Navigator>
+      {/* First-run guided tour for a fresh account */}
+      {isNewUser && tourOpen && <TourOverlay />}
+    </View>
   );
 };
 

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, View, Dimensions, Platform, Image } from 'react-native';
+import { StyleSheet, View, Dimensions, Platform, Text, TouchableOpacity } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -96,6 +96,19 @@ const Toast: React.FC = () => {
             {toast.message}
           </Typography>
         </View>
+        {toast.action && (
+          <TouchableOpacity
+            onPress={() => {
+              toast.action?.onPress();
+              hideToast();
+            }}
+            hitSlop={10}
+            accessibilityRole="button"
+            style={styles.action}
+          >
+            <Text style={styles.actionText}>{toast.action.label}</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </Animated.View>
   );
@@ -147,6 +160,15 @@ const styles = StyleSheet.create({
   message: {
     fontSize: 12,
     lineHeight: 16,
+  },
+  action: {
+    marginLeft: 12,
+  },
+  actionText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+    textDecorationLine: 'underline',
   },
 });
 
