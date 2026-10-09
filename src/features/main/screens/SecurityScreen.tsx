@@ -219,10 +219,12 @@ export const SecurityScreen = () => {
 
               <View style={{ flex: 1 }}>
                 <Text style={[styles.itemTitle, { color: theme.TEXT }]}>
-                  Change Password
+                  {profile?.hasPassword === false ? 'Set a Password' : 'Change Password'}
                 </Text>
                 <Text style={[styles.itemSub, { color: theme.MUTED }]}>
-                  Ensure your account is secure
+                  {profile?.hasPassword === false
+                    ? 'Also log in with your email'
+                    : 'Ensure your account is secure'}
                 </Text>
               </View>
 

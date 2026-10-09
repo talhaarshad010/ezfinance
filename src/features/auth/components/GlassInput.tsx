@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useAuthTheme } from './authTheme';
+import { FieldError } from './AuthFeedback';
 
 function EyeIcon({ open, size, color }: { open: boolean; size: number; color: string }) {
   return open ? (
@@ -37,7 +38,7 @@ interface GlassInputProps extends Omit<TextInputProps, 'style' | 'secureTextEntr
   /** Rendered under the field (e.g. "Forgot password?"). */
   suffix?: React.ReactNode;
   /** Inline error under the field; also turns the border red. */
-  error?: string;
+  error?: React.ReactNode;
 }
 
 /** Frosted text field that glows sky-blue while focused. */
@@ -105,11 +106,7 @@ export function GlassInput({
           </Pressable>
         )}
       </View>
-      {error ? (
-        <Text style={[styles.error, { color: A.RED }]} accessibilityLiveRegion="polite">
-          {error}
-        </Text>
-      ) : null}
+      <FieldError>{error}</FieldError>
       {suffix}
     </View>
   );
@@ -129,7 +126,6 @@ const styles = StyleSheet.create({
   input: {
     padding: 0,
   },
-  error: { fontSize: 12, marginTop: -1 },
   eye: {
     position: 'absolute',
     right: 14,

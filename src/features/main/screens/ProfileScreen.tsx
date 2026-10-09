@@ -7,7 +7,6 @@ import {
   StyleSheet,
   StatusBar,
   Image,
-  DeviceEventEmitter,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
@@ -15,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useAppSelector } from '../../../store/hooks';
 import { useToast } from '../../../context/ToastContext';
+import { signOut } from '../../../services/authService';
 
 export const ProfileScreen = () => {
   const navigation = useNavigation<any>();
@@ -328,7 +328,7 @@ export const ProfileScreen = () => {
           activeOpacity={0.8}
           onPress={() => {
             showToast('Signed out successfully', 'info');
-            DeviceEventEmitter.emit('LOGOUT');
+            signOut();
           }}
           style={[styles.signOutBtn, { backgroundColor: theme.CARD }]}
         >

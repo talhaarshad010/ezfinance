@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -8,195 +8,273 @@ import {
   Text,
   View,
 } from 'react-native';
-import Svg, { Path, Rect } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { useToast } from '../../../context/ToastContext';
+import {
+  ApiError,
+  completePasswordReset,
+  requestPasswordReset,
+  verifyResetCode,
+} from '../../../services/authService';
 import { AuthPalette, useAuthStyles } from '../components/authTheme';
 import { BackChevron, PrimaryButton, TextButton } from '../components/AuthButtons';
 import { GlassInput } from '../components/GlassInput';
-import { FadeUp, LogoReveal } from '../components/Entrance';
-import { Glow } from '../components/Glow';
+import { FadeUp, SlideIn } from '../components/Entrance';
+import { AuthBanners, NoticeData } from '../components/AuthFeedback';
+import { authErrorMessage, useAuthGuard } from '../components/AuthGuard';
+import { MSG, validateEmail, validatePassword } from '../components/authMessages';
+import { OtpVerification } from '../components/OtpVerification';
+import { SuccessState } from '../components/SignUpDone';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const RESEND_SECONDS = 30;
+type Stage = 'request' | 'code' | 'newPassword' | 'done';
 
-function MailIcon({ color }: { color: string }) {
-  return (
-    <Svg width={36} height={36} viewBox="0 0 36 36" fill="none">
-      <Rect x={5} y={9} width={26} height={19} rx={4} stroke={color} strokeWidth={2} />
-      <Path d="M6.5 11.5 18 20l11.5-8.5" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
-  );
-}
-
-/** Mock reset request — swap for the real auth call (e.g. Firebase sendPasswordResetEmail). */
-const requestReset = (_email: string) => new Promise<void>(resolve => setTimeout(resolve, 600));
-
-/** Forgot password: email form → "Check your email" with a resend cooldown. */
+/** Forgot password: email → 6-digit code → new password → done, then log in. */
 export const ForgotPasswordScreen = () => {
   const { A, styles } = useAuthStyles(createStyles);
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const { showToast } = useToast();
+  const guard = useAuthGuard();
 
+  const [stage, setStage] = useState<Stage>('request');
+  const [dir, setDir] = useState<'right' | 'left'>('right');
   const [email, setEmail] = useState('');
-  const [touched, setTouched] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [sentTo, setSentTo] = useState<string | null>(null);
-  const [cooldown, setCooldown] = useState(0);
+  const [emailError, setEmailError] = useState<string>();
+  const [resetToken, setResetToken] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [pwErrors, setPwErrors] = useState<{ password?: string; confirm?: string }>({});
+  const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState<NoticeData | null>(null);
+  // Bumped on Back so an in-flight request can't move the flow forward afterwards.
+  const attempt = useRef(0);
 
-  const trimmed = email.trim();
-  const valid = EMAIL_RE.test(trimmed);
-  const error = touched && trimmed.length > 0 && !valid ? 'Enter a valid email address' : undefined;
+  const go = (next: Stage, d: 'right' | 'left') => {
+    setDir(d);
+    setStage(next);
+  };
 
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const t = setTimeout(() => setCooldown(c => c - 1), 1000);
-    return () => clearTimeout(t);
-  }, [cooldown]);
+  const back = () => {
+    attempt.current++;
+    setLoading(false);
+    setNotice(null);
+    if (stage === 'request') navigation.goBack();
+    else if (stage === 'code') go('request', 'left');
+    else go('code', 'left');
+  };
 
-  const send = async () => {
-    setTouched(true);
-    if (!valid || isLoading) return;
-    setIsLoading(true);
+  const sendCode = async () => {
+    if (loading || guard.blocked) return;
+    const err = validateEmail(email);
+    setEmailError(err ?? undefined);
+    if (err) return;
+    setNotice(null);
+    setLoading(true);
+    const id = ++attempt.current;
     try {
-      await requestReset(trimmed);
-      setSentTo(trimmed);
-      setCooldown(RESEND_SECONDS);
-    } catch {
-      showToast("Couldn't send the link. Check your connection and try again.", 'error');
+      await requestPasswordReset(email);
+      if (id !== attempt.current) return;
+      // Same response whether or not an account exists.
+      setNotice({ tone: 'info', text: MSG.maybeSent });
+      go('code', 'right');
+    } catch (e) {
+      if (id !== attempt.current) return;
+      const msg = authErrorMessage(e, guard);
+      if (msg) setNotice({ tone: 'error', text: msg });
     } finally {
-      setIsLoading(false);
+      if (id === attempt.current) setLoading(false);
     }
   };
 
-  const resend = async () => {
-    if (!sentTo || cooldown > 0) return;
+  const verifyCode = async (code: string) => {
+    const token = await verifyResetCode(email, code);
+    setResetToken(token);
+    setNotice(null);
+    go('newPassword', 'right');
+  };
+
+  const savePassword = async () => {
+    if (loading || guard.blocked) return;
+    const next = {
+      password: validatePassword(password, 'Enter a new password.') ?? undefined,
+      confirm: !confirm ? 'Confirm your new password.' : confirm !== password ? MSG.mismatch : undefined,
+    };
+    setPwErrors(next);
+    if (next.password || next.confirm) return;
+    setNotice(null);
+    setLoading(true);
+    const id = ++attempt.current;
     try {
-      await requestReset(sentTo);
-      setCooldown(RESEND_SECONDS);
-      showToast('Reset link sent again', 'success');
-    } catch {
-      showToast("Couldn't send the link. Try again.", 'error');
+      await completePasswordReset(resetToken, password);
+      if (id !== attempt.current) return;
+      go('done', 'right');
+    } catch (e) {
+      if (id !== attempt.current) return;
+      const err = e as ApiError;
+      if (err.code === 'same_password') {
+        setPwErrors({ password: 'Choose a password different from your current one.' });
+      } else if (err.code === 'weak_password') {
+        setPwErrors({ password: err.message });
+      } else if (err.code === 'reset_expired') {
+        setNotice({ tone: 'error', text: 'This reset took too long. Enter your email to get a new code.' });
+        go('request', 'left');
+      } else {
+        const msg = authErrorMessage(err, guard);
+        if (msg) setNotice({ tone: 'error', text: msg });
+      }
+    } finally {
+      if (id === attempt.current) setLoading(false);
     }
   };
-
-  const back = (
-    <TextButton
-      onPress={() => (sentTo ? setSentTo(null) : navigation.goBack())}
-      style={styles.backBtn}
-      label={
-        <View style={styles.backRow}>
-          <BackChevron />
-          <Text style={styles.backText}>Back</Text>
-        </View>
-      }
-    />
-  );
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle={A.STATUS_BAR} backgroundColor={A.BG} />
+      <View style={{ paddingTop: insets.top }}>
+        <AuthBanners notice={notice} />
+      </View>
 
-      {sentTo ? (
-        // ── Sent ────────────────────────────────────────────────
-        <View style={[styles.sent, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24 }]}>
-          {back}
-          <View style={styles.sentBody}>
-            <LogoReveal style={styles.iconWrap}>
-              <Glow size={130} stops={[[0, A.SKY, 0.22], [0.72, A.SKY, 0]]} />
-              <View style={styles.icon}>
-                <MailIcon color={A.SKY} />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
+        {stage !== 'done' && (
+          <TextButton
+            onPress={back}
+            style={styles.backBtn}
+            label={
+              <View style={styles.backRow}>
+                <BackChevron />
+                <Text style={styles.backText}>Back</Text>
               </View>
-            </LogoReveal>
-            <FadeUp delay={140} style={styles.sentText}>
-              <Text style={styles.sentTitle}>Check your email</Text>
-              <Text style={styles.sentLine}>
-                We sent a password reset link to{'\n'}
-                <Text style={styles.sentEmail}>{sentTo}</Text>
-              </Text>
-              <Text style={styles.sentHint}>The link expires in 30 minutes. Check your spam folder if you don't see it.</Text>
-            </FadeUp>
-          </View>
+            }
+          />
+        )}
 
-          <FadeUp delay={260} style={styles.actions}>
-            <PrimaryButton label="Back to log in" onPress={() => navigation.navigate('Login')} />
-            <View style={styles.footerRow}>
-              {cooldown > 0 ? (
-                <Text style={styles.footerText}>
-                  Resend link in 0:{String(cooldown).padStart(2, '0')}
-                </Text>
-              ) : (
-                <>
-                  <Text style={styles.footerText}>Didn't get it? </Text>
-                  <TextButton label="Resend" onPress={resend} textStyle={[styles.link, styles.footerLink]} />
-                </>
-              )}
-            </View>
-          </FadeUp>
-        </View>
-      ) : (
-        // ── Form ────────────────────────────────────────────────
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-          <ScrollView
-            bounces={false}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={[
-              styles.scroll,
-              { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24 },
-            ]}
-          >
-            {back}
-
-            <FadeUp style={styles.heading}>
-              <Text style={styles.title}>Reset your password</Text>
-              <Text style={styles.subtitle}>
-                Enter the email linked to your account and we'll send you a link to set a new password.
-              </Text>
-            </FadeUp>
-
-            <FadeUp delay={140} style={styles.card}>
-              <View style={styles.cardEdge} />
-              <GlassInput
-                label="Email"
-                placeholder="you@example.com"
-                value={email}
-                onChangeText={setEmail}
-                onBlur={() => setTouched(true)}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoFocus
-                keyboardType="email-address"
-                textContentType="emailAddress"
-                returnKeyType="send"
-                onSubmitEditing={send}
-                error={error}
-              />
-            </FadeUp>
-
-            <View style={styles.flex} />
-
-            <FadeUp delay={260} style={styles.actions}>
-              <PrimaryButton
-                label="Send reset link"
-                onPress={send}
-                disabled={trimmed.length === 0}
-                loading={isLoading}
-              />
-              <View style={styles.footerRow}>
-                <Text style={styles.footerText}>Remember it? </Text>
-                <TextButton
-                  label="Log in"
-                  onPress={() => navigation.navigate('Login')}
-                  textStyle={[styles.link, styles.footerLink]}
+        <SlideIn key={stage} from={dir} style={styles.flex}>
+          {stage === 'request' && (
+            <ScrollView
+              bounces={false}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}
+            >
+              <FadeUp style={styles.heading}>
+                <Text style={styles.title}>Reset your password</Text>
+                <Text style={styles.subtitle}>Enter the email on your account and we'll send you a code.</Text>
+              </FadeUp>
+              <FadeUp delay={140} style={styles.card}>
+                <View style={styles.cardEdge} />
+                <GlassInput
+                  label="Email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChangeText={v => {
+                    setEmail(v);
+                    setEmailError(undefined);
+                  }}
+                  error={emailError}
+                  editable={!loading}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoFocus
+                  keyboardType="email-address"
+                  textContentType="emailAddress"
+                  returnKeyType="send"
+                  onSubmitEditing={sendCode}
+                />
+              </FadeUp>
+              <View style={styles.flex} />
+              <View style={styles.actions}>
+                <PrimaryButton
+                  label="Send code"
+                  onPress={sendCode}
+                  loading={loading}
+                  loadingText="Sending code…"
+                  disabled={guard.blocked}
+                  dim={!email.trim()}
                 />
               </View>
-            </FadeUp>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      )}
+            </ScrollView>
+          )}
+
+          {stage === 'code' && (
+            <View style={styles.codeWrap}>
+              <OtpVerification
+                email={email}
+                variant="page"
+                onVerify={verifyCode}
+                onResend={() => requestPasswordReset(email)}
+                onChangeEmail={back}
+                onNotice={setNotice}
+              />
+            </View>
+          )}
+
+          {stage === 'newPassword' && (
+            <ScrollView
+              bounces={false}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}
+            >
+              <View style={styles.heading}>
+                <Text style={styles.title}>Create new password</Text>
+                <Text style={styles.subtitle}>Use at least 8 characters with a number.</Text>
+              </View>
+              <View style={styles.card}>
+                <View style={styles.cardEdge} />
+                <GlassInput
+                  label="New password"
+                  placeholder="Enter a new password"
+                  value={password}
+                  onChangeText={v => {
+                    setPassword(v);
+                    setPwErrors(er => ({ ...er, password: undefined }));
+                  }}
+                  error={pwErrors.password}
+                  editable={!loading}
+                  password
+                  autoFocus
+                  textContentType="newPassword"
+                  returnKeyType="next"
+                />
+                <GlassInput
+                  label="Confirm password"
+                  placeholder="Re-enter your new password"
+                  value={confirm}
+                  onChangeText={v => {
+                    setConfirm(v);
+                    setPwErrors(er => ({ ...er, confirm: undefined }));
+                  }}
+                  error={pwErrors.confirm}
+                  editable={!loading}
+                  password
+                  textContentType="newPassword"
+                  returnKeyType="go"
+                  onSubmitEditing={savePassword}
+                />
+              </View>
+              <View style={styles.flex} />
+              <View style={styles.actions}>
+                <PrimaryButton
+                  label="Reset password"
+                  onPress={savePassword}
+                  loading={loading}
+                  loadingText="Resetting password…"
+                  disabled={guard.blocked}
+                  dim={!password || !confirm}
+                />
+              </View>
+            </ScrollView>
+          )}
+
+          {stage === 'done' && (
+            <SuccessState
+              title="Password updated"
+              body="You can now log in with your new password."
+              actionLabel="Log in"
+              onAction={() => navigation.navigate('Login')}
+            />
+          )}
+        </SlideIn>
+      </KeyboardAvoidingView>
     </View>
   );
 };
@@ -208,7 +286,8 @@ const createStyles = (A: AuthPalette) =>
     container: { flex: 1, backgroundColor: A.BG },
     flex: { flex: 1 },
     scroll: { flexGrow: 1, paddingHorizontal: 24 },
-    backBtn: { alignSelf: 'flex-start', paddingVertical: 8 },
+    codeWrap: { flex: 1, paddingHorizontal: 24 },
+    backBtn: { alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 24, marginTop: 8 },
     backRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
     backText: { color: A.MUTED, fontSize: 15 },
     heading: { marginTop: 24 },
@@ -223,6 +302,7 @@ const createStyles = (A: AuthPalette) =>
       paddingVertical: 24,
       paddingHorizontal: 20,
       boxShadow: A.CARD_SHADOW,
+      gap: 14,
     },
     cardEdge: {
       position: 'absolute',
@@ -232,28 +312,5 @@ const createStyles = (A: AuthPalette) =>
       height: 1,
       experimental_backgroundImage: `linear-gradient(90deg, transparent, ${A.INK(0.12)}, transparent)`,
     },
-    link: { color: A.LINK, fontSize: 13, fontWeight: '500' },
-    actions: { gap: 16, marginTop: 28 },
-    footerRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', minHeight: 20 },
-    footerText: { fontSize: 14, color: A.MUTED },
-    footerLink: { fontSize: 14, fontWeight: '600' },
-
-    sent: { flex: 1, paddingHorizontal: 24 },
-    sentBody: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 28 },
-    iconWrap: { alignItems: 'center', justifyContent: 'center' },
-    icon: {
-      width: 88,
-      height: 88,
-      borderRadius: 26,
-      backgroundColor: 'rgba(14,165,233,0.10)',
-      borderWidth: 1,
-      borderColor: 'rgba(14,165,233,0.28)',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    sentText: { alignItems: 'center' },
-    sentTitle: { fontSize: 30, fontWeight: '700', color: A.TEXT, letterSpacing: -0.7 },
-    sentLine: { fontSize: 16, color: A.MUTED, lineHeight: 26, marginTop: 14, textAlign: 'center' },
-    sentEmail: { color: A.TEXT, fontWeight: '600' },
-    sentHint: { fontSize: 13, color: A.HINT, lineHeight: 20, marginTop: 12, maxWidth: 280, textAlign: 'center' },
+    actions: { marginTop: 28 },
   });

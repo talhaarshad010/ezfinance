@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -11,25 +11,40 @@ import {
   Text,
   View,
 } from 'react-native';
-import Svg, { Circle, Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useToast } from '../../../context/ToastContext';
 import { useAppDispatch } from '../../../store/hooks';
-import { setProfile } from '../../../store/slices/userSlice';
+import { setProfile, UserProfile } from '../../../store/slices/userSlice';
 import { useUserMode } from '../../../context/UserModeContext';
+import {
+  abandonSignUp,
+  ApiError,
+  completeSignUp,
+  sendSignUpCode,
+  verifySignUpCode,
+} from '../../../services/authService';
+import { clearSignUpProgress, loadSignUpProgress, saveSignUpProgress } from '../../../api/signupProgress';
 import { AuthPalette, useAuthStyles } from '../components/authTheme';
 import { BackChevron, PrimaryButton, TextButton } from '../components/AuthButtons';
 import { GlassInput } from '../components/GlassInput';
 import { GlassDropdown } from '../components/GlassDropdown';
-import { Glow } from '../components/Glow';
-import { FadeUp, LogoReveal, SlideIn } from '../components/Entrance';
+import { FadeUp, SlideIn } from '../components/Entrance';
+import { SignUpDone } from '../components/SignUpDone';
+import { AuthBanners, FieldError, NoticeData } from '../components/AuthFeedback';
+import { authErrorMessage, useAuthGuard } from '../components/AuthGuard';
+import { MSG, validateEmail, validatePassword } from '../components/authMessages';
+import { OtpVerification } from '../components/OtpVerification';
 
-type Step = 'name' | 'contact' | 'password' | 'income' | 'city' | 'filer' | 'done';
+type Step = 'name' | 'email' | 'code' | 'password' | 'income' | 'city' | 'filer' | 'done';
 type Filer = 'yes' | 'no' | 'unsure';
 
-const STEPS: Step[] = ['name', 'contact', 'password', 'income', 'city', 'filer', 'done'];
-const TOTAL = STEPS.length - 1; // "done" isn't counted in "n of 6"
+// The email is verified (and the account created) before the password is chosen.
+const STEPS: Step[] = ['name', 'email', 'code', 'password', 'income', 'city', 'filer', 'done'];
+const TOTAL = STEPS.length - 1; // "done" isn't counted in "n of 7"
+const EMAIL_IDX = STEPS.indexOf('email');
+const PASSWORD_IDX = STEPS.indexOf('password');
+const SWIPE_DX = 60;
 
 const INCOME_OPTIONS = [
   { label: 'Under 25k', value: '< 25,000' },
@@ -72,31 +87,86 @@ function StepHeading({ title, hint }: { title: string; hint: string }) {
   );
 }
 
-/** Six-step sign-up (name → contact → password → income → location → filer) + success. */
+type Errors = Partial<Record<'name' | 'email' | 'password' | 'confirm' | 'city' | 'province', string>>;
+
+/**
+ * Sign-up wizard, one question per screen: name → email → code → password → income → location →
+ * filer → done. Continue or swipe left to advance, back arrow or swipe right to go back.
+ */
 export const RegisterScreen = () => {
   const { A, styles } = useAuthStyles(createStyles);
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const dispatch = useAppDispatch();
-  const { beginNewUser } = useUserMode();
+  const { beginNewUser, beginReturningUser } = useUserMode();
+  const guard = useAuthGuard();
 
   const [stepIdx, setStepIdx] = useState(0);
   const [dir, setDir] = useState<'right' | 'left'>('right');
   const [animKey, setAnimKey] = useState(0);
 
   const [name, setName] = useState('');
-  const [contact, setContact] = useState('');
+  const [email, setEmail] = useState('');
+  /** The email whose code was verified in this session (its account is signed in, in memory). */
+  const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [income, setIncome] = useState('');
   const [city, setCity] = useState('');
   const [province, setProvince] = useState('');
   const [filer, setFiler] = useState<Filer | ''>('');
   const [showFilerInfo, setShowFilerInfo] = useState(false);
 
+  const [errors, setErrors] = useState<Errors>({});
+  const [notice, setNotice] = useState<NoticeData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [created, setCreated] = useState<UserProfile | null>(null);
+  const [restored, setRestored] = useState(false);
+
+  const attempt = useRef(0);
+  const touch = useRef({ x: 0, y: 0 });
+  // Whether leaving this screen should discard an unfinished, verified sign-up session.
+  const pendingSession = useRef(false);
+
   const step = STEPS[stepIdx];
   const isDone = step === 'done';
+  const isCode = step === 'code';
+  const isFinish = step === 'filer';
   const progress = Math.min(Math.round((stepIdx / TOTAL) * 100), 100);
+  const normalizedEmail = email.trim().toLowerCase();
+
+  // ── Saved progress ────────────────────────────────────────────────────
+  useEffect(() => {
+    loadSignUpProgress().then(saved => {
+      if (saved && (saved.name || saved.email)) {
+        setName(saved.name);
+        setEmail(saved.email);
+        setIncome(saved.income);
+        setCity(saved.city);
+        setProvince(saved.province);
+        setFiler(saved.filer as Filer | '');
+        // A verified code doesn't survive a restart, so resume no later than the email step.
+        setStepIdx(Math.min(Math.max(saved.stepIndex, 0), EMAIL_IDX));
+        setNotice({ tone: 'info', text: 'Welcome back. We saved your progress.' });
+      }
+      setRestored(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!restored || isDone) return;
+    saveSignUpProgress({ stepIndex: stepIdx, name, email, income, city, province, filer });
+  }, [restored, isDone, stepIdx, name, email, income, city, province, filer]);
+
+  // Leaving mid-way (back, swipe, "Log in") drops the unfinished session; the account stays
+  // without a password and signing up again with the same email simply continues.
+  useEffect(
+    () => () => {
+      if (pendingSession.current) abandonSignUp();
+    },
+    [],
+  );
 
   const progressAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -108,14 +178,45 @@ export const RegisterScreen = () => {
     }).start();
   }, [progress, progressAnim]);
 
-  const canContinue = (() => {
+  // ── Navigation between steps ─────────────────────────────────────────
+  const goTo = useCallback((index: number, direction: 'right' | 'left') => {
+    setDir(direction);
+    setAnimKey(k => k + 1);
+    setStepIdx(index);
+  }, []);
+
+  const goPrev = () => {
+    attempt.current++;
+    setLoading(false);
+    setNotice(null);
+    setErrors({});
+    if (stepIdx === 0) {
+      navigation.goBack();
+      return;
+    }
+    // Once the email is verified, going back skips the code step.
+    if (step === 'password' && verifiedEmail) goTo(EMAIL_IDX, 'left');
+    else goTo(stepIdx - 1, 'left');
+  };
+
+  const leaveToLogin = () => {
+    attempt.current++;
+    if (pendingSession.current) {
+      pendingSession.current = false;
+      setVerifiedEmail(null);
+      abandonSignUp();
+    }
+    navigation.navigate('Login');
+  };
+
+  const filled = (() => {
     switch (step) {
       case 'name':
         return name.trim().length > 0;
-      case 'contact':
-        return contact.trim().length > 0;
+      case 'email':
+        return email.trim().length > 0;
       case 'password':
-        return password.length >= 8;
+        return password.length > 0 && confirm.length > 0;
       case 'city':
         return city.trim().length > 0 && province.length > 0;
       default:
@@ -123,42 +224,140 @@ export const RegisterScreen = () => {
     }
   })();
   const skippable = step === 'income' || step === 'filer';
+  const needsNetwork = step === 'email' || isFinish;
 
-  const goNext = () => {
-    if (stepIdx >= STEPS.length - 1) return;
-    setDir('right');
-    setAnimKey(k => k + 1);
-    setStepIdx(i => i + 1);
+  const validate = (): Errors => {
+    switch (step) {
+      case 'name':
+        return { name: name.trim() ? undefined : 'Enter your name.' };
+      case 'email':
+        return { email: validateEmail(email) ?? undefined };
+      case 'password':
+        return {
+          password: validatePassword(password) ?? undefined,
+          confirm: !confirm ? 'Confirm your password.' : confirm !== password ? MSG.mismatch : undefined,
+        };
+      case 'city':
+        return {
+          city: city.trim() ? undefined : 'Enter your city.',
+          province: province ? undefined : 'Select your province.',
+        };
+      default:
+        return {};
+    }
   };
-  const goBack = () => {
-    if (stepIdx === 0) {
-      navigation.goBack();
+
+  // Runs a network step with a spinner; results arriving after Back are ignored.
+  const request = async <T,>(fn: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false; error: unknown } | null> => {
+    setNotice(null);
+    setLoading(true);
+    const id = ++attempt.current;
+    try {
+      const value = await fn();
+      return id === attempt.current ? { ok: true, value } : null;
+    } catch (error) {
+      return id === attempt.current ? { ok: false, error } : null;
+    } finally {
+      if (id === attempt.current) setLoading(false);
+    }
+  };
+
+  const showError = (error: unknown) => {
+    const msg = authErrorMessage(error, guard);
+    if (msg) setNotice({ tone: 'error', text: msg });
+  };
+
+  const onContinue = async (skip = false) => {
+    if (loading || isDone || isCode) return;
+    if (!skip) {
+      const errs = validate();
+      setErrors(errs);
+      if (Object.values(errs).some(Boolean)) return;
+    }
+
+    if (step === 'email') {
+      if (guard.blocked) return;
+      if (verifiedEmail === normalizedEmail) {
+        goTo(PASSWORD_IDX, 'right');
+        return;
+      }
+      // Same response whether or not the email already has an account.
+      const r = await request(() => sendSignUpCode(email, name));
+      if (r?.ok) goTo(stepIdx + 1, 'right');
+      else if (r) showError(r.error);
       return;
     }
-    setDir('left');
-    setAnimKey(k => k + 1);
-    setStepIdx(i => i - 1);
+
+    if (isFinish) {
+      if (guard.blocked) return;
+      const r = await request(() =>
+        completeSignUp({
+          name,
+          password,
+          monthlyIncome: income || null,
+          city,
+          province: province || null,
+          filerStatus: skip ? null : filer || null,
+        }),
+      );
+      if (r?.ok) {
+        pendingSession.current = false;
+        clearSignUpProgress();
+        setCreated(r.value);
+        goTo(stepIdx + 1, 'right');
+      } else if (r) {
+        if ((r.error as ApiError).status === 401) {
+          // The verified session expired (e.g. a long pause): verify the email again.
+          pendingSession.current = false;
+          setVerifiedEmail(null);
+          setNotice({ tone: 'error', text: 'Your session expired. Verify your email again to finish.' });
+          goTo(EMAIL_IDX, 'left');
+        } else {
+          showError(r.error);
+        }
+      }
+      return;
+    }
+
+    goTo(stepIdx + 1, 'right');
+  };
+
+  const onCodeVerified = async (code: string) => {
+    const result = await verifySignUpCode(email, code);
+    if (result.existingAccount) {
+      // They proved they own the email, so it's safe to say it already has an account.
+      clearSignUpProgress();
+      beginReturningUser();
+      dispatch(setProfile(result.profile));
+      showToast('You already have an account with this email. You are signed in.', 'success');
+      return;
+    }
+    pendingSession.current = true;
+    setVerifiedEmail(normalizedEmail);
+    setNotice(null);
+    goTo(PASSWORD_IDX, 'right');
   };
 
   const finishSignUp = () => {
-    const value = contact.trim();
-    const isEmail = value.includes('@');
+    if (!created) return;
     // A fresh account: empty states, Getting started checklist and the guided tour.
     beginNewUser();
-    dispatch(
-      setProfile({
-        uid: 'usr_demo_01',
-        name: name.trim(),
-        email: isEmail ? value : '',
-        photoURL: null,
-        phone: isEmail ? null : value,
-        monthlyIncome: income || null,
-        city: city.trim() || null,
-        province: province || null,
-        filerStatus: filer || 'unsure',
-      }),
-    );
+    dispatch(setProfile(created));
     showToast('Account created successfully! Welcome to EZFinance.', 'success');
+  };
+
+  // Editing setters clear the matching inline message.
+  const clear = (k: keyof Errors) => setErrors(e => ({ ...e, [k]: undefined }));
+
+  const onEmailChange = (v: string) => {
+    setEmail(v);
+    clear('email');
+    if (verifiedEmail && v.trim().toLowerCase() !== verifiedEmail) {
+      // A different email: the verified session belongs to the old one.
+      pendingSession.current = false;
+      setVerifiedEmail(null);
+      abandonSignUp();
+    }
   };
 
   const strength = passwordStrength(password, A);
@@ -169,21 +368,21 @@ export const RegisterScreen = () => {
         return (
           <>
             <StepHeading title="What should we call you?" hint="This is how ezFinance will address you" />
-            <GlassInput size="lg" placeholder="Your name" value={name} onChangeText={setName} autoFocus autoCapitalize="words" textContentType="name" returnKeyType="next" onSubmitEditing={canContinue ? goNext : undefined} />
+            <GlassInput size="lg" placeholder="Your name" value={name} onChangeText={v => { setName(v); clear('name'); }} error={errors.name} autoFocus autoCapitalize="words" textContentType="name" returnKeyType="next" onSubmitEditing={() => onContinue()} />
           </>
         );
-      case 'contact':
+      case 'email':
         return (
           <>
-            <StepHeading title="Phone or email?" hint="Used to log in and for important notifications" />
-            <GlassInput size="lg" placeholder="+92 3xx xxxx xxx or email" value={contact} onChangeText={setContact} autoFocus autoCapitalize="none" autoCorrect={false} keyboardType="email-address" textContentType="username" returnKeyType="next" onSubmitEditing={canContinue ? goNext : undefined} />
+            <StepHeading title="What's your email?" hint="Used to log in and for important notifications" />
+            <GlassInput size="lg" placeholder="you@example.com" value={email} onChangeText={onEmailChange} error={errors.email} editable={!loading} autoFocus autoCapitalize="none" autoCorrect={false} keyboardType="email-address" textContentType="emailAddress" returnKeyType="next" onSubmitEditing={() => onContinue()} />
           </>
         );
       case 'password':
         return (
           <>
-            <StepHeading title="Create a password" hint="Minimum 8 characters" />
-            <GlassInput size="lg" placeholder="Password" value={password} onChangeText={setPassword} password autoFocus textContentType="newPassword" returnKeyType="next" onSubmitEditing={canContinue ? goNext : undefined} />
+            <StepHeading title="Create a password" hint="At least 8 characters with a number" />
+            <GlassInput size="lg" placeholder="Password" value={password} onChangeText={v => { setPassword(v); clear('password'); }} error={errors.password} password autoFocus textContentType="newPassword" returnKeyType="next" />
             {strength && (
               <View style={styles.strengthRow}>
                 <View style={styles.strengthTrack}>
@@ -192,6 +391,9 @@ export const RegisterScreen = () => {
                 <Text style={[styles.strengthLabel, { color: strength.color }]}>{strength.label}</Text>
               </View>
             )}
+            <View style={styles.confirmField}>
+              <GlassInput size="lg" placeholder="Confirm password" value={confirm} onChangeText={v => { setConfirm(v); clear('confirm'); }} error={errors.confirm} password textContentType="newPassword" returnKeyType="next" onSubmitEditing={() => onContinue()} />
+            </View>
           </>
         );
       case 'income':
@@ -223,8 +425,11 @@ export const RegisterScreen = () => {
           <>
             <StepHeading title="Your location" hint="Tax rules vary by province" />
             <View style={styles.cityFields}>
-              <GlassInput size="lg" placeholder="City (e.g. Lahore)" value={city} onChangeText={setCity} autoCapitalize="words" textContentType="addressCity" />
-              <GlassDropdown placeholder="Select province" value={province} onChange={setProvince} options={PROVINCES} />
+              <GlassInput size="lg" placeholder="City (e.g. Lahore)" value={city} onChangeText={v => { setCity(v); clear('city'); }} error={errors.city} autoCapitalize="words" textContentType="addressCity" />
+              <View>
+                <GlassDropdown placeholder="Select province" value={province} onChange={v => { setProvince(v); clear('province'); }} options={PROVINCES} />
+                <FieldError>{errors.province}</FieldError>
+              </View>
             </View>
           </>
         );
@@ -269,14 +474,26 @@ export const RegisterScreen = () => {
   };
 
   return (
-    <View style={styles.container}>
+    <View
+      style={styles.container}
+      onTouchStart={e => {
+        touch.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY };
+      }}
+      onTouchEnd={e => {
+        const dx = e.nativeEvent.pageX - touch.current.x;
+        const dy = e.nativeEvent.pageY - touch.current.y;
+        if (isDone || loading || Math.abs(dx) < SWIPE_DX || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+        if (dx < 0) onContinue();
+        else goPrev();
+      }}
+    >
       <StatusBar barStyle={A.STATUS_BAR} backgroundColor={A.BG} />
 
       {/* Header + progress */}
       <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
         {!isDone && (
           <View style={styles.headerRow}>
-            <Pressable onPress={goBack} hitSlop={10} style={({ pressed }) => [styles.headerBack, pressed && { opacity: 0.6 }]}>
+            <Pressable onPress={goPrev} hitSlop={10} accessibilityLabel="Back" style={({ pressed }) => [styles.headerBack, pressed && { opacity: 0.6 }]}>
               <BackChevron />
             </Pressable>
             <Text style={styles.headerTitle}>Create account</Text>
@@ -294,56 +511,55 @@ export const RegisterScreen = () => {
           />
         </View>
       </View>
+      <AuthBanners notice={notice} />
 
       {isDone ? (
-        <View style={[styles.done, { paddingBottom: insets.bottom + 28 }]}>
-          <LogoReveal style={styles.doneIconWrap}>
-            <Glow size={130} stops={[[0, '#00E68A', 0.22], [0.72, '#00E68A', 0]]} />
-            <View style={styles.doneIcon}>
-              <Svg width={40} height={40} viewBox="0 0 40 40" fill="none">
-                <Circle cx="20" cy="20" r="18" fill="rgba(0,230,138,0.2)" />
-                <Circle cx="20" cy="20" r="13" fill={A.EMERALD} />
-                <Path d="M13 20l5.5 5.5 9.5-10" stroke="#0D0D0E" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
-              </Svg>
-            </View>
-          </LogoReveal>
-          <FadeUp delay={140} style={styles.doneText}>
-            <Text style={styles.doneTitle}>You are all set!</Text>
-            <Text style={styles.doneBody}>
-              Your ezFinance account is ready. Let us take control of your finances together.
-            </Text>
-          </FadeUp>
-          <FadeUp delay={260} style={styles.doneCta}>
-            <PrimaryButton label="Go to my dashboard" height={58} onPress={finishSignUp} />
-          </FadeUp>
-        </View>
+        <SignUpDone onContinue={finishSignUp} />
       ) : (
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-          <ScrollView
-            style={styles.flex}
-            contentContainerStyle={styles.stepScroll}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <SlideIn key={animKey} from={dir} style={styles.stepBody}>
-              {renderStep()}
+          {isCode ? (
+            <SlideIn key={animKey} from={dir} style={styles.codeWrap}>
+              <OtpVerification
+                email={email}
+                variant="wizard"
+                onVerify={onCodeVerified}
+                onResend={() => sendSignUpCode(email, name)}
+                onChangeEmail={goPrev}
+                onNotice={setNotice}
+              />
             </SlideIn>
-          </ScrollView>
+          ) : (
+            <>
+              <ScrollView
+                style={styles.flex}
+                contentContainerStyle={styles.stepScroll}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                <SlideIn key={animKey} from={dir} style={[styles.stepBody, loading && styles.locked]}>
+                  {renderStep()}
+                </SlideIn>
+              </ScrollView>
 
-          <View style={[styles.bottom, { paddingBottom: insets.bottom + 20 }]}>
-            <PrimaryButton
-              label={stepIdx === TOTAL - 1 ? 'Finish' : 'Continue'}
-              onPress={goNext}
-              disabled={!canContinue}
-            />
-            {skippable && (
-              <TextButton label="Skip for now" onPress={goNext} style={styles.skipBtn} textStyle={styles.skipText} />
-            )}
-            <View style={styles.loginRow}>
-              <Text style={styles.loginText}>Already have an account? </Text>
-              <TextButton label="Log in" onPress={() => navigation.navigate('Login')} textStyle={styles.loginLink} />
-            </View>
-          </View>
+              <View style={[styles.bottom, { paddingBottom: insets.bottom + 20 }]}>
+                <PrimaryButton
+                  label={isFinish ? 'Finish' : 'Continue'}
+                  onPress={() => onContinue()}
+                  loading={loading}
+                  loadingText={isFinish ? 'Creating account…' : 'Sending code…'}
+                  disabled={needsNetwork && guard.blocked}
+                  dim={!filled}
+                />
+                {skippable && !loading && (
+                  <TextButton label="Skip for now" onPress={() => onContinue(true)} style={styles.skipBtn} textStyle={styles.skipText} />
+                )}
+                <View style={styles.loginRow}>
+                  <Text style={styles.loginText}>Already have an account? </Text>
+                  <TextButton label="Log in" onPress={leaveToLogin} textStyle={styles.loginLink} />
+                </View>
+              </View>
+            </>
+          )}
         </KeyboardAvoidingView>
       )}
     </View>
@@ -447,6 +663,9 @@ const createStyles = (A: AuthPalette) =>
   chipTextActive: { color: A.LINK, fontWeight: '600' },
 
   cityFields: { gap: 12 },
+  confirmField: { marginTop: 14 },
+  codeWrap: { flex: 1, paddingHorizontal: 24 },
+  locked: { opacity: 0.6 },
 
   filerHead: {
     flexDirection: 'row',
@@ -514,40 +733,4 @@ const createStyles = (A: AuthPalette) =>
   loginRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   loginText: { fontSize: 13, color: A.FAINT },
   loginLink: { fontSize: 13, color: A.LINK, fontWeight: '600' },
-
-  done: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    gap: 28,
-  },
-  doneIconWrap: { alignItems: 'center', justifyContent: 'center' },
-  doneIcon: {
-    width: 88,
-    height: 88,
-    borderRadius: 26,
-    backgroundColor: 'rgba(0,230,138,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(0,230,138,0.28)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: '0 0 48px rgba(0,230,138,0.22)',
-  },
-  doneText: { alignItems: 'center' },
-  doneTitle: {
-    fontSize: 30,
-    fontWeight: '700',
-    color: A.TEXT,
-    letterSpacing: -0.7,
-  },
-  doneBody: {
-    fontSize: 16,
-    color: A.MUTED,
-    lineHeight: 26,
-    maxWidth: 260,
-    marginTop: 14,
-    textAlign: 'center',
-  },
-  doneCta: { width: '100%', marginTop: 8 },
 });

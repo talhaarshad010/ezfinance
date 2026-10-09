@@ -1,0 +1,98 @@
+@host = http://localhost:5080
+@email = you@example.com
+@accessToken = paste-access-token
+@refreshToken = paste-refresh-token
+
+### Register (emails a verification code)
+POST {{host}}/api/auth/register
+Content-Type: application/json
+
+{
+  "fullName": "Test User",
+  "email": "{{email}}",
+  "password": "change-me-123",
+  "monthlyIncome": "25k_50k",
+  "city": "Lahore",
+  "province": "Punjab",
+  "filerStatus": "unsure"
+}
+
+### Verify email with the 6-digit code
+POST {{host}}/api/auth/verify-email
+Content-Type: application/json
+
+{ "email": "{{email}}", "code": "123456" }
+
+### Resend sign-up code
+POST {{host}}/api/auth/resend-code
+Content-Type: application/json
+
+{ "email": "{{email}}" }
+
+### Login
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{ "email": "{{email}}", "password": "change-me-123" }
+
+### Google sign-in (idToken from native Google Sign-In on the phone)
+POST {{host}}/api/auth/google
+Content-Type: application/json
+
+{ "idToken": "paste-google-id-token" }
+
+### Refresh session
+POST {{host}}/api/auth/refresh
+Content-Type: application/json
+
+{ "refreshToken": "{{refreshToken}}" }
+
+### Forgot password (emails a reset code)
+POST {{host}}/api/auth/forgot-password
+Content-Type: application/json
+
+{ "email": "{{email}}" }
+
+### Reset password with the code
+POST {{host}}/api/auth/reset-password
+Content-Type: application/json
+
+{ "email": "{{email}}", "code": "123456", "newPassword": "new-password-123" }
+
+### Change password
+POST {{host}}/api/auth/change-password
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{ "currentPassword": "change-me-123", "newPassword": "new-password-123" }
+
+### Set a password (accounts created with Google)
+POST {{host}}/api/auth/set-password
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{ "newPassword": "new-password-123" }
+
+### Logout
+POST {{host}}/api/auth/logout
+Authorization: Bearer {{accessToken}}
+
+### Get profile
+GET {{host}}/api/profile
+Authorization: Bearer {{accessToken}}
+
+### Update profile
+PUT {{host}}/api/profile
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "fullName": "Test User",
+  "monthlyIncome": "50k_100k",
+  "city": "Karachi",
+  "province": "Sindh",
+  "filerStatus": "filer"
+}
+
+### Readiness
+GET {{host}}/health/ready

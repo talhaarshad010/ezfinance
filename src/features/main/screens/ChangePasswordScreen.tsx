@@ -14,12 +14,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
+import { ApiError, changePassword, setPassword } from '../../../services/authService';
+import { useAppDispatch, useAppSelector } from '../../../store/hooks';
+import { setProfile } from '../../../store/slices/userSlice';
 
 export const ChangePasswordScreen = () => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { showToast } = useToast();
+  const dispatch = useAppDispatch();
+  // Accounts created with Google have no password yet: this screen then sets one instead.
+  const settingPassword = useAppSelector(state => state.user.profile?.hasPassword === false);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -38,8 +44,8 @@ export const ChangePasswordScreen = () => {
   const hasNumberSpecial =
     /[0-9]/.test(newPassword) && /[^A-Za-z0-9]/.test(newPassword);
 
-  const handleChangePassword = () => {
-    if (!currentPassword || !newPassword || !confirmPassword) {
+  const handleChangePassword = async () => {
+    if ((!settingPassword && !currentPassword) || !newPassword || !confirmPassword) {
       showToast('Please fill in all password fields.', 'error');
       return;
     }
@@ -54,17 +60,30 @@ export const ChangePasswordScreen = () => {
       return;
     }
 
-    if (currentPassword === newPassword) {
+    if (!settingPassword && currentPassword === newPassword) {
       showToast('New password must be different from current.', 'error');
       return;
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      showToast('Password updated successfully!', 'success');
+    try {
+      if (settingPassword) {
+        dispatch(setProfile(await setPassword(newPassword)));
+        showToast('Password set. You can now also log in with your email.', 'success');
+      } else {
+        await changePassword(currentPassword, newPassword);
+        showToast('Password updated successfully!', 'success');
+      }
       navigation.goBack();
-    }, 400);
+    } catch (e) {
+      const err = e as ApiError;
+      showToast(
+        err.code === 'invalid_current_password' ? 'Your current password is incorrect.' : err.message,
+        'error',
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -97,10 +116,12 @@ export const ChangePasswordScreen = () => {
             </Text>
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
-            Change Password
+            {settingPassword ? 'Set a Password' : 'Change Password'}
           </Text>
           <Text style={[styles.headerSub, { color: theme.MUTED }]}>
-            Ensure your new password meets security requirements.
+            {settingPassword
+              ? 'You signed up with Google. Add a password to also log in with your email.'
+              : 'Ensure your new password meets security requirements.'}
           </Text>
         </View>
 
@@ -108,32 +129,34 @@ export const ChangePasswordScreen = () => {
         <View style={styles.sectionMargin}>
           <View style={styles.inputsStack}>
             {/* Current Password */}
-            <View style={[styles.inputCard, { backgroundColor: theme.CARD }]}>
-              <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
-                CURRENT PASSWORD
-              </Text>
-              <View style={styles.inputInnerRow}>
-                <Feather name="lock" size={18} color={theme.MUTED} />
-                <TextInput
-                  style={[styles.textInput, { color: theme.TEXT }]}
-                  value={currentPassword}
-                  onChangeText={setCurrentPassword}
-                  secureTextEntry={!showCurrent}
-                  placeholder="Enter current password"
-                  placeholderTextColor={theme.MUTED}
-                />
-                <TouchableOpacity
-                  activeOpacity={0.7}
-                  onPress={() => setShowCurrent(!showCurrent)}
-                >
-                  <Feather
-                    name={showCurrent ? 'eye' : 'eye-off'}
-                    size={18}
-                    color={theme.MUTED}
+            {!settingPassword && (
+              <View style={[styles.inputCard, { backgroundColor: theme.CARD }]}>
+                <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>
+                  CURRENT PASSWORD
+                </Text>
+                <View style={styles.inputInnerRow}>
+                  <Feather name="lock" size={18} color={theme.MUTED} />
+                  <TextInput
+                    style={[styles.textInput, { color: theme.TEXT }]}
+                    value={currentPassword}
+                    onChangeText={setCurrentPassword}
+                    secureTextEntry={!showCurrent}
+                    placeholder="Enter current password"
+                    placeholderTextColor={theme.MUTED}
                   />
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => setShowCurrent(!showCurrent)}
+                  >
+                    <Feather
+                      name={showCurrent ? 'eye' : 'eye-off'}
+                      size={18}
+                      color={theme.MUTED}
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
+            )}
 
             {/* New Password */}
             <View style={[styles.inputCard, { backgroundColor: theme.CARD }]}>
@@ -243,7 +266,7 @@ export const ChangePasswordScreen = () => {
             <ActivityIndicator color={theme.BG} />
           ) : (
             <Text style={[styles.submitText, { color: theme.BG }]}>
-              Update Password →
+              {settingPassword ? 'Set Password →' : 'Update Password →'}
             </Text>
           )}
         </TouchableOpacity>

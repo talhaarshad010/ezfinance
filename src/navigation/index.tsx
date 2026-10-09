@@ -38,7 +38,8 @@ import {
 import Feather from 'react-native-vector-icons/Feather';
 import { Typography, Logo } from '../components';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { clearProfile } from '../store/slices/userSlice';
+import { clearProfile, setProfile } from '../store/slices/userSlice';
+import { isSignedIn, refreshProfile, restoreSession } from '../services/authService';
 import { HeaderProfile } from '../components/HeaderProfile';
 import { resetSettings } from '../store/slices/settingsSlice';
 import { useTheme } from '../context/ThemeContext';
@@ -57,11 +58,38 @@ export const AppNavigator = () => {
   const { beginReturningUser } = useUserMode();
   const net = useNetwork();
 
+  const [restoring, setRestoring] = React.useState(true);
   const [pendingOTP, setPendingOTP] = React.useState(false);
   const [otpUserData, setOtpUserData] = React.useState<{
     uid: string;
     email: string;
   } | null>(null);
+
+  // Reopen the app signed in when a session was saved on this device.
+  React.useEffect(() => {
+    let active = true;
+    (async () => {
+      const saved = await restoreSession();
+      if (!active) return;
+      if (saved) {
+        beginReturningUser();
+        dispatch(setProfile(saved));
+      }
+      setRestoring(false);
+      if (saved) {
+        // Pick up changes made on the server. A dead session signs out via the api layer.
+        refreshProfile()
+          .then(latest => {
+            if (active && isSignedIn()) dispatch(setProfile(latest));
+          })
+          .catch(() => {});
+      }
+    })();
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   React.useEffect(() => {
     const logoutListener = DeviceEventEmitter.addListener('LOGOUT', () => {
@@ -85,6 +113,10 @@ export const AppNavigator = () => {
     setOtpUserData(null);
     dispatch(clearProfile());
   };
+
+  if (restoring) {
+    return <View style={{ flex: 1, backgroundColor: theme.BG }} />;
+  }
 
   // Show OTP screen if 2FA is pending
   if (isAuthenticated && pendingOTP && otpUserData) {

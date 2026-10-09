@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EzFinance.Api/EzFinance.Api.csproj" />
+  </Folder>
+</Solution>

@@ -15,47 +15,58 @@ import { useAuthTheme } from './authTheme';
 // `.btn-press:active` → scale(0.965), opacity .88
 const pressed = { transform: [{ scale: 0.965 }], opacity: 0.88 };
 
-/** Solid pill — the primary CTA (white on dark, ink on light). Dims when disabled. */
+/**
+ * Solid pill — the primary CTA (white on dark, ink on light).
+ * `dim`: form incomplete. Looks inactive but stays tappable, so the screen can explain what's missing.
+ * `disabled`: truly unavailable (offline, locked out). `loading` shows a spinner and `loadingText`.
+ */
 export function PrimaryButton({
   label,
   onPress,
   disabled,
+  dim,
   loading,
+  loadingText,
   height = 56,
   style,
 }: {
   label: string;
   onPress?: () => void;
   disabled?: boolean;
+  dim?: boolean;
   loading?: boolean;
+  loadingText?: string;
   height?: number;
   style?: StyleProp<ViewStyle>;
 }) {
   const A = useAuthTheme();
   const off = disabled || loading;
+  const muted = !loading && (disabled || dim);
+  const fontSize = height > 56 ? 17 : 16;
   return (
     <Pressable
       onPress={off ? undefined : onPress}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!off, busy: !!loading }}
       style={({ pressed: p }) => [
         styles.pill,
         {
           height,
-          backgroundColor: disabled ? A.DISABLED_BG : A.PRIMARY_BG,
-          boxShadow: disabled ? undefined : A.PRIMARY_SHADOW,
+          backgroundColor: muted ? A.DISABLED_BG : A.PRIMARY_BG,
+          boxShadow: muted || loading ? undefined : A.PRIMARY_SHADOW,
+          opacity: loading ? 0.86 : 1,
         },
         p && !off && pressed,
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={A.PRIMARY_TEXT} />
+        <View style={styles.glassRow}>
+          <ActivityIndicator color={A.PRIMARY_TEXT} />
+          {loadingText ? <Text style={[styles.primaryText, { fontSize, color: A.PRIMARY_TEXT }]}>{loadingText}</Text> : null}
+        </View>
       ) : (
-        <Text
-          style={[
-            styles.primaryText,
-            { fontSize: height > 56 ? 17 : 16, color: disabled ? A.DISABLED_TEXT : A.PRIMARY_TEXT },
-          ]}
-        >
+        <Text style={[styles.primaryText, { fontSize, color: muted ? A.DISABLED_TEXT : A.PRIMARY_TEXT }]}>
           {label}
         </Text>
       )}
@@ -67,21 +78,30 @@ export function PrimaryButton({
 export function GlassButton({
   children,
   onPress,
+  disabled,
+  busy,
   style,
 }: {
   children: React.ReactNode;
   onPress?: () => void;
+  /** Unavailable: faded and not tappable. */
+  disabled?: boolean;
+  /** Working (e.g. "Signing in…"): not tappable but not faded. */
+  busy?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const A = useAuthTheme();
+  const off = disabled || busy;
   return (
     <Pressable
-      onPress={onPress}
+      onPress={off ? undefined : onPress}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!off, busy: !!busy }}
       style={({ pressed: p }) => [
         styles.pill,
         styles.glass,
-        { backgroundColor: A.SECONDARY_BG, borderColor: A.SECONDARY_BORDER },
-        p && { ...pressed, backgroundColor: A.SECONDARY_PRESSED },
+        { backgroundColor: A.SECONDARY_BG, borderColor: A.SECONDARY_BORDER, opacity: disabled && !busy ? 0.4 : 1 },
+        p && !off && { ...pressed, backgroundColor: A.SECONDARY_PRESSED },
         style,
       ]}
     >

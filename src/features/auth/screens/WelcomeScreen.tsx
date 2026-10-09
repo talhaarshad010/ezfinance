@@ -1,16 +1,21 @@
-import React, { useState } from 'react';
-import { StatusBar, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useToast } from '../../../context/ToastContext';
 import { useAppDispatch } from '../../../store/hooks';
 import { setProfile } from '../../../store/slices/userSlice';
 import { useUserMode } from '../../../context/UserModeContext';
+import { ApiError, signInWithGoogle } from '../../../services/authService';
+import { getLastSignInMethod, SignInMethod } from '../../../api/lastSignIn';
 import { AuthPalette, useAuthStyles } from '../components/authTheme';
 import { AuthLogo } from '../components/AuthLogo';
 import { Glow } from '../components/Glow';
 import { GlassButton, GoogleIcon, PrimaryButton, TextButton } from '../components/AuthButtons';
 import { FadeUp } from '../components/Entrance';
+import { AuthBanners, NoticeData } from '../components/AuthFeedback';
+import { authErrorMessage, useAuthGuard } from '../components/AuthGuard';
+import { MSG } from '../components/authMessages';
 
 /** Auth choice: create account, log in, continue with Google, or explore as a guest. */
 export const WelcomeScreen = () => {
@@ -19,27 +24,44 @@ export const WelcomeScreen = () => {
   const insets = useSafeAreaInsets();
   const dispatch = useAppDispatch();
   const { beginNewUser, beginReturningUser } = useUserMode();
-  const { showToast } = useToast();
+  const guard = useAuthGuard();
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<NoticeData | null>(null);
+  const [lastUsed, setLastUsed] = useState<SignInMethod | null>(null);
 
-  // Same demo sign-in the Login/Register screens use.
-  const handleGoogleSignIn = () => {
-    if (busy) return;
+  useEffect(() => {
+    getLastSignInMethod().then(setLastUsed);
+  }, []);
+
+  const lastUsedBadge = (
+    <View style={styles.badge} pointerEvents="none">
+      <Text style={styles.badgeText}>Last used</Text>
+    </View>
+  );
+  const { showToast } = useToast();
+
+  const handleGoogleSignIn = async () => {
+    if (busy || guard.blocked) return;
+    setNotice(null);
     setBusy(true);
-    setTimeout(() => {
-      beginReturningUser();
-      dispatch(
-        setProfile({
-          uid: 'usr_demo_01',
-          name: 'Muhammad Talha Arshad',
-          email: 'talhaarshad010@gmail.com',
-          photoURL: null,
-          phone: '+92 300 1234567',
-        }),
-      );
+    try {
+      const result = await signInWithGoogle();
+      if (!result) return; // closing the Google sheet is not an error, so nothing is shown
+      // First Google sign-in creates the account: same fresh start as email sign-up.
+      if (result.isNewUser) {
+        beginNewUser();
+      } else {
+        beginReturningUser();
+      }
+      dispatch(setProfile(result.profile));
+      showToast(result.isNewUser ? 'Welcome to EZFinance!' : 'Signed in with Google!', 'success');
+    } catch (e) {
+      const err = e as ApiError;
+      const msg = err.code === 'google_failed' ? MSG.googleFail : authErrorMessage(err, guard);
+      if (msg) setNotice({ tone: 'error', text: msg });
+    } finally {
       setBusy(false);
-      showToast('Signed in with Google!', 'success');
-    }, 400);
+    }
   };
 
   // Explore = first-run journey: empty states, getting-started checklist and the guided tour.
@@ -59,6 +81,9 @@ export const WelcomeScreen = () => {
   return (
     <View style={styles.container}>
       <StatusBar barStyle={A.STATUS_BAR} backgroundColor={A.BG} />
+      <View style={{ paddingTop: insets.top }}>
+        <AuthBanners notice={notice} />
+      </View>
 
       <View style={styles.hero}>
         <Glow
@@ -82,9 +107,13 @@ export const WelcomeScreen = () => {
         <PrimaryButton
           label="Create new account"
           onPress={() => navigation.navigate('Register')}
+          disabled={busy}
           style={{ boxShadow: A.isDark ? '0 4px 24px rgba(255,255,255,0.15)' : A.PRIMARY_SHADOW }}
         />
-        <GlassButton onPress={() => navigation.navigate('Login')}>Log in</GlassButton>
+        <View>
+          <GlassButton onPress={() => navigation.navigate('Login')} disabled={busy}>Log in</GlassButton>
+          {lastUsed === 'email' && lastUsedBadge}
+        </View>
 
         <View style={styles.orRow}>
           <View style={styles.orLine} />
@@ -92,10 +121,22 @@ export const WelcomeScreen = () => {
           <View style={styles.orLine} />
         </View>
 
-        <GlassButton onPress={handleGoogleSignIn}>
-          <GoogleIcon />
-          <Text style={styles.googleText}>Continue with Google</Text>
-        </GlassButton>
+        <View>
+          <GlassButton onPress={handleGoogleSignIn} disabled={guard.offline || busy} busy={busy}>
+            {busy ? (
+              <>
+                <ActivityIndicator color={A.TEXT} />
+                <Text style={styles.googleText}>Signing in…</Text>
+              </>
+            ) : (
+              <>
+                <GoogleIcon />
+                <Text style={styles.googleText}>Continue with Google</Text>
+              </>
+            )}
+          </GlassButton>
+          {lastUsed === 'google' && lastUsedBadge}
+        </View>
 
         <TextButton
           label="Explore without logging in →"
@@ -153,6 +194,17 @@ const createStyles = (A: AuthPalette) =>
   },
   orText: { fontSize: 13, color: A.MUTED },
   googleText: { color: A.TEXT, fontSize: 16, fontWeight: '600' },
+  // "Last used" pill sitting on the top edge of the button the user signed in with last time.
+  badge: {
+    position: 'absolute',
+    top: -9,
+    right: 18,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 100,
+    backgroundColor: A.SKY,
+  },
+  badgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
   exploreBtn: {
     height: 44,
     alignItems: 'center',

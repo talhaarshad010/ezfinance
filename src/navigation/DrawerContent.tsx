@@ -6,13 +6,13 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
-  DeviceEventEmitter,
 } from 'react-native';
 import { DrawerContentComponentProps } from '@react-navigation/drawer';
 import Feather from 'react-native-vector-icons/Feather';
 import Typography from '../components/Typography';
 import { useAppSelector } from '../store/hooks';
 import { useTheme } from '../context/ThemeContext';
+import { signOut } from '../services/authService';
 
 const { width } = Dimensions.get('window');
 
@@ -306,7 +306,7 @@ export const DrawerContent = React.memo((props: DrawerContentComponentProps) => 
 
         <TouchableOpacity
           style={[styles.logoutButton, { borderTopColor: theme.BORDER }]}
-          onPress={() => DeviceEventEmitter.emit('LOGOUT')}
+          onPress={() => signOut()}
           activeOpacity={0.8}
         >
           <Feather name="log-out" size={20} color={theme.RED} />

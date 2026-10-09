@@ -14,10 +14,14 @@ import { useToast } from '../../../context/ToastContext';
 import { useAppDispatch } from '../../../store/hooks';
 import { setProfile } from '../../../store/slices/userSlice';
 import { useUserMode } from '../../../context/UserModeContext';
+import { ApiError, resendVerificationCode, signIn } from '../../../services/authService';
 import { AuthPalette, useAuthStyles } from '../components/authTheme';
 import { BackChevron, PrimaryButton, TextButton } from '../components/AuthButtons';
 import { GlassInput } from '../components/GlassInput';
 import { FadeUp } from '../components/Entrance';
+import { AuthBanners, NoticeData } from '../components/AuthFeedback';
+import { authErrorMessage, useAuthGuard } from '../components/AuthGuard';
+import { MSG, validateEmail } from '../components/authMessages';
 
 export const LoginScreen = () => {
   const { A, styles } = useAuthStyles(createStyles);
@@ -27,38 +31,65 @@ export const LoginScreen = () => {
   const dispatch = useAppDispatch();
   const { beginReturningUser } = useUserMode();
 
+  const guard = useAuthGuard();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  // Same message whether or not the account exists, so it can't be used to probe for accounts.
+  const [badCredentials, setBadCredentials] = useState(false);
+  const [notice, setNotice] = useState<NoticeData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const canSubmit = email.trim().length > 0 && password.length > 0;
+  const filled = email.trim().length > 0 && password.length > 0;
 
-  const handleLogin = () => {
-    if (!email.trim() || !password) {
-      showToast('Please enter both email and password', 'error');
-      return;
-    }
+  const handleLogin = async () => {
+    if (isLoading || guard.blocked) return;
+    // The button stays tappable while the form is incomplete, so explain what's missing.
+    const next = {
+      email: validateEmail(email) ?? undefined,
+      password: password ? undefined : 'Enter your password.',
+    };
+    setErrors(next);
+    if (next.email || next.password) return;
 
+    setNotice(null);
+    setBadCredentials(false);
     setIsLoading(true);
-    setTimeout(() => {
+    try {
+      const profile = await signIn(email, password);
+      guard.resetFailures();
       beginReturningUser();
-      dispatch(
-        setProfile({
-          uid: 'usr_demo_01',
-          name: 'Muhammad Talha Arshad',
-          email: email.trim(),
-          photoURL: null,
-          phone: '+92 300 1234567',
-        }),
-      );
-      setIsLoading(false);
+      dispatch(setProfile(profile));
       showToast('Welcome back! Vault unlocked.', 'success');
-    }, 400);
+    } catch (e) {
+      const err = e as ApiError;
+      if (err.code === 'email_not_confirmed') {
+        // Signed up but never entered the code: send a fresh one and finish verification.
+        try {
+          await resendVerificationCode(email);
+        } catch {
+          // Rate limited or offline; the previous code may still be valid.
+        }
+        navigation.navigate('VerifyEmail', { email: email.trim() });
+      } else if (err.code === 'invalid_credentials') {
+        setBadCredentials(true);
+        guard.registerFailure(); // 5 wrong attempts lock the form for 5 minutes
+      } else {
+        const msg = authErrorMessage(err, guard);
+        if (msg) setNotice({ tone: 'error', text: msg });
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle={A.STATUS_BAR} backgroundColor={A.BG} />
+      <View style={{ paddingTop: insets.top }}>
+        <AuthBanners notice={notice} />
+      </View>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -70,7 +101,7 @@ export const LoginScreen = () => {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.scroll,
-            { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24 },
+            { paddingTop: 8, paddingBottom: insets.bottom + 24 },
           ]}
         >
           {/* Back */}
@@ -95,10 +126,17 @@ export const LoginScreen = () => {
           <FadeUp delay={140} style={styles.card}>
             <View style={styles.cardEdge} />
             <GlassInput
-              label="Email or phone number"
+              label="Email"
               placeholder="you@example.com"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={text => {
+                setEmail(text);
+                setErrors(er => ({ ...er, email: undefined }));
+                setBadCredentials(false);
+              }}
+              error={errors.email}
+              editable={!isLoading}
+              autoFocus
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
@@ -109,11 +147,17 @@ export const LoginScreen = () => {
               label="Password"
               placeholder="Enter your password"
               value={password}
-              onChangeText={setPassword}
+              onChangeText={text => {
+                setPassword(text);
+                setErrors(er => ({ ...er, password: undefined }));
+                setBadCredentials(false);
+              }}
+              error={errors.password ?? (badCredentials ? MSG.loginFail : undefined)}
+              editable={!isLoading}
               password
               textContentType="password"
               returnKeyType="go"
-              onSubmitEditing={canSubmit ? handleLogin : undefined}
+              onSubmitEditing={handleLogin}
               suffix={
                 <View style={styles.forgotRow}>
                   <TextButton
@@ -124,6 +168,12 @@ export const LoginScreen = () => {
                 </View>
               }
             />
+            {badCredentials && (
+              <Text style={styles.hint}>
+                Signed up with Google? Go back and choose Continue with Google. Or tap Forgot password
+                to set a password for this email.
+              </Text>
+            )}
           </FadeUp>
 
           <View style={styles.flex} />
@@ -133,8 +183,10 @@ export const LoginScreen = () => {
             <PrimaryButton
               label="Log in"
               onPress={handleLogin}
-              disabled={!canSubmit}
               loading={isLoading}
+              loadingText="Signing in…"
+              disabled={guard.blocked}
+              dim={!filled}
             />
             <View style={styles.footerRow}>
               <Text style={styles.footerText}>Don't have an account? </Text>
@@ -209,6 +261,11 @@ const createStyles = (A: AuthPalette) =>
     height: 1,
     experimental_backgroundImage:
       `linear-gradient(90deg, transparent, ${A.INK(0.12)}, transparent)`,
+  },
+  hint: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: A.MUTED,
   },
   forgotRow: {
     flexDirection: 'row',

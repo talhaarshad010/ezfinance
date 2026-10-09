@@ -12,7 +12,9 @@ import WelcomeScreen from '../features/auth/screens/WelcomeScreen';
 import LoginScreen from '../features/auth/screens/LoginScreen';
 import RegisterScreen from '../features/auth/screens/RegisterScreen';
 import ForgotPasswordScreen from '../features/auth/screens/ForgotPasswordScreen';
+import VerifyEmailScreen from '../features/auth/screens/VerifyEmailScreen';
 import { useAuthTheme } from '../features/auth/components/authTheme';
+import { AuthGuardProvider } from '../features/auth/components/AuthGuard';
 import { HAS_NATIVE_SPLASH } from '../utils/nativeSplash';
 
 export type AuthStackParamList = {
@@ -22,6 +24,7 @@ export type AuthStackParamList = {
   Login: undefined;
   Register: undefined;
   ForgotPassword: undefined;
+  VerifyEmail: { email: string };
 };
 
 const Stack = createStackNavigator<AuthStackParamList>();
@@ -49,7 +52,7 @@ export const AuthStack = () => {
     introShown = true;
   }, []);
   return (
-    <>
+    <AuthGuardProvider>
       <StatusBar barStyle={A.STATUS_BAR} backgroundColor={A.BG} translucent={false} />
       <Stack.Navigator
         // First launch: Android plays the logo splash natively before JS is up, iOS uses
@@ -68,7 +71,8 @@ export const AuthStack = () => {
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Register" component={RegisterScreen} options={{ gestureEnabled: false }} />
         <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+        <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
       </Stack.Navigator>
-    </>
+    </AuthGuardProvider>
   );
 };

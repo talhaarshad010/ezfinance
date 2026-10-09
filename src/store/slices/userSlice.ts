@@ -1,6 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
-interface UserProfile {
+export interface UserProfile {
   uid: string;
   name: string;
   email: string;
@@ -11,6 +11,8 @@ interface UserProfile {
   city?: string | null;
   province?: string | null;
   filerStatus?: 'yes' | 'no' | 'unsure' | null;
+  /** False when the account was created with Google and has no password yet. */
+  hasPassword?: boolean;
 }
 
 interface UserState {
