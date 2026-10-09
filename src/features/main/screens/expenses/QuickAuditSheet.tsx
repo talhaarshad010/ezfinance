@@ -83,7 +83,7 @@ export default function QuickAuditSheet({
                 {tx.label}
               </Text>
               <Text style={[styles.txSub, { color: theme.MUTED }]}>
-                {tx.category} · {tx.account}
+                {[tx.category, tx.account].filter(Boolean).join(' · ')}
               </Text>
             </View>
             <Text style={[styles.txAmt, { color: amtColor }]}>
@@ -180,7 +180,7 @@ export function TransactionDetailModal({
   const rows = [
     { label: 'Date & Time', value: `${tx.dateGroup} · ${tx.time}`, badge: false },
     { label: 'Status', value: tx.status, badge: true },
-    { label: 'Payment Method', value: tx.account, badge: false },
+    { label: 'Payment Method', value: tx.account || '—', badge: false },
     { label: 'Category', value: tx.category, badge: false },
     { label: 'SMS Reference', value: tx.smsRef || 'N/A', badge: false, mono: true },
   ];
@@ -267,11 +267,14 @@ export function EditTxModal({
   tx,
   onClose,
   onSave,
+  categories,
 }: {
   visible: boolean;
   tx: LedgerTransaction | null;
   onClose: () => void;
   onSave: (updated: LedgerTransaction) => void;
+  /** Categories to pick from; defaults to the sample ledger's. */
+  categories?: string[];
 }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -287,7 +290,7 @@ export function EditTxModal({
 
   if (!tx) return null;
 
-  const cats = [
+  const cats = categories ?? [
     'Groceries',
     'Transport',
     'Housing',
@@ -417,6 +420,11 @@ export function SplitTxModal({
   const split2 = total - split1;
   const [cat1, setCat1] = useState('Groceries');
   const [cat2, setCat2] = useState('Dining');
+
+  // Start each split at 60 / 40 of the transaction being split.
+  React.useEffect(() => {
+    setSplit1(Math.floor(total * 0.6));
+  }, [tx, total]);
 
   if (!tx) return null;
 

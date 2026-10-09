@@ -16,13 +16,16 @@ import { useToast } from '../../../context/ToastContext';
 import { ProgressRing, ProgressTrack } from '../../../components';
 import {
   AMBER,
-  SAVINGS_GOALS,
   SavingsGoal,
   goalColor,
   goalPct,
   totalEarmarked,
 } from '../../../constants/savingsGoals';
 import { AnimatedModal } from '../../../components/AnimatedModal';
+import { useNetwork } from '../../../context/NetworkContext';
+import { EmptyState, Sample, TEAL } from '../newUser/shared';
+import { GoalSheet } from '../newUser/sheets';
+import { useSavingsGoals } from './goals/useSavingsGoals';
 
 type GoalOverlay = null | 'streak' | 'options' | 'yield' | 'activity' | 'archive';
 
@@ -33,16 +36,24 @@ const ACTIVITY_FEED = [
   { name: 'Fatima', amount: 10000, label: 'Monthly contribution', ago: '1 month ago' },
 ];
 
+/** "310K" for large amounts, the full number below 1,000. */
+const shortAmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(0)}K` : n.toLocaleString());
+
+const addDays = (d: Date, days: number) => new Date(d.getTime() + days * 86400000);
+
 /* ─── Goal card ──────────────────────────────────────────────────────────── */
 
 function GoalCard({
   goal,
   onTap,
   onOverlay,
+  paceNote = 'on track',
 }: {
   goal: SavingsGoal;
   onTap: () => void;
   onOverlay: (o: GoalOverlay) => void;
+  /** Shown after the monthly pace, e.g. "on track" or "12 mo left". */
+  paceNote?: string;
 }) {
   const { theme } = useTheme();
   const pct = goalPct(goal);
@@ -120,10 +131,10 @@ function GoalCard({
 
       <View style={styles.goalAmountsRow}>
         <Text style={[styles.goalAmountText, { color: theme.MUTED }]}>
-          PKR {goal.currentLabel ?? `${(goal.current / 1000).toFixed(0)}K`}
+          PKR {goal.currentLabel ?? shortAmt(goal.current)}
         </Text>
         <Text style={[styles.goalAmountText, { color: theme.MUTED }]}>
-          of {goal.targetLabel ?? `PKR ${(goal.target / 1000).toFixed(0)}K`}
+          of {goal.targetLabel ?? `PKR ${shortAmt(goal.target)}`}
         </Text>
       </View>
 
@@ -132,7 +143,7 @@ function GoalCard({
       <View style={styles.goalBottomRow}>
         {!isPaused ? (
           <Text style={[styles.goalPaceText, { color: theme.MUTED }]}>
-            PKR {goal.pace.toLocaleString()}/mo · on track
+            PKR {goal.pace.toLocaleString()}/mo · {paceNote}
           </Text>
         ) : (
           <Text style={[styles.goalPaceText, { color: AMBER }]}>
@@ -184,10 +195,46 @@ export const GoalsScreen = () => {
   const { theme } = useTheme();
   const { showToast } = useToast();
 
+  const { goals, isUser, userGoalOf, userMode } = useSavingsGoals();
+  const network = useNetwork();
+
   const [overlay, setOverlay] = useState<GoalOverlay>(null);
   const [activeGoal, setActiveGoal] = useState<SavingsGoal | null>(null);
+  // Quick-add sheet behind the empty state's suggestions.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [preset, setPreset] = useState<{ name: string; target: number } | undefined>(undefined);
+  const openPreset = (p: { name: string; target: number }) => {
+    setPreset(p);
+    setSheetOpen(true);
+  };
+  const samples: Sample[] = [
+    { label: 'Emergency fund', icon: 'shield', color: TEAL, onPress: () => openPreset({ name: 'Emergency fund', target: 300000 }) },
+    { label: 'Umrah', icon: 'send', color: '#0055FF', onPress: () => openPreset({ name: 'Umrah', target: 450000 }) },
+    { label: 'Wedding', icon: 'heart', color: '#FF2D55', onPress: () => openPreset({ name: 'Wedding', target: 1500000 }) },
+  ];
 
-  const earmarked = totalEarmarked();
+  const earmarked = totalEarmarked(goals);
+
+  // Savings rate: the sample figure, or this month's (income − spending) / income.
+  const savingsRate = (() => {
+    if (!isUser) return 20;
+    const now = new Date();
+    const thisMonth = userMode.txs.filter(
+      t => t.date.getMonth() === now.getMonth() && t.date.getFullYear() === now.getFullYear(),
+    );
+    const income = thisMonth.filter(t => t.type === 'income').reduce((a, t) => a + t.amount, 0);
+    const spent = thisMonth.filter(t => t.type === 'expense').reduce((a, t) => a + t.amount, 0);
+    return income > 0 ? Math.round(((income - spent) / income) * 100) : null;
+  })();
+
+  /** Moves a user's goal deadline out by `days` (from today if it has none). */
+  const pushDeadline = (days: number) => {
+    const own = activeGoal ? userGoalOf(activeGoal.id) : undefined;
+    if (!own) return null;
+    const deadline = addDays(own.deadline ?? addDays(new Date(), 365), days);
+    userMode.updateGoal(own.id, { deadline });
+    return deadline.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  };
 
   const closeOverlay = () => setOverlay(null);
 
@@ -209,6 +256,7 @@ export const GoalsScreen = () => {
       color: theme.TEXT,
       onPress: () => {
         closeOverlay();
+        if (isUser) pushDeadline(60);
         showToast(
           `${activeGoal?.label} target extended by 60 days.`,
           'success',
@@ -222,6 +270,8 @@ export const GoalsScreen = () => {
       color: theme.TEXT,
       onPress: () => {
         closeOverlay();
+        // A user's lower pace comes from a later deadline (3 months out).
+        if (isUser) pushDeadline(90);
         showToast(
           'Monthly pace target lowered. Deadline pushed out accordingly.',
           'info',
@@ -311,22 +361,34 @@ export const GoalsScreen = () => {
                 PKR {earmarked.toLocaleString()}
               </Text>
             </View>
-            <View
-              style={[styles.ratePill, { backgroundColor: `${theme.GREEN}18` }]}
-            >
-              <Text style={[styles.ratePillText, { color: theme.GREEN }]}>
-                Savings Rate: 20%
-              </Text>
-            </View>
+            {savingsRate !== null && (
+              <View
+                style={[styles.ratePill, { backgroundColor: `${savingsRate < 0 ? theme.RED : theme.GREEN}18` }]}
+              >
+                <Text style={[styles.ratePillText, { color: savingsRate < 0 ? theme.RED : theme.GREEN }]}>
+                  Savings Rate: {savingsRate}%
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
         {/* Goal cards */}
+        {goals.length === 0 && (
+          <EmptyState
+            icon="target"
+            title="What are you saving for?"
+            line="Pick a target and we'll show how much to put aside each month."
+            samples={samples}
+            primary={{ label: 'Create a goal', onPress: () => navigation.navigate('CreateGoal') }}
+          />
+        )}
         <View style={styles.sectionPad}>
-          {SAVINGS_GOALS.map(goal => (
+          {goals.map(goal => (
             <GoalCard
               key={goal.id}
               goal={goal}
+              paceNote={isUser ? `${goal.monthsLeft} mo left` : undefined}
               onTap={() =>
                 navigation.navigate('GoalDetail', { goalId: goal.id })
               }
@@ -338,6 +400,8 @@ export const GoalsScreen = () => {
           ))}
         </View>
       </ScrollView>
+
+      {isUser && <GoalSheet visible={sheetOpen} preset={preset} onClose={() => setSheetOpen(false)} />}
 
       {/* ── Options action sheet ── */}
       <AnimatedModal
@@ -532,6 +596,11 @@ export const GoalsScreen = () => {
                 activeOpacity={0.85}
                 onPress={() => {
                   closeOverlay();
+                  const own = activeGoal ? userGoalOf(activeGoal.id) : undefined;
+                  if (own) {
+                    userMode.deleteGoal(own.id);
+                    network.record({ entity: 'goal', entityId: own.id, action: 'delete', label: `Archive goal · ${own.name}` });
+                  }
                   showToast(
                     `${activeGoal?.label} archived. Funds returned to Net Worth.`,
                     'success',

@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Feather from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
+import { isRouteEnabled } from '../../../constants/features';
 import { Typography, Card } from '../../../components';
 import { colors } from '../../../theme/colors';
 
@@ -34,7 +35,6 @@ const SEARCH_DATABASE: SearchItem[] = [
   { id: 'm6', title: 'Analytics', subtitle: 'Detailed spending reports', target: 'Analytics', category: 'Menu', icon: 'bar-chart-2' },
   { id: 'm7', title: 'Portfolio', subtitle: 'Manage your assets', target: 'Portfolio', category: 'Menu', icon: 'briefcase' },
   { id: 'm8', title: 'Stock Market', subtitle: 'Real-time stock news & data', target: 'StockMarket', category: 'Menu', icon: 'activity' },
-  { id: 'm9', title: 'Crypto Market', subtitle: 'Digital currency trends', target: 'CryptoMarket', category: 'Menu', icon: 'zap' },
   
   // Settings & Account
   { id: 's1', title: 'Profile Settings', subtitle: 'Edit your name, email, and photo', target: 'EditProfile', category: 'Setting', icon: 'user' },
@@ -51,8 +51,6 @@ const SEARCH_DATABASE: SearchItem[] = [
   
   // Markets & Assets
   { id: 'mk1', title: 'Apple Inc (AAPL)', subtitle: 'Stock • Technology', target: 'StockDetail', params: { symbol: 'AAPL' }, category: 'Market', icon: 'activity' },
-  { id: 'mk2', title: 'Bitcoin (BTC)', subtitle: 'Crypto • Digital Gold', target: 'AssetDetail', params: { id: 'bitcoin' }, category: 'Market', icon: 'zap' },
-  { id: 'mk3', title: 'Ethereum (ETH)', subtitle: 'Crypto • Smart Contracts', target: 'AssetDetail', params: { id: 'ethereum' }, category: 'Market', icon: 'circle' },
   
   // Bank Accounts
   { id: 'ba1', title: 'Bank Accounts', subtitle: 'Manage your bank accounts', target: 'BankAccounts', category: 'Menu', icon: 'briefcase' },
@@ -69,9 +67,11 @@ const SearchScreen = () => {
     const lowerQuery = query.toLowerCase();
     return SEARCH_DATABASE.filter(
       item =>
+        // Skip screens of switched-off features (see constants/features).
+        isRouteEnabled(item.target) && (
         item.title.toLowerCase().includes(lowerQuery) ||
         item.subtitle.toLowerCase().includes(lowerQuery) ||
-        item.category.toLowerCase().includes(lowerQuery)
+        item.category.toLowerCase().includes(lowerQuery))
     );
   }, [query]);
 
@@ -80,7 +80,7 @@ const SearchScreen = () => {
     const tabScreens = ['Home', 'Expenses', 'Investments', 'AI Advisor', 'Profile'];
     // These screens are direct children of 'Drawer'
     const drawerScreens = [
-      'StockMarket', 'CryptoMarket', 'AddExpense', 'Analytics', 
+      'StockMarket', 'AddExpense', 'Analytics', 
       'BudgetPlanner', 'Portfolio', 'Settings', 'Notifications', 'BankAccounts'
     ];
 

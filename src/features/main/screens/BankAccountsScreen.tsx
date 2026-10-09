@@ -15,12 +15,8 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
-import { useAppSelector, useAppDispatch } from '../../../store/hooks';
-import {
-  removeAccount,
-  updateAccountBalance,
-  BankAccount,
-} from '../../../store/slices/bankAccountsSlice';
+import { BankAccount } from '../../../store/slices/bankAccountsSlice';
+import { useBankAccounts } from './bankAccounts/useBankAccounts';
 import { getBankById } from '../../../constants/pakistaniBanks';
 import { AnimatedModal } from '../../../components/AnimatedModal';
 
@@ -34,10 +30,11 @@ export const BankAccountsScreen = () => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const dispatch = useAppDispatch();
   const { showToast } = useToast();
 
-  const { accounts, loading } = useAppSelector(state => state.bankAccounts);
+  // The user's own accounts, or the sample accounts in the Explore demo.
+  const bank = useBankAccounts();
+  const { accounts, isUser } = bank;
 
   const [balanceModalVisible, setBalanceModalVisible] = useState(false);
   const [actionMenuVisible, setActionMenuVisible] = useState(false);
@@ -65,9 +62,7 @@ export const BankAccountsScreen = () => {
 
     setIsUpdating(true);
     setTimeout(() => {
-      dispatch(
-        updateAccountBalance({ accountId: selectedAccount.id, balance: val }),
-      );
+      bank.setBalance(selectedAccount.id, val);
       setBalanceModalVisible(false);
       setIsUpdating(false);
       showToast(
@@ -80,7 +75,7 @@ export const BankAccountsScreen = () => {
 
   const handleConfirmRemove = (acc: BankAccount) => {
     setActionMenuVisible(false);
-    dispatch(removeAccount(acc.id));
+    bank.remove(acc.id);
     showToast(
       `${acc.bankName} account removed successfully.`,
       'success',
@@ -125,7 +120,7 @@ export const BankAccountsScreen = () => {
 
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => navigation.navigate('LinkAccount')}
+            onPress={() => navigation.navigate('AddAccount')}
             style={[styles.addBtn, { backgroundColor: theme.TEXT }]}
           >
             <Feather name="plus" size={18} color={theme.BG} />
@@ -136,7 +131,7 @@ export const BankAccountsScreen = () => {
         <View style={styles.sectionMargin}>
           <View style={[styles.heroCard, { backgroundColor: theme.HERO_BG }]}>
             <Text style={styles.heroSubhead}>
-              TOTAL LIQUID ASSETS · 1LINK MERGED
+              {isUser ? 'TOTAL BALANCE · ALL ACCOUNTS' : 'TOTAL LIQUID ASSETS · 1LINK MERGED'}
             </Text>
             <Text style={styles.heroAmount}>
               {totalBalance.toLocaleString()}
@@ -148,21 +143,21 @@ export const BankAccountsScreen = () => {
               <View style={styles.heroStatCol}>
                 <Text style={styles.heroStatLabel}>Accounts</Text>
                 <Text style={[styles.heroStatValue, { color: theme.TEXT }]}>
-                  {accounts.length} Linked
+                  {accounts.length} {isUser ? 'Added' : 'Linked'}
                 </Text>
               </View>
 
               <View style={styles.heroStatColBordered}>
                 <Text style={styles.heroStatLabel}>Primary Vault</Text>
-                <Text style={[styles.heroStatValue, { color: theme.ACTIVE }]}>
-                  {accounts[0]?.bankName || 'Meezan Bank'}
+                <Text numberOfLines={1} style={[styles.heroStatValue, { color: theme.ACTIVE }]}>
+                  {accounts[0]?.bankName || (isUser ? '—' : 'Meezan Bank')}
                 </Text>
               </View>
 
               <View style={styles.heroStatColBordered}>
-                <Text style={styles.heroStatLabel}>Auto-Sync</Text>
-                <Text style={[styles.heroStatValue, { color: theme.GREEN }]}>
-                  Active
+                <Text style={styles.heroStatLabel}>{isUser ? 'Updates' : 'Auto-Sync'}</Text>
+                <Text style={[styles.heroStatValue, { color: isUser ? theme.MUTED : theme.GREEN }]}>
+                  {isUser ? 'Manual' : 'Active'}
                 </Text>
               </View>
             </View>
@@ -173,7 +168,7 @@ export const BankAccountsScreen = () => {
         <View style={styles.sectionMargin}>
           <View style={styles.listHeaderRow}>
             <Text style={[styles.sectionTitle, { color: theme.MUTED }]}>
-              Linked Accounts
+              {isUser ? 'Your Accounts' : 'Linked Accounts'}
             </Text>
             <Text style={[styles.subText, { color: theme.MUTED }]}>
               {accounts.length} Accounts
@@ -192,19 +187,20 @@ export const BankAccountsScreen = () => {
                 <Feather name="credit-card" size={24} color={theme.MUTED} />
               </View>
               <Text style={[styles.emptyTitle, { color: theme.TEXT }]}>
-                No Bank Accounts Linked
+                {isUser ? 'No accounts yet' : 'No Bank Accounts Linked'}
               </Text>
               <Text style={[styles.emptySub, { color: theme.MUTED }]}>
-                Link your HBL, Meezan, Alfalah, or Easypaisa account to enable
-                SMS transaction parsing.
+                {isUser
+                  ? 'Add your bank accounts and wallets with their current balance. Transactions you log to an account keep its balance up to date.'
+                  : 'Link your HBL, Meezan, Alfalah, or Easypaisa account to enable SMS transaction parsing.'}
               </Text>
               <TouchableOpacity
                 activeOpacity={0.85}
-                onPress={() => navigation.navigate('LinkAccount')}
+                onPress={() => navigation.navigate('AddAccount')}
                 style={[styles.linkCtaBtn, { backgroundColor: theme.TEXT }]}
               >
                 <Text style={[styles.linkCtaText, { color: theme.BG }]}>
-                  + Link Bank Account
+                  {isUser ? '+ Add Account' : '+ Link Bank Account'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -214,8 +210,10 @@ export const BankAccountsScreen = () => {
                 const bankInfo = getBankById(acc.bankId);
 
                 return (
-                  <View
+                  <TouchableOpacity
                     key={acc.id}
+                    activeOpacity={0.9}
+                    onPress={() => navigation.navigate('AccountDetail', { accountId: acc.id })}
                     style={[
                       styles.accountCard,
                       { backgroundColor: theme.CARD },
@@ -312,7 +310,7 @@ export const BankAccountsScreen = () => {
                         </Text>
                       </TouchableOpacity>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
             </View>
@@ -330,10 +328,11 @@ export const BankAccountsScreen = () => {
             <Feather name="shield" size={16} color={theme.ACTIVE} />
             <Text style={[styles.complianceText, { color: theme.TEXT }]}>
               <Text style={{ fontWeight: '700', color: theme.ACTIVE }}>
-                1LINK SECP PROTECTED:{' '}
+                {isUser ? 'YOUR DATA, YOUR CONTROL: ' : "1LINK SECP PROTECTED: "}
               </Text>
-              All linked accounts are encrypted under SBP digital banking
-              protocols. No raw banking credentials are ever stored.
+              {isUser
+                ? 'Balances come from what you enter and log. ezfinance never asks for your banking passwords or PINs.'
+                : 'All linked accounts are encrypted under SBP digital banking protocols. No raw banking credentials are ever stored.'}
             </Text>
           </View>
         </View>
@@ -448,7 +447,7 @@ export const BankAccountsScreen = () => {
             >
               <Feather name="trash-2" size={15} color={theme.RED} />
               <Text style={[styles.menuItemText, { color: theme.RED }]}>
-                Remove Linked Account
+                {isUser ? 'Remove Account' : 'Remove Linked Account'}
               </Text>
             </TouchableOpacity>
           </View>

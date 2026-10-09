@@ -18,6 +18,8 @@ import { FieldError } from '../../../components/Feedback';
 import { MSG, SAVE_ERROR, isFuture, parseAmount, simulateSave, useFormErrors } from '../../../utils/validation';
 import { abbr, fullAmt } from '../../../utils/format';
 import { GOAL_ICONS } from '../../../constants/savingsGoals';
+import { useUserMode } from '../../../context/UserModeContext';
+import { useNetwork } from '../../../context/NetworkContext';
 
 type CreateStep = 1 | 2 | 3;
 
@@ -36,6 +38,8 @@ export const CreateGoalScreen = () => {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { showToast } = useToast();
+  const { isNewUser, addGoal } = useUserMode();
+  const network = useNetwork();
 
   const [step, setStep] = useState<CreateStep>(1);
   const prevStep = useRef(step);
@@ -95,6 +99,11 @@ export const CreateGoalScreen = () => {
     try {
       await simulateSave();
       const amount = parseAmount(targetAmt)!;
+      // A signed-in user's goal is saved to their goals (the Explore demo only shows the toast).
+      if (isNewUser) {
+        const g = { name: name.trim(), target: amount, deadline: targetDate, icon: GOAL_ICONS[iconIdx]?.icon };
+        network.record({ entity: 'goal', entityId: addGoal(g), action: 'create', label: `Goal · ${g.name}`, payload: g });
+      }
       showToast(
         `${name.trim()} created — PKR ${abbr(amount)} by ${formatTargetDate(targetDate)}.`,
         'success',

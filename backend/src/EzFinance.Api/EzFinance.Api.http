@@ -3,19 +3,11 @@
 @accessToken = paste-access-token
 @refreshToken = paste-refresh-token
 
-### Register (emails a verification code)
-POST {{host}}/api/auth/register
+### Sign-up step 1: email a 6-digit code (creates the account if new)
+POST {{host}}/api/auth/email-code
 Content-Type: application/json
 
-{
-  "fullName": "Test User",
-  "email": "{{email}}",
-  "password": "change-me-123",
-  "monthlyIncome": "25k_50k",
-  "city": "Lahore",
-  "province": "Punjab",
-  "filerStatus": "unsure"
-}
+{ "email": "{{email}}", "fullName": "Test User" }
 
 ### Verify email with the 6-digit code
 POST {{host}}/api/auth/verify-email
@@ -53,11 +45,17 @@ Content-Type: application/json
 
 { "email": "{{email}}" }
 
-### Reset password with the code
-POST {{host}}/api/auth/reset-password
+### Reset step 2: check the code from the reset email
+POST {{host}}/api/auth/verify-reset-code
 Content-Type: application/json
 
-{ "email": "{{email}}", "code": "123456", "newPassword": "new-password-123" }
+{ "email": "{{email}}", "code": "123456" }
+
+### Reset step 3: set the new password
+POST {{host}}/api/auth/complete-reset
+Content-Type: application/json
+
+{ "resetToken": "paste-reset-token", "newPassword": "new-password-123" }
 
 ### Change password
 POST {{host}}/api/auth/change-password

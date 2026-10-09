@@ -12,6 +12,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
+import { isRouteEnabled } from '../../../constants/features';
 
 type FilterType = 'all' | 'unread' | 'transactions' | 'markets' | 'ai';
 
@@ -93,7 +94,8 @@ export const NotificationsScreen = () => {
 
   const [filter, setFilter] = useState<FilterType>('all');
   const [notifications, setNotifications] = useState<NotificationItem[]>(
-    INITIAL_NOTIFICATIONS,
+    // Leave out alerts that open a switched-off feature (see constants/features).
+    INITIAL_NOTIFICATIONS.filter(n => !n.screenTarget || isRouteEnabled(n.screenTarget)),
   );
 
   const handleMarkAllRead = () => {

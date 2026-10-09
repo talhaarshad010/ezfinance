@@ -12,10 +12,9 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
-import {
-  SAVINGS_GOALS,
-  goalColor,
-} from '../../../constants/savingsGoals';
+import { goalColor } from '../../../constants/savingsGoals';
+import { useNetwork } from '../../../context/NetworkContext';
+import { useSavingsGoals } from './goals/useSavingsGoals';
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '000', '0', '⌫'];
 const QUICK_AMOUNTS = [5000, 10000, 25000];
@@ -27,7 +26,9 @@ export const LogContributionScreen = () => {
   const { theme } = useTheme();
   const { showToast } = useToast();
 
-  const initialGoalId = route.params?.goalId ?? SAVINGS_GOALS[0].id;
+  const { goals, userGoalOf, userMode } = useSavingsGoals();
+  const network = useNetwork();
+  const initialGoalId = route.params?.goalId ?? goals[0]?.id;
   const [goalId, setGoalId] = useState<number>(initialGoalId);
   const [amount, setAmount] = useState('');
   const [source, setSource] = useState<'unallocated' | 'external'>(
@@ -36,7 +37,11 @@ export const LogContributionScreen = () => {
   const [done, setDone] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const goal = SAVINGS_GOALS.find(g => g.id === goalId) ?? SAVINGS_GOALS[0];
+  // Once added, the shown goal already includes the contribution, so keep the one from before.
+  const shownGoal = goals.find(g => g.id === goalId) ?? goals[0];
+  const before = useRef(shownGoal);
+  if (!done) before.current = shownGoal;
+  const goal = before.current;
 
   useEffect(
     () => () => {
@@ -65,9 +70,17 @@ export const LogContributionScreen = () => {
       );
       return;
     }
+    // A user's contribution is added to their goal.
+    const own = userGoalOf(goal.id);
+    if (own) {
+      userMode.updateGoal(own.id, { saved: own.saved + numeric });
+      network.record({ entity: 'goal', entityId: own.id, action: 'update', label: `Contribution · ${own.name}` });
+    }
     setDone(true);
     timer.current = setTimeout(() => navigation.goBack(), 1800);
   };
+
+  if (!goal) return <View style={[styles.container, { backgroundColor: theme.BG }]} />;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.BG }]}>
@@ -125,7 +138,7 @@ export const LogContributionScreen = () => {
                 SELECT GOAL
               </Text>
               <View style={styles.chipWrap}>
-                {SAVINGS_GOALS.map(g => {
+                {goals.map(g => {
                   const selected = g.id === goalId;
                   const c = goalColor(g, theme.GREEN, theme.ACTIVE);
                   return (

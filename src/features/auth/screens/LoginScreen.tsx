@@ -29,7 +29,7 @@ export const LoginScreen = () => {
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const dispatch = useAppDispatch();
-  const { beginReturningUser } = useUserMode();
+  const { beginNewUser } = useUserMode();
 
   const guard = useAuthGuard();
 
@@ -59,7 +59,8 @@ export const LoginScreen = () => {
     try {
       const profile = await signIn(email, password);
       guard.resetFailures();
-      beginReturningUser();
+      // Real accounts never see sample data; the tour shows until it's been completed once.
+      beginNewUser({ tour: !profile.tourCompleted });
       dispatch(setProfile(profile));
       showToast('Welcome back! Vault unlocked.', 'success');
     } catch (e) {

@@ -11,7 +11,7 @@ import ChangePasswordScreen from '../features/main/screens/ChangePasswordScreen'
 import StockDetailScreen from '../features/main/screens/StockDetailScreen';
 import AddExpenseScreen from '../features/main/screens/AddExpenseScreen';
 import ExpenseDetailScreen from '../features/main/screens/ExpenseDetailScreen';
-import BuyCryptoScreen from '../features/main/screens/BuyCryptoScreen';
+
 import EditProfileScreen from '../features/main/screens/EditProfileScreen';
 import SecurityScreen from '../features/main/screens/SecurityScreen';
 import AssetDetailScreen from '../features/main/screens/AssetDetailScreen';
@@ -39,7 +39,8 @@ import Feather from 'react-native-vector-icons/Feather';
 import { Typography, Logo } from '../components';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { clearProfile, setProfile } from '../store/slices/userSlice';
-import { isSignedIn, refreshProfile, restoreSession } from '../services/authService';
+import { FEATURES } from '../constants/features';
+import { isSignedIn, markTourCompleted, refreshProfile, restoreSession } from '../services/authService';
 import { HeaderProfile } from '../components/HeaderProfile';
 import { resetSettings } from '../store/slices/settingsSlice';
 import { useTheme } from '../context/ThemeContext';
@@ -55,7 +56,7 @@ export const AppNavigator = () => {
   const { theme } = useTheme();
   const profile = useAppSelector(state => state.user.profile);
   const isAuthenticated = !!profile;
-  const { beginReturningUser } = useUserMode();
+  const { beginNewUser, beginReturningUser, tourOpen } = useUserMode();
   const net = useNetwork();
 
   const [restoring, setRestoring] = React.useState(true);
@@ -72,7 +73,8 @@ export const AppNavigator = () => {
       const saved = await restoreSession();
       if (!active) return;
       if (saved) {
-        beginReturningUser();
+        // Real accounts never see sample data; the tour shows until it's been completed once.
+        beginNewUser({ tour: !saved.tourCompleted });
         dispatch(setProfile(saved));
       }
       setRestoring(false);
@@ -90,6 +92,21 @@ export const AppNavigator = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // When a signed-in account finishes or skips the tour, remember it on the server so it shows
+  // only on the first visit (on any device). Explore (guest) has no account to remember it on.
+  const wasTourOpen = React.useRef(false);
+  React.useEffect(() => {
+    if (wasTourOpen.current && !tourOpen && profile && !profile.tourCompleted && isSignedIn()) {
+      markTourCompleted()
+        .then(latest => {
+          if (isSignedIn()) dispatch(setProfile(latest));
+        })
+        .catch(() => {}); // offline: the tour shows again next time, which is harmless
+    }
+    wasTourOpen.current = tourOpen;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tourOpen]);
 
   React.useEffect(() => {
     const logoutListener = DeviceEventEmitter.addListener('LOGOUT', () => {
@@ -176,10 +193,12 @@ export const AppNavigator = () => {
           >
             <Stack.Screen name="Drawer" component={MainDrawerNavigator} options={{ headerShown: false }} />
             <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="StockDetail" component={StockDetailScreen} options={{ headerShown: false }} />
+            {FEATURES.stockMarket && (
+              <Stack.Screen name="StockDetail" component={StockDetailScreen} options={{ headerShown: false }} />
+            )}
             <Stack.Screen name="AddExpense" component={AddExpenseScreen} options={{ headerShown: false }} />
             <Stack.Screen name="ExpenseDetail" component={ExpenseDetailScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="BuyCrypto" component={BuyCryptoScreen} options={{ headerShown: false }} />
+            
             <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Security" component={SecurityScreen} options={{ headerShown: false }} />
             <Stack.Screen name="AssetDetail" component={AssetDetailScreen} options={{ headerShown: false }} />

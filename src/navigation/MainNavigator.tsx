@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import { Easing, View } from 'react-native';
 import {
   createBottomTabNavigator,
@@ -10,6 +10,7 @@ import ExpensesScreen from '../features/main/screens/ExpensesScreen';
 import InvestmentsScreen from '../features/main/screens/InvestmentsScreen';
 import AIAdvisorScreen from '../features/main/screens/AIAdvisorScreen';
 import GoalsScreen from '../features/main/screens/GoalsScreen';
+import { useFocusEffect } from '@react-navigation/native';
 import { CustomBottomNav } from './CustomBottomNav';
 import { useTheme } from '../context/ThemeContext';
 import { useUserMode } from '../context/UserModeContext';
@@ -18,11 +19,10 @@ import { AISkeleton, GoalsSkeleton, NewUserSkeleton } from '../components/Skelet
 import {
   NewAI,
   NewDashboard,
-  NewExpenses,
-  NewGoals,
   NewInvestments,
 } from '../features/main/newUser/NewUserScreens';
 import { TourOverlay } from '../features/main/newUser/TourOverlay';
+import { InvestmentComingSoon } from '../features/main/screens/investments/InvestmentComingSoon';
 
 const Tab = createBottomTabNavigator();
 
@@ -66,15 +66,10 @@ const HomeTab = () => {
   );
 };
 
+// Same ledger layout for both; a real account sees only its own entries.
 const ExpensesTab = () => {
   const { isNewUser } = useUserMode();
-  return isNewUser ? (
-    <LoadGate id="expenses" skeleton={<NewUserSkeleton />}>
-      <NewExpenses />
-    </LoadGate>
-  ) : (
-    <ExpensesScreen />
-  );
+  return <ExpensesScreen mode={isNewUser ? 'user' : 'sample'} />;
 };
 
 const AITab = () => {
@@ -86,25 +81,31 @@ const AITab = () => {
   );
 };
 
-const InvestmentsTab = () => {
-  const { isNewUser } = useUserMode();
-  return isNewUser ? (
+// New users get the same "Coming soon" splash as the sample-data version; "Explore now" opens
+// their (empty) investments. Leaving the tab brings the splash back.
+const NewInvestmentsTab = () => {
+  const [revealed, setRevealed] = useState(false);
+  useFocusEffect(useCallback(() => () => setRevealed(false), []));
+  return revealed ? (
     <LoadGate id="investments" skeleton={<NewUserSkeleton />}>
       <NewInvestments />
     </LoadGate>
   ) : (
-    <InvestmentsScreen />
+    <InvestmentComingSoon onExplore={() => setRevealed(true)} />
   );
 };
 
-const GoalsTab = () => {
+const InvestmentsTab = () => {
   const { isNewUser } = useUserMode();
-  return (
-    <LoadGate id="goals" skeleton={isNewUser ? <NewUserSkeleton /> : <GoalsSkeleton />}>
-      {isNewUser ? <NewGoals /> : <GoalsScreen />}
-    </LoadGate>
-  );
+  return isNewUser ? <NewInvestmentsTab /> : <InvestmentsScreen />;
 };
+
+// Same Goals Hub for both; a real account sees only its own goals.
+const GoalsTab = () => (
+  <LoadGate id="goals" skeleton={<GoalsSkeleton />}>
+    <GoalsScreen />
+  </LoadGate>
+);
 
 export const MainNavigator = () => {
   const { theme } = useTheme();

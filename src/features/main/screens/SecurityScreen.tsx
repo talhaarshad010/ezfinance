@@ -17,6 +17,8 @@ import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
 import { setTwoFactor } from '../../../store/slices/settingsSlice';
+import { useUserMode } from '../../../context/UserModeContext';
+import DeviceInfo from 'react-native-device-info';
 
 export interface UserSession {
   id: string;
@@ -57,8 +59,38 @@ export const SecurityScreen = () => {
   const twoFactor = useAppSelector(state => state.settings.twoFactorEnabled);
 
   const [isLoading2FA, setIsLoading2FA] = useState(false);
-  const [sessions, setSessions] = useState<UserSession[]>(INITIAL_SESSIONS);
+  // Real accounts see only this device (other devices aren't tracked yet); the two sample
+  // devices are only for the Explore demo.
+  const { isNewUser } = useUserMode();
+  const [sessions, setSessions] = useState<UserSession[]>(() =>
+    isNewUser
+      ? [
+          {
+            id: 'this_device',
+            deviceName: DeviceInfo.getModel(),
+            platform: DeviceInfo.getSystemName(),
+            osVersion: `${DeviceInfo.getSystemName()} ${DeviceInfo.getSystemVersion()}`,
+            lastActive: Date.now(),
+            isCurrent: true,
+          },
+        ]
+      : INITIAL_SESSIONS,
+  );
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+
+  // Explore keeps its sample rating; real accounts are rated on what they've actually turned on.
+  const strong = !isNewUser || twoFactor;
+  const healthColor = strong ? theme.GREEN : '#F59E0B';
+  const healthTitle = !isNewUser
+    ? 'Security Health: High (94%)'
+    : twoFactor
+    ? 'Security Health: Strong'
+    : 'Security Health: Good';
+  const healthSub = !isNewUser
+    ? 'Biometrics active, 2FA enabled, 0 suspicious logins detected.'
+    : twoFactor
+    ? 'Your account is protected by your password and two-factor authentication.'
+    : 'Turn on two-factor authentication below for extra protection.';
 
   const handleToggle2FA = (enabled: boolean) => {
     setIsLoading2FA(true);
@@ -170,23 +202,23 @@ export const SecurityScreen = () => {
           <View
             style={[
               styles.ratingCard,
-              { backgroundColor: `${theme.GREEN}14` },
+              { backgroundColor: `${healthColor}14` },
             ]}
           >
             <View
               style={[
                 styles.ratingIconBox,
-                { backgroundColor: theme.GREEN },
+                { backgroundColor: healthColor },
               ]}
             >
               <Feather name="shield" size={18} color="#FFFFFF" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.ratingTitle, { color: theme.TEXT }]}>
-                Security Health: High (94%)
+                {healthTitle}
               </Text>
               <Text style={[styles.ratingSub, { color: theme.MUTED }]}>
-                Biometrics active, 2FA enabled, 0 suspicious logins detected.
+                {healthSub}
               </Text>
             </View>
           </View>

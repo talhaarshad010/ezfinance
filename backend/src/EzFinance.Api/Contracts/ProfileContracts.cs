@@ -12,11 +12,12 @@ public sealed record ProfileResponse(
     string? Province,
     string FilerStatus,
     DateTimeOffset CreatedAt,
-    bool HasPassword)
+    bool HasPassword,
+    bool TourCompleted)
 {
-    public static ProfileResponse From(Profile profile, string email, bool hasPassword) => new(
+    public static ProfileResponse From(Profile profile, string email) => new(
         profile.Id, email, profile.FullName, profile.MonthlyIncome, profile.City,
-        profile.Province, profile.FilerStatus, profile.CreatedAt, hasPassword);
+        profile.Province, profile.FilerStatus, profile.CreatedAt, profile.HasPassword, profile.TourCompleted);
 }
 
 public sealed class UpdateProfileRequest

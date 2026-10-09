@@ -16,7 +16,7 @@ import StockMarketScreen from '../features/main/screens/StockMarketScreen';
 import AddExpenseScreen from '../features/main/screens/AddExpenseScreen';
 import AnalyticsScreen from '../features/main/screens/AnalyticsScreen';
 import PortfolioScreen from '../features/main/screens/PortfolioScreen';
-import CryptoMarketScreen from '../features/main/screens/CryptoMarketScreen';
+
 import SettingsScreen from '../features/main/screens/SettingsScreen';
 import BudgetPlannerScreen from '../features/main/screens/BudgetPlannerScreen';
 import NotificationsScreen from '../features/main/screens/NotificationsScreen';
@@ -24,6 +24,12 @@ import BankAccountsScreen from '../features/main/screens/BankAccountsScreen';
 import ProfileScreen from '../features/main/screens/ProfileScreen';
 import LoansScreen from '../features/main/screens/LoansScreen';
 import { useTheme } from '../context/ThemeContext';
+import { useUserMode } from '../context/UserModeContext';
+import { FEATURES } from '../constants/features';
+import {
+  NewLoans,
+  NewNotifications,
+} from '../features/main/newUser/NewUserDrawerScreens';
 
 const Drawer = createDrawerNavigator();
 
@@ -90,7 +96,9 @@ const SceneWrapper = React.memo(({ children }: { children: React.ReactNode }) =>
   );
 });
 
-// Stable component wrappers to prevent unmounting & re-creation during drawer transitions
+// Stable component wrappers to prevent unmounting & re-creation during drawer transitions.
+// Screens with sample data show a new-user version (real data or an empty state) for signed-in
+// accounts; the sample-data version is only for Explore.
 const MainTabsWrapper = React.memo(() => (
   <SceneWrapper>
     <MainNavigator />
@@ -103,11 +111,7 @@ const StockMarketWrapper = React.memo(() => (
   </SceneWrapper>
 ));
 
-const CryptoMarketWrapper = React.memo(() => (
-  <SceneWrapper>
-    <CryptoMarketScreen />
-  </SceneWrapper>
-));
+
 
 const AddExpenseWrapper = React.memo(() => (
   <SceneWrapper>
@@ -115,12 +119,14 @@ const AddExpenseWrapper = React.memo(() => (
   </SceneWrapper>
 ));
 
+// Same analytics for both; a real account sees only its own spending.
 const AnalyticsWrapper = React.memo(() => (
   <SceneWrapper>
     <AnalyticsScreen />
   </SceneWrapper>
 ));
 
+// Same planner for both; a real account sees only its own budget and envelopes.
 const BudgetPlannerWrapper = React.memo(() => (
   <SceneWrapper>
     <BudgetPlannerScreen />
@@ -139,12 +145,12 @@ const SettingsWrapper = React.memo(() => (
   </SceneWrapper>
 ));
 
-const NotificationsWrapper = React.memo(() => (
-  <SceneWrapper>
-    <NotificationsScreen />
-  </SceneWrapper>
-));
+const NotificationsWrapper = React.memo(() => {
+  const { isNewUser } = useUserMode();
+  return <SceneWrapper>{isNewUser ? <NewNotifications /> : <NotificationsScreen />}</SceneWrapper>;
+});
 
+// Same accounts screen for both; a real account sees only the accounts it added.
 const BankAccountsWrapper = React.memo(() => (
   <SceneWrapper>
     <BankAccountsScreen />
@@ -157,11 +163,10 @@ const ProfileWrapper = React.memo(() => (
   </SceneWrapper>
 ));
 
-const LoansWrapper = React.memo(() => (
-  <SceneWrapper>
-    <LoansScreen />
-  </SceneWrapper>
-));
+const LoansWrapper = React.memo(() => {
+  const { isNewUser } = useUserMode();
+  return <SceneWrapper>{isNewUser ? <NewLoans /> : <LoansScreen />}</SceneWrapper>;
+});
 
 export const MainDrawerNavigator = () => {
   const { theme } = useTheme();
@@ -187,8 +192,7 @@ export const MainDrawerNavigator = () => {
         }}
       >
         <Drawer.Screen name="MainTabs" component={MainTabsWrapper} />
-        <Drawer.Screen name="StockMarket" component={StockMarketWrapper} />
-        <Drawer.Screen name="CryptoMarket" component={CryptoMarketWrapper} />
+        {FEATURES.stockMarket && <Drawer.Screen name="StockMarket" component={StockMarketWrapper} />}
         <Drawer.Screen
           name="AddExpense"
           component={AddExpenseWrapper}
@@ -229,11 +233,13 @@ export const MainDrawerNavigator = () => {
           component={ProfileWrapper}
           options={{ drawerItemStyle: { display: 'none' } }}
         />
-        <Drawer.Screen
-          name="Loans"
-          component={LoansWrapper}
-          options={{ title: 'Loans & Liabilities' }}
-        />
+        {FEATURES.loans && (
+          <Drawer.Screen
+            name="Loans"
+            component={LoansWrapper}
+            options={{ title: 'Loans & Liabilities' }}
+          />
+        )}
       </Drawer.Navigator>
     </View>
   );

@@ -12,6 +12,10 @@ public sealed class Profile
     public string? City { get; set; }
     public string? Province { get; set; }
     public string FilerStatus { get; set; } = ProfileValues.FilerUnsure;
+    /// <summary>The user chose a password (see AuthUserQueries).</summary>
+    public bool HasPassword { get; set; }
+    /// <summary>The user finished or skipped the first-visit app tour.</summary>
+    public bool TourCompleted { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

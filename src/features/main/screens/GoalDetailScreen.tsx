@@ -15,11 +15,14 @@ import { useTheme } from '../../../context/ThemeContext';
 import { ProgressRing, ProgressTrack } from '../../../components';
 import {
   AMBER,
-  SAVINGS_GOALS,
   goalColor,
   goalPct,
 } from '../../../constants/savingsGoals';
 import { AnimatedModal } from '../../../components/AnimatedModal';
+import { useSavingsGoals } from './goals/useSavingsGoals';
+
+/** "310K" for large amounts, the full number below 1,000. */
+const shortAmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(0)}K` : n.toLocaleString());
 
 export const GoalDetailScreen = () => {
   const navigation = useNavigation<any>();
@@ -27,11 +30,14 @@ export const GoalDetailScreen = () => {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
 
-  const goalId = route.params?.goalId ?? SAVINGS_GOALS[0].id;
-  const goal =
-    SAVINGS_GOALS.find(g => g.id === goalId) ?? SAVINGS_GOALS[0];
+  const { goals } = useSavingsGoals();
+  const goalId = route.params?.goalId ?? goals[0]?.id;
+  const goal = goals.find(g => g.id === goalId) ?? goals[0];
 
   const [streakVisible, setStreakVisible] = useState(false);
+
+  // The goal was archived (or there are none): nothing to show.
+  if (!goal) return <View style={[styles.container, { backgroundColor: theme.BG }]} />;
 
   const pct = goalPct(goal);
   const color = goalColor(goal, theme.GREEN, theme.ACTIVE);
@@ -142,8 +148,7 @@ export const GoalDetailScreen = () => {
               CURRENT
             </Text>
             <Text style={[styles.duoValue, { color }]}>
-              {goal.currentLabel ??
-                `PKR ${(goal.current / 1000).toFixed(0)}K`}
+              {goal.currentLabel ?? `PKR ${shortAmt(goal.current)}`}
             </Text>
           </View>
           <View style={[styles.duoCard, { backgroundColor: theme.CARD }]}>
@@ -151,7 +156,7 @@ export const GoalDetailScreen = () => {
               TARGET
             </Text>
             <Text style={[styles.duoValue, { color: theme.TEXT }]}>
-              {goal.targetLabel ?? `PKR ${(goal.target / 1000).toFixed(0)}K`}
+              {goal.targetLabel ?? `PKR ${shortAmt(goal.target)}`}
             </Text>
           </View>
         </View>

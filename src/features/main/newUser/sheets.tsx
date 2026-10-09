@@ -5,6 +5,7 @@ import { useTheme } from '../../../context/ThemeContext';
 import { useNetwork } from '../../../context/NetworkContext';
 import { TxSheetPreset, TxType, useUserMode } from '../../../context/UserModeContext';
 import { CalendarPicker } from '../../../components';
+import { accountLabel } from '../screens/bankAccounts/useBankAccounts';
 import { fullAmt } from '../../../utils/format';
 import { MSG, isFuture, parseAmount, startOfToday, useFormErrors } from '../../../utils/validation';
 import {
@@ -34,7 +35,7 @@ const longDate = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', mo
 
 function TransactionForm({ preset }: { preset: TxSheetPreset }) {
   const { theme } = useTheme();
-  const { closeTxSheet, addTx, updateTx } = useUserMode();
+  const { closeTxSheet, addTx, updateTx, bankAccounts } = useUserMode();
   const [type, setType] = useState<TxType>(preset.type ?? 'expense');
   const [cat, setCat] = useState(preset.category ?? '');
   const [amount, setAmount] = useState(preset.amount ? String(preset.amount) : '');
@@ -50,6 +51,13 @@ function TransactionForm({ preset }: { preset: TxSheetPreset }) {
     account: account ? undefined : MSG.account,
     date: isFuture(date) ? MSG.futureDate : undefined,
   }));
+
+  // The user's own accounts (plus Cash) once they've added any; otherwise the starter list.
+  const accountChoices = (() => {
+    const own = bankAccounts.map(accountLabel);
+    const base = own.length ? ['Cash', ...own] : ACCOUNTS;
+    return account && !base.includes(account) ? [...base, account] : base;
+  })();
 
   const dateChoice = sameDay(date, daysAgo(0)) ? 'Today' : sameDay(date, daysAgo(1)) ? 'Yesterday' : longDate(date);
 
@@ -96,7 +104,7 @@ function TransactionForm({ preset }: { preset: TxSheetPreset }) {
         <Chips options={CATS} value={cat} onChange={setCat} colorOf={c => CAT_META[c]?.color} iconOf={c => CAT_META[c]?.icon} />
       </Field>
       <Field label="Account" error={form.errors.account}>
-        <Chips options={ACCOUNTS} value={account} onChange={setAccount} />
+        <Chips options={accountChoices} value={account} onChange={setAccount} />
       </Field>
       <Field label="Date" error={form.errors.date}>
         <Chips

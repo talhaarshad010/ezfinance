@@ -31,7 +31,7 @@ export const VerifyEmailScreen = () => {
 
   const enterApp = () => {
     if (!verified) return;
-    beginNewUser();
+    beginNewUser({ tour: !verified.tourCompleted });
     dispatch(setProfile(verified));
     showToast('Account created successfully! Welcome to EZFinance.', 'success');
   };

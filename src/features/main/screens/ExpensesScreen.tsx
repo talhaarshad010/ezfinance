@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -43,6 +43,9 @@ import {
   MarkAsPaidSheet,
 } from './expenses/RecurringSheets';
 import StatementImportModal from './expenses/StatementImportModal';
+import { UserTx, useUserMode } from '../../../context/UserModeContext';
+import { useNetwork } from '../../../context/NetworkContext';
+import { CAT_META, CATS, EmptyState } from '../newUser/shared';
 
 type LedgerTab = 'transactions' | 'recurring' | 'debts';
 const LEDGER_TAB_ORDER: LedgerTab[] = ['transactions', 'recurring', 'debts'];
@@ -66,7 +69,54 @@ const CAT_COLORS: Record<string, { bg: string; icon: string }> = {
 };
 const DEFAULT_CAT = { bg: '#86868B22', icon: '#86868B' };
 
-export const ExpensesScreen = () => {
+const catStyleOf = (category: string) => {
+  if (CAT_COLORS[category]) return CAT_COLORS[category];
+  const meta = CAT_META[category];
+  return meta ? { bg: meta.color + '22', icon: meta.color } : DEFAULT_CAT;
+};
+
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+/** Date group of a user's transaction: TODAY, YESTERDAY, or e.g. "07 OCT". */
+function dateGroupOf(date: Date) {
+  const days = Math.round((startOfDay(new Date()).getTime() - startOfDay(date).getTime()) / 86400000);
+  if (days === 0) return 'TODAY';
+  if (days === 1) return 'YESTERDAY';
+  const label = date.toLocaleString('en-GB', { day: '2-digit', month: 'short' }).toUpperCase();
+  return date.getFullYear() === new Date().getFullYear() ? label : `${label} ${date.getFullYear()}`;
+}
+
+const numericDate = (d: Date) =>
+  `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+
+const isThisMonth = (d: Date) => {
+  const now = new Date();
+  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+};
+
+/** A user's own transaction, shaped for the ledger list. */
+const toLedger = (t: UserTx): LedgerTransaction => ({
+  id: t.id,
+  icon: (CAT_META[t.category] ?? CAT_META.Other).icon,
+  label: t.note || t.category,
+  account: t.account ?? '',
+  category: t.category,
+  amount: t.type === 'income' ? t.amount : -t.amount,
+  dateGroup: dateGroupOf(t.date),
+  time: t.date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+  type: t.type,
+  smsRef: '',
+  status: 'Settled',
+});
+
+/**
+ * The ledger. `mode="sample"` (Explore) shows the sample data; `mode="user"` shows a signed-in
+ * user's own transactions, repeated bills and loans, with the same layout.
+ */
+export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }) => {
+  const isUser = mode === 'user';
+  const userMode = useUserMode();
+  const network = useNetwork();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { showToast } = useToast();
@@ -90,9 +140,27 @@ export const ExpensesScreen = () => {
   const [recurringSub, setRecurringSub] = useState<RecurringSubTab>('history');
 
   // Data Collections
-  const [transactions, setTransactions] = useState<LedgerTransaction[]>(SEED_TXS);
-  const [upcomingBills, setUpcomingBills] = useState<UpcomingBill[]>(SEED_BILLS);
-  const [debts, setDebts] = useState<DebtEntry[]>(SEED_DEBTS);
+  // Sample mode keeps its data here; user mode reads and writes the user's own (UserModeContext).
+  const [sampleTxs, setTransactions] = useState<LedgerTransaction[]>(SEED_TXS);
+  const [sampleBills, setSampleBills] = useState<UpcomingBill[]>(SEED_BILLS);
+  const [sampleDebts, setSampleDebts] = useState<DebtEntry[]>(SEED_DEBTS);
+  const userTxs = useMemo(
+    () => [...userMode.txs].sort((a, b) => b.date.getTime() - a.date.getTime()),
+    [userMode.txs],
+  );
+  const userLedger = useMemo(() => userTxs.map(toLedger), [userTxs]);
+  const transactions = isUser ? userLedger : sampleTxs;
+  const upcomingBills = isUser ? userMode.bills : sampleBills;
+  const setUpcomingBills = isUser ? userMode.setBills : setSampleBills;
+  const debts = isUser ? userMode.debts : sampleDebts;
+  const setDebts = isUser ? userMode.setDebts : setSampleDebts;
+  const dateLabelOf = (group: string) => {
+    if (!isUser) return DATE_LABELS[group] ?? group;
+    const tx = userTxs.find(t => dateGroupOf(t.date) === group);
+    return tx ? numericDate(tx.date) : group;
+  };
+  const userTxOf = (tx: LedgerTransaction) => userMode.txs.find(t => t.id === tx.id);
+  const onAdd = () => (isUser ? userMode.setFirstActionOpen(true) : setGatewayOpen(true));
 
   // Modals & Sheets Visibility
   const [gatewayOpen, setGatewayOpen] = useState(false);
@@ -139,14 +207,40 @@ export const ExpensesScreen = () => {
     .filter(t => t.dateGroup === 'TODAY' && t.amount < 0)
     .reduce((s, t) => s + Math.abs(t.amount), 0);
 
-  const incomeTotal = transactions
-    .filter(t => t.type === 'income')
-    .reduce((s, t) => s + t.amount, 0);
+  const incomeTotal = isUser
+    ? userTxs.filter(t => t.type === 'income' && isThisMonth(t.date)).reduce((s, t) => s + t.amount, 0)
+    : transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
 
-  const totalRecurring = RECURRING.reduce((s, r) => s + r.amount, 0);
+  const recurringRows = isUser
+    ? upcomingBills.map(b => ({
+        id: b.id,
+        icon: b.icon,
+        label: b.label,
+        amount: b.amount,
+        cadence: `Monthly · next ${b.date}`,
+        category: b.tag,
+      }))
+    : RECURRING;
+  const totalRecurring = recurringRows.reduce((s, r) => s + r.amount, 0);
   const totalDebt = debts.reduce((s, d) => s + d.remaining, 0);
   const totalEMI = debts.reduce((s, d) => s + d.emi, 0);
-  const dtiPct = ((totalEMI / 150000) * 100).toFixed(1);
+  // Sample data assumes a 150,000 salary; a user's ratio uses this month's logged income.
+  const dtiIncome = isUser ? incomeTotal : 150000;
+  const dtiPct = dtiIncome > 0 ? ((totalEMI / dtiIncome) * 100).toFixed(1) : null;
+  const dtiHealthy = dtiPct !== null && parseFloat(dtiPct) < 36;
+  const todayOfMonth = isUser ? new Date().getDate() : 8;
+
+  // 30-day snapshot: sample figures, or the user's logged balance minus unpaid bills.
+  const userBalance = userTxs.reduce((s, t) => s + (t.type === 'income' ? t.amount : -t.amount), 0);
+  const unpaidBills = upcomingBills.filter(b => !b.paid).reduce((s, b) => s + b.amount, 0);
+  const liquidity = isUser
+    ? {
+        month: new Date().toLocaleString('en-US', { month: 'short', year: 'numeric' }),
+        cash: userBalance,
+        bills: unpaidBills,
+        safe: userBalance - unpaidBills,
+      }
+    : { month: 'Sep 2026', cash: 72000, bills: 48800, safe: 23200 };
 
   // Handlers
   const handleAddManualTransaction = (tx: any) => {
@@ -189,11 +283,30 @@ export const ExpensesScreen = () => {
   };
 
   const handleSaveEditedTx = (updated: LedgerTransaction) => {
+    if (isUser) {
+      userMode.updateTx(updated.id, { category: updated.category });
+      showToast('Transaction updated', 'success');
+      return;
+    }
     setTransactions(prev => prev.map(t => (t.id === updated.id ? updated : t)));
     showToast('Transaction updated', 'success');
   };
 
   const handleDeleteTx = (tx: LedgerTransaction) => {
+    const own = isUser ? userTxOf(tx) : undefined;
+    if (own) {
+      const index = userMode.txs.findIndex(t => t.id === own.id);
+      userMode.deleteTx(own.id);
+      const opId = network.record({ entity: 'tx', entityId: own.id, action: 'delete', label: `Delete · ${own.note ?? own.category}` });
+      showToast('Transaction deleted', 'info', undefined, 5000, {
+        label: 'Undo',
+        onPress: () => {
+          userMode.restoreTx(own, index);
+          if (opId) network.remove(opId);
+        },
+      });
+      return;
+    }
     setTransactions(prev => prev.filter(t => t.id !== tx.id));
     showToast('Transaction deleted', 'info');
   };
@@ -205,6 +318,24 @@ export const ExpensesScreen = () => {
     cat2: string,
   ) => {
     if (!splitTx) return;
+    const own = isUser ? userTxOf(splitTx) : undefined;
+    if (own) {
+      userMode.deleteTx(own.id);
+      [
+        { amount: part1, category: cat1 },
+        { amount: part2, category: cat2 },
+      ].forEach((part, i) =>
+        userMode.addTx({
+          type: own.type,
+          account: own.account,
+          date: own.date,
+          note: `${splitTx.label} (Split ${i + 1})`,
+          ...part,
+        }),
+      );
+      showToast('Transaction split in two', 'success');
+      return;
+    }
     const isNegative = splitTx.amount < 0;
     const tx1: LedgerTransaction = {
       ...splitTx,
@@ -266,7 +397,7 @@ export const ExpensesScreen = () => {
           </Text>
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => setGatewayOpen(true)}
+            onPress={onAdd}
             style={[styles.addBtn, { backgroundColor: theme.TEXT }]}
           >
             <Feather name="plus" size={18} color={theme.BG} />
@@ -319,7 +450,22 @@ export const ExpensesScreen = () => {
           (tab === 'transactions' ? <ExpTransactionsSkeleton /> : tab === 'recurring' ? <ExpRecurringSkeleton /> : <ExpLoansSkeleton />)}
         {ledgerLoad.status === 'error' && <ErrorState onRetry={ledgerLoad.retry} />}
         {/* ── TAB 1: TRANSACTIONS ── */}
-        {ledgerReady && tab === 'transactions' && (
+        {ledgerReady && tab === 'transactions' && isUser && userTxs.length === 0 && (
+          <View style={styles.userEmpty}>
+            <EmptyState
+              icon="file-text"
+              title="No transactions yet"
+              line="Every rupee you log here builds your budget, tax picture and AI advice."
+              samples={[
+                { label: 'Add Groceries', icon: CAT_META.Groceries.icon, color: CAT_META.Groceries.color, onPress: () => userMode.openTxSheet({ type: 'expense', category: 'Groceries', source: 'manual' }) },
+                { label: 'Add Fuel', icon: CAT_META.Fuel.icon, color: CAT_META.Fuel.color, onPress: () => userMode.openTxSheet({ type: 'expense', category: 'Fuel', source: 'manual' }) },
+                { label: 'Add Salary', icon: CAT_META.Salary.icon, color: CAT_META.Salary.color, onPress: () => userMode.openTxSheet({ type: 'income', category: 'Salary', source: 'manual' }) },
+              ]}
+              primary={{ label: 'Log a transaction', onPress: () => userMode.setFirstActionOpen(true) }}
+            />
+          </View>
+        )}
+        {ledgerReady && tab === 'transactions' && !(isUser && userTxs.length === 0) && (
           <View>
             {/* Sub-Filter Chips */}
             <View style={styles.filterRow}>
@@ -437,7 +583,7 @@ export const ExpensesScreen = () => {
               groupedTxs.map(group => (
                 <View key={group.date} style={styles.groupWrap}>
                   <Text style={[styles.groupDateLabel, { color: theme.MUTED }]}>
-                    {group.date} // {DATE_LABELS[group.date] ?? group.date}
+                    {group.date} // {dateLabelOf(group.date)}
                   </Text>
                   <View
                     style={[
@@ -455,7 +601,7 @@ export const ExpensesScreen = () => {
                         : tx.amount > 0
                         ? theme.GREEN
                         : theme.RED;
-                      const catStyle = CAT_COLORS[tx.category] || DEFAULT_CAT;
+                      const catStyle = catStyleOf(tx.category);
 
                       return (
                         <TouchableOpacity
@@ -494,9 +640,11 @@ export const ExpensesScreen = () => {
                               {tx.label}
                             </Text>
                             <View style={styles.txMetaRow}>
-                              <Text style={[styles.txAccount, { color: theme.MUTED }]}>
-                                {tx.account}
-                              </Text>
+                              {!!tx.account && (
+                                <Text style={[styles.txAccount, { color: theme.MUTED }]}>
+                                  {tx.account}
+                                </Text>
+                              )}
                               <View
                                 style={[
                                   styles.txCatBadge,
@@ -574,10 +722,10 @@ export const ExpensesScreen = () => {
                       MONTHLY COMMITMENTS
                     </Text>
                     <Text style={[styles.commitVal, { color: theme.RED }]}>
-                      − PKR {totalRecurring.toLocaleString()}
+                      {totalRecurring > 0 ? '− ' : ''}PKR {totalRecurring.toLocaleString()}
                     </Text>
                     <Text style={[styles.commitSub, { color: theme.MUTED }]}>
-                      per month · {RECURRING.length} subscriptions
+                      per month · {recurringRows.length} subscription{recurringRows.length === 1 ? '' : 's'}
                     </Text>
                   </View>
                   <View
@@ -591,6 +739,15 @@ export const ExpensesScreen = () => {
                 </View>
 
                 {/* Subscriptions List */}
+                {recurringRows.length === 0 ? (
+                  <NoItems
+                    icon="repeat"
+                    title="No repeated payments yet"
+                    line="Add bills you pay every month, like rent or internet, and we'll remind you before they're due."
+                    action="Add a repeated bill"
+                    onAction={() => setAddBillOpen(true)}
+                  />
+                ) : (
                 <View
                   style={[
                     styles.groupCard,
@@ -601,14 +758,14 @@ export const ExpensesScreen = () => {
                     },
                   ]}
                 >
-                  {RECURRING.map((r, i) => {
-                    const catColor = CAT_COLORS[r.category] || DEFAULT_CAT;
+                  {recurringRows.map((r, i) => {
+                    const catColor = catStyleOf(r.category);
                     return (
                       <View
                         key={r.id}
                         style={[
                           styles.txRow,
-                          i < RECURRING.length - 1 && {
+                          i < recurringRows.length - 1 && {
                             borderBottomWidth: StyleSheet.hairlineWidth,
                             borderBottomColor: theme.BORDER,
                           },
@@ -662,6 +819,7 @@ export const ExpensesScreen = () => {
                     );
                   })}
                 </View>
+                )}
               </View>
             )}
 
@@ -688,7 +846,7 @@ export const ExpensesScreen = () => {
                       ]}
                     >
                       <Text style={[styles.monthBadgeText, { color: theme.ACTIVE }]}>
-                        Sep 2026
+                        {liquidity.month}
                       </Text>
                     </View>
                   </View>
@@ -704,7 +862,7 @@ export const ExpensesScreen = () => {
                         Available Cash
                       </Text>
                       <Text style={[styles.colVal, { color: theme.TEXT }]}>
-                        72,000
+                        {liquidity.cash.toLocaleString()}
                       </Text>
                       <Text style={[styles.colSub, { color: theme.MUTED }]}>
                         PKR
@@ -721,7 +879,7 @@ export const ExpensesScreen = () => {
                         Upcoming Bills
                       </Text>
                       <Text style={[styles.colVal, { color: theme.RED }]}>
-                        48,800
+                        {liquidity.bills.toLocaleString()}
                       </Text>
                       <Text style={[styles.colSub, { color: theme.MUTED }]}>
                         PKR · 30 days
@@ -732,8 +890,8 @@ export const ExpensesScreen = () => {
                       <Text style={[styles.colLabel, { color: theme.MUTED }]}>
                         Safe to Spend
                       </Text>
-                      <Text style={[styles.colVal, { color: theme.GREEN }]}>
-                        23,200
+                      <Text style={[styles.colVal, { color: liquidity.safe < 0 ? theme.RED : theme.GREEN }]}>
+                        {liquidity.safe.toLocaleString()}
                       </Text>
                       <Text style={[styles.colSub, { color: theme.GREEN, fontWeight: '700' }]}>
                         PKR buffer
@@ -761,6 +919,7 @@ export const ExpensesScreen = () => {
                 </TouchableOpacity>
 
                 {/* Upcoming Bills List */}
+                {upcomingBills.length > 0 && (
                 <View
                   style={[
                     styles.groupCard,
@@ -832,6 +991,7 @@ export const ExpensesScreen = () => {
                     </TouchableOpacity>
                   ))}
                 </View>
+                )}
               </View>
             )}
             </FadeInView>
@@ -858,27 +1018,27 @@ export const ExpensesScreen = () => {
                 <Text
                   style={[
                     styles.dtiVal,
-                    { color: parseFloat(dtiPct) < 36 ? theme.GREEN : theme.RED },
+                    { color: dtiPct === null ? theme.MUTED : dtiHealthy ? theme.GREEN : theme.RED },
                   ]}
                 >
-                  {dtiPct}%
+                  {dtiPct === null ? '—' : `${dtiPct}%`}
                 </Text>
                 <View
                   style={[
                     styles.dtiBadge,
                     {
                       backgroundColor:
-                        (parseFloat(dtiPct) < 36 ? theme.GREEN : theme.RED) + '18',
+                        (dtiPct === null ? theme.MUTED : dtiHealthy ? theme.GREEN : theme.RED) + '18',
                     },
                   ]}
                 >
                   <Text
                     style={[
                       styles.dtiBadgeText,
-                      { color: parseFloat(dtiPct) < 36 ? theme.GREEN : theme.RED },
+                      { color: dtiPct === null ? theme.MUTED : dtiHealthy ? theme.GREEN : theme.RED },
                     ]}
                   >
-                    {parseFloat(dtiPct) < 36 ? 'Healthy' : 'High'}
+                    {dtiPct === null ? 'Log income' : dtiHealthy ? 'Healthy' : 'High'}
                   </Text>
                 </View>
               </View>
@@ -887,7 +1047,7 @@ export const ExpensesScreen = () => {
             {/* 3 Summary Cards */}
             <View style={styles.debtStatsRow}>
               {[
-                { label: 'TOTAL BALANCE', value: `PKR ${(totalDebt / 1000).toFixed(0)}K`, color: theme.RED },
+                { label: 'TOTAL BALANCE', value: totalDebt >= 1000 ? `PKR ${(totalDebt / 1000).toFixed(0)}K` : `PKR ${totalDebt}`, color: theme.RED },
                 { label: 'MONTHLY EMI', value: `PKR ${totalEMI.toLocaleString()}`, color: theme.RED },
                 { label: 'ACTIVE DEBTS', value: String(debts.length), color: theme.TEXT },
               ].map(s => (
@@ -912,11 +1072,18 @@ export const ExpensesScreen = () => {
             </View>
 
             {/* Debts List Cards */}
+            {debts.length === 0 && (
+              <NoItems
+                icon="credit-card"
+                title="No loans tracked"
+                line="Add a loan or credit line to see what's left to pay, your monthly instalments and reminders before each due date."
+              />
+            )}
             {debts.map(debt => {
               const pct = Math.round(
                 ((debt.totalAmount - debt.remaining) / debt.totalAmount) * 100,
               );
-              const daysLeft = debt.dueDayOfMonth - 8;
+              const daysLeft = debt.dueDayOfMonth - todayOfMonth;
               const urgentDue = daysLeft <= debt.remindDaysBefore && daysLeft >= 0;
 
               return (
@@ -1118,6 +1285,28 @@ export const ExpensesScreen = () => {
         }}
         onEdit={tx => {
           setAuditTx(null);
+          const own = isUser ? userTxOf(tx) : undefined;
+          if (!own) {
+            setEditTx(tx);
+            return;
+          }
+          // A user's transaction opens the full edit sheet (amount, note, account, date).
+          setTimeout(
+            () =>
+              userMode.openTxSheet({
+                editId: own.id,
+                type: own.type,
+                category: own.category,
+                amount: own.amount,
+                note: own.note,
+                account: own.account,
+                date: own.date,
+              }),
+            280,
+          );
+        }}
+        onChangeCategory={tx => {
+          setAuditTx(null);
           setEditTx(tx);
         }}
         onSplit={tx => {
@@ -1143,6 +1332,7 @@ export const ExpensesScreen = () => {
         tx={editTx}
         onClose={() => setEditTx(null)}
         onSave={handleSaveEditedTx}
+        categories={isUser ? CATS : undefined}
       />
 
       {/* Split Transaction Modal */}
@@ -1206,6 +1396,42 @@ export const ExpensesScreen = () => {
   );
 };
 
+/** Empty card for a list the user hasn't added anything to yet. */
+function NoItems({
+  icon,
+  title,
+  line,
+  action,
+  onAction,
+}: {
+  icon: string;
+  title: string;
+  line: string;
+  action?: string;
+  onAction?: () => void;
+}) {
+  const { theme } = useTheme();
+  return (
+    <View
+      style={[
+        styles.noItems,
+        { backgroundColor: theme.isDark ? theme.CARD : '#FFFFFF', borderColor: theme.BORDER },
+      ]}
+    >
+      <View style={[styles.noItemsIcon, { backgroundColor: theme.MODAL }]}>
+        <Feather name={icon} size={18} color={theme.MUTED} />
+      </View>
+      <Text style={[styles.noItemsTitle, { color: theme.TEXT }]}>{title}</Text>
+      <Text style={[styles.noItemsLine, { color: theme.MUTED }]}>{line}</Text>
+      {action && onAction && (
+        <TouchableOpacity activeOpacity={0.85} onPress={onAction} hitSlop={8}>
+          <Text style={[styles.noItemsAction, { color: theme.ACTIVE }]}>{action}</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
 export default ExpensesScreen;
 
 const styles = StyleSheet.create({
@@ -1214,6 +1440,41 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
+  },
+  // EmptyState carries its own 16px side margin; the scroll content already has it.
+  userEmpty: {
+    marginHorizontal: -16,
+  },
+  noItems: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 20,
+    marginTop: 12,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  noItemsIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  noItemsTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  noItemsLine: {
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
+  },
+  noItemsAction: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 12,
   },
   headerRow: {
     flexDirection: 'row',

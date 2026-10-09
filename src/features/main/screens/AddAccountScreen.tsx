@@ -14,12 +14,13 @@ import { Typography } from '../../../components';
 import BankSelectionModal from '../../../components/BankSelectionModal';
 import { PakistaniBank } from '../../../constants/pakistaniBanks';
 import { useToast } from '../../../context/ToastContext';
-import { useAppDispatch } from '../../../store/hooks';
-import { addAccount as addAccountAction } from '../../../store/slices/bankAccountsSlice';
+import { ScreenBackHeader } from '../../../components/ScreenBackHeader';
+import { useBankAccounts } from './bankAccounts/useBankAccounts';
 
 const AddAccountScreen = () => {
   const navigation = useNavigation<any>();
-  const dispatch = useAppDispatch();
+  // Saves to the user's own accounts, or the sample accounts in the Explore demo.
+  const bank = useBankAccounts();
   const { showToast } = useToast();
 
   const [selectedBank, setSelectedBank] = useState<PakistaniBank | null>(null);
@@ -54,8 +55,7 @@ const AddAccountScreen = () => {
 
     setSaving(true);
     setTimeout(() => {
-      dispatch(
-        addAccountAction({
+      bank.add({
           id: 'acc_' + Date.now(),
           bankId: selectedBank!.id,
           bankName: selectedBank!.shortName,
@@ -65,8 +65,7 @@ const AddAccountScreen = () => {
           accountNumber: accountNumber.trim(),
           balance: parseFloat(balance),
           createdAt: Date.now(),
-        }),
-      );
+        });
       setSaving(false);
       showToast('Account added successfully!', 'success', 'Success');
       navigation.goBack();
@@ -74,6 +73,8 @@ const AddAccountScreen = () => {
   };
 
   return (
+    <View style={styles.container}>
+    <ScreenBackHeader title="Add Account" back="Bank Accounts" />
     <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       {/* Bank Selection */}
       <Typography variant="caption" weight="700" color="#999" style={styles.label}>
@@ -190,6 +191,7 @@ const AddAccountScreen = () => {
         }}
       />
     </ScrollView>
+    </View>
   );
 };
 

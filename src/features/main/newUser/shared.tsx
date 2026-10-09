@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DrawerActions, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import { SyncOp, useNetwork } from '../../../context/NetworkContext';
@@ -52,6 +53,7 @@ export function ScreenShell({
 }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
   return (
     <View style={[s.flex, { backgroundColor: theme.BG }]}>
       <StatusBar barStyle={theme.isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.BG} />
@@ -60,9 +62,20 @@ export function ScreenShell({
         contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 120 }}
       >
         <View style={s.header}>
-          <View style={s.flexShrink}>
-            <Text style={[s.eyebrow, { color: theme.MUTED }]}>{eyebrow}</Text>
-            <Text style={[s.title, { color: theme.TEXT }]}>{title}</Text>
+          <View style={[s.headerLeft, s.flexShrink]}>
+            {/* Opens the side menu (works from the bottom tabs and from menu screens). */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+              accessibilityLabel="Open menu"
+              style={[s.menuBtn, { backgroundColor: theme.CARD }]}
+            >
+              <Feather name="menu" size={20} color={theme.TEXT} />
+            </TouchableOpacity>
+            <View style={s.flexShrink}>
+              <Text style={[s.eyebrow, { color: theme.MUTED }]}>{eyebrow}</Text>
+              <Text style={[s.title, { color: theme.TEXT }]}>{title}</Text>
+            </View>
           </View>
           {right}
         </View>
@@ -147,7 +160,8 @@ export function EmptyState({
   icon: string;
   title: string;
   line: string;
-  samples: Sample[];
+  /** Quick-add suggestions under "Try one"; omit for a plain empty state. */
+  samples?: Sample[];
   primary?: { label: string; onPress: () => void };
 }) {
   const { theme } = useTheme();
@@ -158,9 +172,9 @@ export function EmptyState({
       </View>
       <Text style={[s.emptyTitle, { color: theme.TEXT }]}>{title}</Text>
       <Text style={[s.emptyLine, { color: theme.MUTED }]}>{line}</Text>
-      <Text style={[s.tryOne, { color: theme.MUTED }]}>TRY ONE</Text>
+      {samples && samples.length > 0 && <Text style={[s.tryOne, { color: theme.MUTED }]}>TRY ONE</Text>}
       <View style={s.samples}>
-        {samples.map(sm => (
+        {samples?.map(sm => (
           <TouchableOpacity
             key={sm.label}
             activeOpacity={0.8}
@@ -390,6 +404,8 @@ export const s = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  menuBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   eyebrow: { fontSize: 11, marginBottom: 2 },
   title: { fontSize: 24, fontWeight: '700', letterSpacing: -0.6 },
   primary: { height: 50, borderRadius: 100, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },

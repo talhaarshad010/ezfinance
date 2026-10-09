@@ -11,13 +11,15 @@ import {
 import Feather from 'react-native-vector-icons/Feather';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Typography, Card } from '../../../components';
-import { useAppSelector, useAppDispatch } from '../../../store/hooks';
+import { useAppDispatch } from '../../../store/hooks';
 import {
   removeTransaction as removeTransactionAction,
   updateAccountBalance,
   Transaction,
 } from '../../../store/slices/bankAccountsSlice';
 import { useToast } from '../../../context/ToastContext';
+import { ScreenBackHeader } from '../../../components/ScreenBackHeader';
+import { accountLabel, useBankAccounts } from './bankAccounts/useBankAccounts';
 import { getBankById } from '../../../constants/pakistaniBanks';
 
 const AccountDetailScreen = () => {
@@ -27,12 +29,17 @@ const AccountDetailScreen = () => {
   const { showToast } = useToast();
   const { accountId } = route.params;
 
-  const account = useAppSelector(state =>
-    state.bankAccounts.accounts.find(a => a.id === accountId),
-  );
-  const transactions = useAppSelector(
-    state => state.bankAccounts.transactions[accountId] || [],
-  );
+  // The user's own account and the transactions logged to it, or the sample account.
+  const bank = useBankAccounts();
+  const { isUser, userMode } = bank;
+  const account = bank.accounts.find(a => a.id === accountId);
+  const transactions = bank.transactionsOf(accountId);
+
+  // A user adds a transaction with the regular sheet, already set to this account.
+  const addTransaction = () =>
+    isUser && account
+      ? userMode.openTxSheet({ type: 'expense', account: accountLabel(account), source: 'manual' })
+      : navigation.navigate('AddTransaction', { accountId });
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = () => {
@@ -52,6 +59,12 @@ const AccountDetailScreen = () => {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
+            if (isUser) {
+              // The balance follows from the remaining transactions.
+              userMode.deleteTx(Number(tx.id));
+              showToast('Transaction deleted', 'success', 'Done');
+              return;
+            }
             dispatch(removeTransactionAction({ accountId, transactionId: tx.id }));
             if (account) {
               const newBal = tx.type === 'income'
@@ -121,7 +134,7 @@ const AccountDetailScreen = () => {
         <Typography variant="body" weight="700">Transactions</Typography>
         <TouchableOpacity
           style={styles.addTxBtn}
-          onPress={() => navigation.navigate('AddTransaction', { accountId })}
+          onPress={addTransaction}
           activeOpacity={0.8}
         >
           <Feather name="plus" size={14} color="#FFF" />
@@ -138,7 +151,7 @@ const AccountDetailScreen = () => {
     <TouchableOpacity
       style={styles.txRow}
       activeOpacity={0.7}
-      onPress={() => navigation.navigate('TransactionDetail', { transaction: item })}
+      onPress={() => navigation.navigate('TransactionDetail', { transaction: item, account })}
       onLongPress={() => handleDelete(item)}
     >
       <View style={[
@@ -179,7 +192,7 @@ const AccountDetailScreen = () => {
       </Typography>
       <TouchableOpacity
         style={styles.emptyAddBtn}
-        onPress={() => navigation.navigate('AddTransaction', { accountId })}
+        onPress={addTransaction}
       >
         <Typography variant="caption" weight="700" color="#FFF">Add Transaction</Typography>
       </TouchableOpacity>
@@ -188,14 +201,18 @@ const AccountDetailScreen = () => {
 
   if (!account) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Typography variant="body" color="#999">Account not found</Typography>
+      <View style={styles.container}>
+        <ScreenBackHeader title="Account" back="Bank Accounts" />
+        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+          <Typography variant="body" color="#999">Account not found</Typography>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      <ScreenBackHeader title={account.bankName} back="Bank Accounts" />
       <FlatList
         data={transactions}
         keyExtractor={item => item.id}

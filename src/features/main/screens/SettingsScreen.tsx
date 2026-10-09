@@ -13,6 +13,10 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
+import { useUserMode } from '../../../context/UserModeContext';
+import { useAppDispatch, useAppSelector } from '../../../store/hooks';
+import { setProfile, UserProfile } from '../../../store/slices/userSlice';
+import { ApiError, updateProfileDetails } from '../../../services/authService';
 
 const BRACKETS = [
   { label: 'Up to 600K', range: '≤ PKR 6,00,000', rate: 'Exempt' },
@@ -28,7 +32,24 @@ const PROVINCES = [
   { id: 'sindh', label: 'Sindh – SRB' },
   { id: 'kpk', label: 'KPK – KPRA' },
   { id: 'balochistan', label: 'Balochistan – BRA' },
+  { id: 'ict', label: 'Islamabad – ICT' },
+  { id: 'ajk', label: 'Azad Kashmir – AJK' },
+  { id: 'gb', label: 'Gilgit-Baltistan – GB' },
 ];
+
+// Settings ids ↔ the profile's stored values.
+const PROVINCE_TO_PROFILE: Record<string, string> = {
+  punjab: 'Punjab',
+  sindh: 'Sindh',
+  kpk: 'KPK',
+  balochistan: 'Balochistan',
+  ict: 'ICT',
+  ajk: 'AJK',
+  gb: 'GB',
+};
+const provinceIdOf = (value?: string | null) =>
+  Object.keys(PROVINCE_TO_PROFILE).find(id => PROVINCE_TO_PROFILE[id] === value) ?? '';
+const fbrIdOf = (value?: string | null) => (value === 'yes' ? 'filer' : value === 'no' ? 'nonfiler' : '');
 
 function PillToggle({
   options,
@@ -116,8 +137,33 @@ export const SettingsScreen = () => {
   const { theme, toggle, setTheme } = useTheme();
   const { showToast } = useToast();
 
-  const [fbr, setFbr] = useState<string>('filer');
-  const [province, setProvince] = useState<string>('punjab');
+  // Real accounts start from (and save to) their profile; the Explore demo keeps sample values.
+  const { isNewUser } = useUserMode();
+  const dispatch = useAppDispatch();
+  const profile = useAppSelector(state => state.user.profile);
+  const [fbr, setFbr] = useState<string>(() => (isNewUser ? fbrIdOf(profile?.filerStatus) : 'filer'));
+  const [province, setProvince] = useState<string>(() =>
+    isNewUser ? provinceIdOf(profile?.province) : 'punjab',
+  );
+
+  /** Saves a tax detail to the profile (real accounts only). Reverts the choice if it fails. */
+  const saveToProfile = async (
+    changes: Partial<Pick<UserProfile, 'province' | 'filerStatus'>>,
+    revert: () => void,
+    savedMessage: string,
+  ) => {
+    if (!isNewUser || !profile) {
+      showToast(savedMessage, 'info', 'FBR Profile');
+      return;
+    }
+    try {
+      dispatch(setProfile(await updateProfileDetails(profile, changes)));
+      showToast(savedMessage, 'success', 'Saved');
+    } catch (e) {
+      revert();
+      showToast((e as ApiError).message, 'error');
+    }
+  };
   const [bracket, setBracket] = useState(2);
   const [smsEnabled, setSmsEnabled] = useState(true);
   const [isolatedMode, setIsolatedMode] = useState(false);
@@ -253,11 +299,12 @@ export const SettingsScreen = () => {
               ]}
               value={fbr}
               onChange={val => {
+                const previous = fbr;
                 setFbr(val);
-                showToast(
-                  `FBR profile updated to ${val.toUpperCase()}`,
-                  'info',
-                  'FBR Profile',
+                saveToProfile(
+                  { filerStatus: val === 'filer' ? 'yes' : 'no' },
+                  () => setFbr(previous),
+                  `FBR profile updated to ${val === 'filer' ? 'FILER' : 'NON-FILER'}`,
                 );
               }}
             />
@@ -265,7 +312,9 @@ export const SettingsScreen = () => {
             <Text style={[styles.fbrDescText, { color: theme.MUTED }]}>
               {fbr === 'filer'
                 ? 'Reduced withholding tax rates and full FBR return filing access.'
-                : 'Higher WHT rates apply. File your return to unlock filer benefits.'}
+                : fbr === 'nonfiler'
+                ? 'Higher WHT rates apply. File your return to unlock filer benefits.'
+                : 'Not sure yet? Choose one to see the tax rates that apply to you.'}
             </Text>
           </View>
         </View>
@@ -287,7 +336,16 @@ export const SettingsScreen = () => {
                   <TouchableOpacity
                     key={p.id}
                     activeOpacity={0.8}
-                    onPress={() => setProvince(p.id)}
+                    onPress={() => {
+                      if (p.id === province) return;
+                      const previous = province;
+                      setProvince(p.id);
+                      saveToProfile(
+                        { province: PROVINCE_TO_PROFILE[p.id] },
+                        () => setProvince(previous),
+                        `Province updated to ${p.label}`,
+                      );
+                    }}
                     style={[
                       styles.provRowBtn,
                       {

@@ -15,13 +15,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
-import { useAppDispatch, useAppSelector } from '../../../store/hooks';
-import {
-  addCategory,
-  updateCategory,
-  BudgetCategory,
-} from '../../../store/slices/budgetSlice';
+import { BudgetCategory } from '../../../store/slices/budgetSlice';
 import { AnimatedModal } from '../../../components/AnimatedModal';
+import { CAT_META, CATS } from '../newUser/shared';
+import { useBudgetPlan } from './budget/useBudgetPlan';
+
+// A user's envelope counts spending whose category has the same name, so suggest those names.
+const SPENDING_CATS = CATS.filter(c => c !== 'Salary');
 
 const ICONS = [
   'coffee',
@@ -58,14 +58,11 @@ export const AddCategoryScreen = () => {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { showToast } = useToast();
-  const dispatch = useAppDispatch();
+  const plan = useBudgetPlan();
 
   const editingCategory = route.params?.category as BudgetCategory | undefined;
 
-  const categories = useAppSelector(state => state.budget.categories);
-  const totalMonthlyBudget = useAppSelector(
-    state => state.budget.totalMonthlyBudget,
-  );
+  const { categories, totalMonthlyBudget } = plan;
 
   const [name, setName] = useState(editingCategory?.name || '');
   const [limit, setLimit] = useState(
@@ -116,7 +113,7 @@ export const AddCategoryScreen = () => {
           color,
           isMain: editingCategory.isMain || false,
         };
-        dispatch(updateCategory(categoryData));
+        plan.update(categoryData);
         showToast('Category updated successfully.', 'success', 'Success');
       } else {
         const categoryData: BudgetCategory = {
@@ -127,7 +124,7 @@ export const AddCategoryScreen = () => {
           color,
           isMain: false,
         };
-        dispatch(addCategory(categoryData));
+        plan.add(categoryData);
         showToast('New category added successfully.', 'success', 'Success');
       }
       setIsSaving(false);
@@ -199,6 +196,29 @@ export const AddCategoryScreen = () => {
                   onChangeText={setName}
                 />
               </View>
+              {plan.isUser && (
+                <View style={styles.suggestRow}>
+                  {SPENDING_CATS.filter(
+                    c => !categories.some(x => x.id !== editingCategory?.id && x.name.toLowerCase() === c.toLowerCase()),
+                  ).map(c => {
+                    const selected = name.trim().toLowerCase() === c.toLowerCase();
+                    return (
+                      <TouchableOpacity
+                        key={c}
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setName(c);
+                          setIcon(CAT_META[c]?.icon ?? icon);
+                          setColor(CAT_META[c]?.color ?? color);
+                        }}
+                        style={[styles.suggestChip, { backgroundColor: selected ? theme.TEXT : theme.MODAL }]}
+                      >
+                        <Text style={[styles.suggestText, { color: selected ? theme.BG : theme.TEXT }]}>{c}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
             </View>
 
             {/* Monthly Limit Field */}
@@ -390,6 +410,9 @@ export const AddCategoryScreen = () => {
 export default AddCategoryScreen;
 
 const styles = StyleSheet.create({
+  suggestRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  suggestChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 14 },
+  suggestText: { fontSize: 12, fontWeight: '600' },
   container: {
     flex: 1,
   },

@@ -13,6 +13,10 @@ export interface UserProfile {
   filerStatus?: 'yes' | 'no' | 'unsure' | null;
   /** False when the account was created with Google and has no password yet. */
   hasPassword?: boolean;
+  /** True once the first-visit app tour was finished or skipped. */
+  tourCompleted?: boolean;
+  /** When the account was created (ISO date), for "Member since". */
+  createdAt?: string;
 }
 
 interface UserState {

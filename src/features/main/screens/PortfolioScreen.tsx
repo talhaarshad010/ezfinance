@@ -84,9 +84,8 @@ const PortfolioScreen = () => {
          <Typography variant="caption" color="#AAA" style={{marginTop: 4}}>By Asset Class</Typography>
          
          <View style={{marginTop: 24}}>
-             <AllocationRow label="Stocks" percent="65%" fillWidth="65%" />
-             <AllocationRow label="Crypto" percent="25%" fillWidth="25%" />
-             <AllocationRow label="Bonds" percent="10%" fillWidth="10%" />
+             <AllocationRow label="Stocks" percent="70%" fillWidth="70%" />
+             <AllocationRow label="Bonds" percent="30%" fillWidth="30%" />
          </View>
 
          <TouchableOpacity style={styles.whiteBtn}>
@@ -103,7 +102,6 @@ const PortfolioScreen = () => {
       </View>
 
       <AssetDetailCard icon="pocket" title="Apple Inc." subtitle="AAPL • 140 Shares" invested="$21,420.00" current="$26,512.40" gain="+23.8%" gainColor="#0047AB" />
-      <AssetDetailCard icon="bold" title="Bitcoin" subtitle="BTC • 0.85 BTC" invested="$35,000.00" current="$41,200.15" gain="+17.7%" gainColor="#0047AB" />
       <AssetDetailCard icon="triangle" title="Tesla Inc." subtitle="TSLA • 50 Shares" invested="$12,500.00" current="$11,210.00" gain="-10.3%" gainColor="#D32F2F" />
 
       <View style={{height: 100}} />

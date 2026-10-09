@@ -12,6 +12,8 @@ import Feather from 'react-native-vector-icons/Feather';
 import Typography from '../components/Typography';
 import { useAppSelector } from '../store/hooks';
 import { useTheme } from '../context/ThemeContext';
+import { useUserMode } from '../context/UserModeContext';
+import { FEATURES } from '../constants/features';
 import { signOut } from '../services/authService';
 
 const { width } = Dimensions.get('window');
@@ -102,6 +104,7 @@ export const DrawerContent = React.memo((props: DrawerContentComponentProps) => 
     ]?.name;
   const currentScreenName = activeTabRoute || currentRoute;
   const profile = useAppSelector(state => state.user.profile);
+  const { isNewUser, openTxSheet } = useUserMode();
 
   const drawerBg = theme.isDark ? '#0A0A0D' : '#F8F9FA';
 
@@ -115,6 +118,12 @@ export const DrawerContent = React.memo((props: DrawerContentComponentProps) => 
 
   const navigateTo = (screen: string) => {
     props.navigation.closeDrawer();
+    if (screen === 'AddExpense' && isNewUser) {
+      // Real accounts log expenses with the same sheet as the rest of the new-user flow.
+      props.navigation.navigate('MainTabs', { screen: 'Expenses' });
+      setTimeout(() => openTxSheet({ type: 'expense' }), 300);
+      return;
+    }
     if (
       ['Home', 'Expenses', 'Investments', 'AI Advisor', 'Goals'].includes(screen)
     ) {
@@ -182,22 +191,25 @@ export const DrawerContent = React.memo((props: DrawerContentComponentProps) => 
             <Typography variant="h3" weight="700" color={theme.TEXT}>
               {profile?.name || 'User'}
             </Typography>
-            <View
-              style={[
-                styles.membershipBadge,
-                { backgroundColor: theme.MODAL },
-              ]}
-            >
-              <Feather name="award" size={12} color="#FFD700" />
-              <Typography
-                variant="caption"
-                weight="700"
-                color="#FFD700"
-                style={{ marginLeft: 4 }}
+            {/* Membership tiers aren't real yet: only the Explore demo shows the badge. */}
+            {!isNewUser && (
+              <View
+                style={[
+                  styles.membershipBadge,
+                  { backgroundColor: theme.MODAL },
+                ]}
               >
-                PREMIUM
-              </Typography>
-            </View>
+                <Feather name="award" size={12} color="#FFD700" />
+                <Typography
+                  variant="caption"
+                  weight="700"
+                  color="#FFD700"
+                  style={{ marginLeft: 4 }}
+                >
+                  PREMIUM
+                </Typography>
+              </View>
+            )}
           </View>
         </TouchableOpacity>
 
@@ -251,12 +263,14 @@ export const DrawerContent = React.memo((props: DrawerContentComponentProps) => 
           active={currentScreenName === 'Goals'}
           onPress={() => navigateTo('Goals')}
         />
-        <MenuItem
-          icon="layers"
-          label="Loans & Liabilities"
-          active={currentScreenName === 'Loans'}
-          onPress={() => navigateTo('Loans')}
-        />
+        {FEATURES.loans && (
+          <MenuItem
+            icon="layers"
+            label="Loans & Liabilities"
+            active={currentScreenName === 'Loans'}
+            onPress={() => navigateTo('Loans')}
+          />
+        )}
 
         {/* Growth */}
         <SectionHeader title="Growth" />
@@ -266,18 +280,14 @@ export const DrawerContent = React.memo((props: DrawerContentComponentProps) => 
           active={currentScreenName === 'Investments'}
           onPress={() => navigateTo('Investments')}
         />
-        <MenuItem
-          icon="activity"
-          label="Stock Market"
-          active={currentScreenName === 'StockMarket'}
-          onPress={() => navigateTo('StockMarket')}
-        />
-        <MenuItem
-          icon="zap"
-          label="Crypto Market"
-          active={currentScreenName === 'CryptoMarket'}
-          onPress={() => navigateTo('CryptoMarket')}
-        />
+        {FEATURES.stockMarket && (
+          <MenuItem
+            icon="activity"
+            label="Stock Market"
+            active={currentScreenName === 'StockMarket'}
+            onPress={() => navigateTo('StockMarket')}
+          />
+        )}
 
         {/* Intelligence */}
         <SectionHeader title="Intelligence" />

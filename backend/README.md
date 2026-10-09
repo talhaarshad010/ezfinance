@@ -60,15 +60,16 @@ The API listens on `http://0.0.0.0:5080`, so it is reachable from:
 
 | Method | Path                        | Auth | Description                                                   |
 | ------ | --------------------------- | ---- | ------------------------------------------------------------- |
-| POST   | `/api/auth/register`        |      | Create account; emails a verification code                    |
-| POST   | `/api/auth/verify-email`    |      | Confirm email with the code; returns a session                |
+| POST   | `/api/auth/email-code`      |      | Sign-up step 1: email a 6-digit code (creates the account if new) |
+| POST   | `/api/auth/verify-email`    |      | Verify an emailed sign-up or sign-in code; returns a session  |
 | POST   | `/api/auth/resend-code`     |      | Send a new sign-up code                                       |
 | POST   | `/api/auth/login`           |      | Email + password; returns a session                           |
 | POST   | `/api/auth/google`          |      | Google ID token from native Google Sign-In; returns a session |
 | POST   | `/api/auth/refresh`         |      | Swap a refresh token (single-use) for a new session           |
 | POST   | `/api/auth/logout`          | ✓    | Revoke the current session                                    |
 | POST   | `/api/auth/forgot-password` |      | Email a reset code (always 204)                               |
-| POST   | `/api/auth/reset-password`  |      | Code + new password; returns a session                        |
+| POST   | `/api/auth/verify-reset-code` |    | Check the reset code; returns a single-use reset token (10 min) |
+| POST   | `/api/auth/complete-reset`  |      | Reset token + new password                                    |
 | POST   | `/api/auth/change-password` | ✓    | Current + new password                                        |
 | POST   | `/api/auth/set-password`    | ✓    | Add a password to a Google-only account (409 if one exists)   |
 | GET    | `/api/profile`              | ✓    | The signed-in user's profile (recreated if missing), with `hasPassword` |
@@ -96,14 +97,15 @@ public keys from `https://jlbvnztpzztoazeujaxa.supabase.co/auth/v1/.well-known/o
 checking signature, issuer, audience (`authenticated`) and expiry. No JWT secret is stored here.
 
 Profiles live in `public.profiles` and are created by a database trigger when a user signs up,
-from the metadata sent by `/api/auth/register`. The table has RLS enabled with no policies and
+from the name sent with `/api/auth/email-code` (the wizard fills in the rest via `PUT /api/profile`). The table has RLS enabled with no policies and
 no grants for `anon`/`authenticated`, so the public Supabase Data API cannot read it; only this
 backend (connected as `postgres`) can.
 
 ## Supabase dashboard settings
 
-- **Authentication → Emails → Confirm signup** and **Reset password**: the templates must
-  include `{{ .Token }}` so users receive a code instead of only a link.
+- **Authentication → Emails → Confirm signup**, **Magic Link** and **Reset password**: the templates
+  must include `{{ .Token }}` so users receive a code instead of only a link. (New sign-ups get
+  Confirm signup; the sign-up code for an email that already has an account uses Magic Link.)
 - **Authentication → Providers → Email**: keep "Confirm email" on; email OTP length 6 (the app's
   OTP screen expects 6 digits); minimum password length 8.
 - **Authentication → Sign In / Providers → Google**: enabled; Client IDs = the web, iOS and

@@ -1,12 +1,16 @@
-import React, { createContext, ReactNode, useContext, useMemo, useState } from 'react';
+import React, { createContext, Dispatch, ReactNode, SetStateAction, useContext, useMemo, useState } from 'react';
+import type { DebtEntry, UpcomingBill } from '../constants/ledgerData';
+import type { BudgetCategory } from '../store/slices/budgetSlice';
+import type { BankAccount } from '../store/slices/bankAccountsSlice';
 
 /**
- * New vs returning user.
+ * Two experiences of the main app:
  *
- * - Returning user (log in / Google / explore): the existing screens with their sample data.
- * - New user (right after sign-up): a fresh, empty account — empty states, a Getting
- *   started checklist, locked insights until there's enough data, and a guided tour.
- *   Everything the new user adds lives here.
+ * - New user (every signed-in account): no sample data. Empty states, a Getting started
+ *   checklist, insights locked until there's enough data, and a guided tour on the account's
+ *   first visit. Everything the user adds lives here.
+ * - Returning user (Explore without logging in): the screens filled with sample data, as a demo
+ *   of the app once it has real data. Never used for real accounts.
  */
 
 export type TxType = 'expense' | 'income';
@@ -27,6 +31,9 @@ export interface UserGoal {
   target: number;
   saved: number;
   deadline?: Date;
+  /** Feather icon chosen when the goal was created. */
+  icon?: string;
+  paused?: boolean;
 }
 export interface UserHolding {
   id: number;
@@ -44,15 +51,29 @@ export const UNLOCK_AT = 3;
 
 interface UserModeCtx {
   isNewUser: boolean;
-  /** Call from the sign-up success handler: empty account + guided tour. */
-  beginNewUser: () => void;
-  /** Call on log in / Google / explore / log out: back to the returning-user experience. */
+  /**
+   * The real-account experience: no sample data, only what the user adds. Every signed-in account
+   * uses it. `tour` shows the guided tour (first visit only).
+   */
+  beginNewUser: (options?: { tour?: boolean }) => void;
+  /** The sample-data demo (Explore). Also used to reset state on log out. */
   beginReturningUser: () => void;
 
   txs: UserTx[];
   goals: UserGoal[];
   holdings: UserHolding[];
   budget: number | null;
+  /** Repeated bills and loans the user tracks on the Expenses screen. */
+  bills: UpcomingBill[];
+  setBills: Dispatch<SetStateAction<UpcomingBill[]>>;
+  debts: DebtEntry[];
+  setDebts: Dispatch<SetStateAction<DebtEntry[]>>;
+  /** Spending envelopes (category caps) on the Budget Planner. */
+  envelopes: BudgetCategory[];
+  setEnvelopes: Dispatch<SetStateAction<BudgetCategory[]>>;
+  /** Bank accounts and wallets the user added; `balance` is the opening balance. */
+  bankAccounts: BankAccount[];
+  setBankAccounts: Dispatch<SetStateAction<BankAccount[]>>;
 
   addTx: (t: Omit<UserTx, 'id' | 'date'> & { date?: Date }) => number;
   updateTx: (id: number, patch: Partial<Omit<UserTx, 'id'>>) => void;
@@ -60,6 +81,7 @@ interface UserModeCtx {
   /** Undo for delete: puts the item back where it was. */
   restoreTx: (t: UserTx, index: number) => void;
   addGoal: (g: Omit<UserGoal, 'id' | 'saved'>) => number;
+  updateGoal: (id: number, patch: Partial<Omit<UserGoal, 'id'>>) => void;
   deleteGoal: (id: number) => void;
   addHolding: (h: Omit<UserHolding, 'id'>) => number;
   setBudget: (n: number) => void;
@@ -88,6 +110,10 @@ export function UserModeProvider({ children }: { children: ReactNode }) {
   const [goals, setGoals] = useState<UserGoal[]>([]);
   const [holdings, setHoldings] = useState<UserHolding[]>([]);
   const [budget, setBudget] = useState<number | null>(null);
+  const [bills, setBills] = useState<UpcomingBill[]>([]);
+  const [debts, setDebts] = useState<DebtEntry[]>([]);
+  const [envelopes, setEnvelopes] = useState<BudgetCategory[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [checklistHidden, setChecklistHidden] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
   const [firstActionOpen, setFirstActionOpen] = useState(false);
@@ -99,16 +125,20 @@ export function UserModeProvider({ children }: { children: ReactNode }) {
       setGoals([]);
       setHoldings([]);
       setBudget(null);
+      setBills([]);
+      setDebts([]);
+      setEnvelopes([]);
+      setBankAccounts([]);
       setChecklistHidden(false);
       setFirstActionOpen(false);
       setTxSheet({ open: false });
     };
     return {
       isNewUser,
-      beginNewUser: () => {
+      beginNewUser: options => {
         reset();
         setIsNewUser(true);
-        setTourOpen(true);
+        setTourOpen(options?.tour ?? true);
       },
       beginReturningUser: () => {
         reset();
@@ -119,6 +149,14 @@ export function UserModeProvider({ children }: { children: ReactNode }) {
       goals,
       holdings,
       budget,
+      bills,
+      setBills,
+      debts,
+      setDebts,
+      envelopes,
+      setEnvelopes,
+      bankAccounts,
+      setBankAccounts,
       addTx: t => {
         const id = newId();
         setTxs(p => [{ date: new Date(), ...t, id }, ...p]);
@@ -137,6 +175,7 @@ export function UserModeProvider({ children }: { children: ReactNode }) {
         setGoals(p => [...p, { ...g, id, saved: 0 }]);
         return id;
       },
+      updateGoal: (id, patch) => setGoals(p => p.map(g => (g.id === id ? { ...g, ...patch } : g))),
       deleteGoal: id => setGoals(p => p.filter(g => g.id !== id)),
       addHolding: h => {
         const id = newId();
@@ -155,7 +194,7 @@ export function UserModeProvider({ children }: { children: ReactNode }) {
       openTxSheet: preset => setTxSheet({ open: true, preset }),
       closeTxSheet: () => setTxSheet(s => ({ ...s, open: false })),
     };
-  }, [isNewUser, txs, goals, holdings, budget, checklistHidden, tourOpen, firstActionOpen, txSheet]);
+  }, [isNewUser, txs, goals, holdings, budget, bills, debts, envelopes, bankAccounts, checklistHidden, tourOpen, firstActionOpen, txSheet]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

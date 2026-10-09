@@ -12,15 +12,17 @@ public sealed class PasswordResetStore(IMemoryCache cache)
 {
     public static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(10);
 
-    public string Create(string recoveryAccessToken)
+    public sealed record Entry(string AccessToken, Guid UserId);
+
+    public string Create(string recoveryAccessToken, Guid userId)
     {
         var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
-        cache.Set(Key(token), recoveryAccessToken, Lifetime);
+        cache.Set(Key(token), new Entry(recoveryAccessToken, userId), Lifetime);
         return token;
     }
 
-    public string? Find(string resetToken) =>
-        cache.TryGetValue(Key(resetToken), out string? accessToken) ? accessToken : null;
+    public Entry? Find(string resetToken) =>
+        cache.TryGetValue(Key(resetToken), out Entry? entry) ? entry : null;
 
     public void Remove(string resetToken) => cache.Remove(Key(resetToken));
 

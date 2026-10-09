@@ -64,7 +64,7 @@ export function TxList({ limit }: { limit?: number }) {
 }
 
 /** Full detail (full name + full amount), with Edit and Delete (Undo toast; queued while offline). */
-function TxDetailSheet({ tx, visible, onClose }: { tx: UserTx | null; visible: boolean; onClose: () => void }) {
+export function TxDetailSheet({ tx, visible, onClose }: { tx: UserTx | null; visible: boolean; onClose: () => void }) {
   const { theme } = useTheme();
   const { txs, deleteTx, restoreTx, openTxSheet } = useUserMode();
   const { record, remove } = useNetwork();

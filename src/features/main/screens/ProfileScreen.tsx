@@ -13,8 +13,19 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useAppSelector } from '../../../store/hooks';
+import { useUserMode } from '../../../context/UserModeContext';
+import { fullAmt } from '../../../utils/format';
 import { useToast } from '../../../context/ToastContext';
 import { signOut } from '../../../services/authService';
+
+/** Sign-up income options, by stored value. */
+const INCOME_LABELS: Record<string, string> = {
+  '< 25,000': 'Under PKR 25k',
+  '25,000 to 50,000': 'PKR 25k to 50k',
+  '50,000 to 100,000': 'PKR 50k to 100k',
+  '100,000 to 150,000': 'PKR 100k to 150k',
+  '> 150,000': 'PKR 150k and above',
+};
 
 export const ProfileScreen = () => {
   const navigation = useNavigation<any>();
@@ -23,6 +34,19 @@ export const ProfileScreen = () => {
   const { showToast } = useToast();
 
   const profile = useAppSelector(state => state.user.profile);
+  const twoFactor = useAppSelector(state => state.settings.twoFactorEnabled);
+  // Real accounts show their own data; the hard-coded figures are only for the Explore demo.
+  const { isNewUser, txs, bankAccounts } = useUserMode();
+  const income = txs.filter(t => t.type === 'income').reduce((a, t) => a + t.amount, 0);
+  const spent = txs.filter(t => t.type === 'expense').reduce((a, t) => a + t.amount, 0);
+  const now = new Date();
+  const spentThisMonth = txs
+    .filter(t => t.type === 'expense' && t.date.getMonth() === now.getMonth() && t.date.getFullYear() === now.getFullYear())
+    .reduce((a, t) => a + t.amount, 0);
+  const memberSince = profile?.createdAt
+    ? new Date(profile.createdAt).toLocaleString('en-US', { month: 'short', year: 'numeric' })
+    : '—';
+  const incomeLabel = profile?.monthlyIncome ? INCOME_LABELS[profile.monthlyIncome] ?? profile.monthlyIncome : 'Not set';
 
   const getInitials = () => {
     if (!profile?.name) return 'TA';
@@ -121,23 +145,18 @@ export const ProfileScreen = () => {
 
               <View style={styles.profileMeta}>
                 <Text style={[styles.profileName, { color: theme.TEXT }]}>
-                  {profile?.name || 'Talha Arshad'}
+                  {profile?.name || 'User'}
                 </Text>
                 <Text style={[styles.profileEmail, { color: theme.MUTED }]}>
-                  {profile?.email || 'talhaarshad010@gmail.com'}
+                  {profile?.email || ''}
                 </Text>
 
-                <View
-                  style={[
-                    styles.tierBadge,
-                    { backgroundColor: `${theme.ACTIVE}15` },
-                  ]}
-                >
-                  <Feather name="award" size={12} color="#FFD700" />
-                  <Text style={[styles.tierText, { color: theme.ACTIVE }]}>
-                    PRO MEMBER — TIER 1
-                  </Text>
-                </View>
+                {!isNewUser && (
+                  <View style={[styles.tierBadge, { backgroundColor: `${theme.ACTIVE}15` }]}>
+                    <Feather name="award" size={12} color="#FFD700" />
+                    <Text style={[styles.tierText, { color: theme.ACTIVE }]}>PRO MEMBER — TIER 1</Text>
+                  </View>
+                )}
               </View>
             </View>
 
@@ -153,7 +172,7 @@ export const ProfileScreen = () => {
                   MEMBER SINCE
                 </Text>
                 <Text style={[styles.metricValue, { color: theme.TEXT }]}>
-                  Jan 2024
+                  {isNewUser ? memberSince : 'Jan 2024'}
                 </Text>
               </View>
 
@@ -167,7 +186,7 @@ export const ProfileScreen = () => {
                   ACCOUNTS
                 </Text>
                 <Text style={[styles.metricValue, { color: theme.TEXT }]}>
-                  3 Banks Linked
+                  {isNewUser ? (bankAccounts.length ? `${bankAccounts.length} added` : 'None added') : '3 Banks Linked'}
                 </Text>
               </View>
 
@@ -180,14 +199,14 @@ export const ProfileScreen = () => {
                 <Text style={[styles.metricLabel, { color: theme.MUTED }]}>
                   2FA SECURITY
                 </Text>
-                <View style={styles.secVerifiedRow}>
-                  <Feather name="check-circle" size={12} color={theme.GREEN} />
-                  <Text
-                    style={[styles.metricValue, { color: theme.GREEN }]}
-                  >
-                    Active
-                  </Text>
-                </View>
+                {isNewUser && !twoFactor ? (
+                  <Text style={[styles.metricValue, { color: theme.MUTED }]}>Off</Text>
+                ) : (
+                  <View style={styles.secVerifiedRow}>
+                    <Feather name="check-circle" size={12} color={theme.GREEN} />
+                    <Text style={[styles.metricValue, { color: theme.GREEN }]}>Active</Text>
+                  </View>
+                )}
               </View>
             </View>
           </View>
@@ -202,23 +221,18 @@ export const ProfileScreen = () => {
             <View style={styles.cardHeaderRow}>
               <View>
                 <Text style={[styles.cardSubText, { color: theme.MUTED }]}>
-                  Total Portfolio Net Worth
+                  {isNewUser ? 'Net (income minus spending)' : 'Total Portfolio Net Worth'}
                 </Text>
                 <Text style={[styles.netWorthAmount, { color: theme.TEXT }]}>
-                  PKR 5,740,000
+                  {isNewUser ? (txs.length ? `PKR ${fullAmt(income - spent)}` : 'No data yet') : 'PKR 5,740,000'}
                 </Text>
               </View>
 
-              <View
-                style={[
-                  styles.scoreBadge,
-                  { backgroundColor: `${theme.GREEN}15` },
-                ]}
-              >
-                <Text style={[styles.scoreText, { color: theme.GREEN }]}>
-                  Credit 784 — Excellent
-                </Text>
-              </View>
+              {!isNewUser && (
+                <View style={[styles.scoreBadge, { backgroundColor: `${theme.GREEN}15` }]}>
+                  <Text style={[styles.scoreText, { color: theme.GREEN }]}>Credit 784 — Excellent</Text>
+                </View>
+              )}
             </View>
 
             <View style={styles.snapshotGrid}>
@@ -227,16 +241,16 @@ export const ProfileScreen = () => {
                   MONTHLY INCOME
                 </Text>
                 <Text style={[styles.snapVal, { color: theme.GREEN }]}>
-                  PKR 150,000
+                  {isNewUser ? incomeLabel : 'PKR 150,000'}
                 </Text>
               </View>
 
               <View style={[styles.snapBox, { backgroundColor: theme.MODAL }]}>
                 <Text style={[styles.snapLabel, { color: theme.MUTED }]}>
-                  MONTHLY BURN RATE
+                  {isNewUser ? 'SPENT THIS MONTH' : 'MONTHLY BURN RATE'}
                 </Text>
                 <Text style={[styles.snapVal, { color: theme.TEXT }]}>
-                  PKR 80,000 (53%)
+                  {isNewUser ? (spentThisMonth ? `PKR ${fullAmt(spentThisMonth)}` : 'Nothing yet') : 'PKR 80,000 (53%)'}
                 </Text>
               </View>
             </View>
@@ -265,7 +279,7 @@ export const ProfileScreen = () => {
               {
                 icon: 'credit-card',
                 label: 'Bank Accounts & Payment Cards',
-                sub: 'Meezan, HBL, Bank Alfalah linked',
+                sub: isNewUser ? 'No accounts linked yet' : 'Meezan, HBL, Bank Alfalah linked',
                 screen: 'BankAccounts',
               },
               {

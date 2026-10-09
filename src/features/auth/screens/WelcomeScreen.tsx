@@ -47,12 +47,8 @@ export const WelcomeScreen = () => {
     try {
       const result = await signInWithGoogle();
       if (!result) return; // closing the Google sheet is not an error, so nothing is shown
-      // First Google sign-in creates the account: same fresh start as email sign-up.
-      if (result.isNewUser) {
-        beginNewUser();
-      } else {
-        beginReturningUser();
-      }
+      // Real accounts never see sample data; the tour shows until it's been completed once.
+      beginNewUser({ tour: !result.profile.tourCompleted });
       dispatch(setProfile(result.profile));
       showToast(result.isNewUser ? 'Welcome to EZFinance!' : 'Signed in with Google!', 'success');
     } catch (e) {
@@ -64,9 +60,10 @@ export const WelcomeScreen = () => {
     }
   };
 
-  // Explore = first-run journey: empty states, getting-started checklist and the guided tour.
+  // Explore = a demo of the full app with sample data, so visitors see how it looks once filled in.
+  // No account, so nothing is saved and there is no tour.
   const handleExplore = () => {
-    beginNewUser();
+    beginReturningUser();
     dispatch(
       setProfile({
         uid: 'guest',

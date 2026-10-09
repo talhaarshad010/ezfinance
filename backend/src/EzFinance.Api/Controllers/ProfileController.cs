@@ -20,7 +20,7 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
         var profile = await LoadProfileAsync(track: false, ct);
         return profile is null
             ? Problem(statusCode: StatusCodes.Status404NotFound, detail: "Profile not found.")
-            : Ok(await ToResponseAsync(profile, ct));
+            : Ok(ProfileResponse.From(profile, User.GetEmail()));
     }
 
     [HttpPut]
@@ -40,11 +40,27 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
         profile.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
 
-        return Ok(await ToResponseAsync(profile, ct));
+        return Ok(ProfileResponse.From(profile, User.GetEmail()));
     }
 
-    private async Task<ProfileResponse> ToResponseAsync(Profile profile, CancellationToken ct) =>
-        ProfileResponse.From(profile, User.GetEmail(), await db.HasPasswordAsync(profile.Id, ct));
+    /// <summary>Records that the user finished or skipped the first-visit app tour.</summary>
+    [HttpPost("tour-completed")]
+    public async Task<ActionResult<ProfileResponse>> TourCompleted(CancellationToken ct)
+    {
+        var profile = await LoadProfileAsync(track: true, ct);
+        if (profile is null)
+        {
+            return Problem(statusCode: StatusCodes.Status404NotFound, detail: "Profile not found.");
+        }
+
+        if (!profile.TourCompleted)
+        {
+            profile.TourCompleted = true;
+            profile.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+        }
+        return Ok(ProfileResponse.From(profile, User.GetEmail()));
+    }
 
     /// <summary>
     /// The caller's profile. If the row is missing (e.g. deleted by hand), it is recreated from

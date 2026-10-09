@@ -14,6 +14,18 @@ import { useTheme } from '../../../../context/ThemeContext';
 import { UpcomingBill } from '../../../../constants/ledgerData';
 import { AnimatedModal } from '../../../../components/AnimatedModal';
 
+/** Next date a bill due on `dueDay` falls on (this month, or next if it has passed). */
+function nextDue(dueDay: number) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(today.getFullYear(), today.getMonth(), dueDay);
+  if (due < today) due.setMonth(due.getMonth() + 1);
+  return {
+    date: due.toLocaleString('en-GB', { day: '2-digit', month: 'short' }),
+    dueIn: Math.round((due.getTime() - today.getTime()) / 86400000),
+  };
+}
+
 // ── Add Recurring Bill Sheet ──────────────────────────────────────────────────
 interface AddRecurringBillSheetProps {
   visible: boolean;
@@ -57,8 +69,7 @@ export function AddRecurringBillSheet({
       icon: category === 'Housing' ? 'home' : category === 'Utilities' ? 'zap' : 'clock',
       label: billerName.trim(),
       amount: parseFloat(amount) || 0,
-      date: `${dueDay} Sep`,
-      dueIn: Math.max(0, dueDay - 8),
+      ...nextDue(dueDay),
       tag: payMethod,
       tagColor: theme.ACTIVE,
       paid: false,

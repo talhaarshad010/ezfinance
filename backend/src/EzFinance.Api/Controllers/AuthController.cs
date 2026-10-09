@@ -52,6 +52,8 @@ public sealed class AuthController(SupabaseAuthClient auth, AppDbContext db, Pas
     public async Task<ActionResult<AuthSessionResponse>> Login(LoginRequest request, CancellationToken ct)
     {
         var session = await auth.SignInWithPasswordAsync(Normalize(request.Email), request.Password, ct);
+        // A successful password login proves the user has one (also repairs older accounts).
+        await db.MarkPasswordSetAsync(session.User!.Id, ct);
         return Ok(AuthSessionResponse.From(session));
     }
 
@@ -109,7 +111,7 @@ public sealed class AuthController(SupabaseAuthClient auth, AppDbContext db, Pas
     public async Task<ActionResult<ResetTokenResponse>> VerifyResetCode(VerifyEmailRequest request, CancellationToken ct)
     {
         var session = await auth.VerifyOtpAsync(Normalize(request.Email), request.Code, "recovery", ct);
-        var token = resets.Create(session.AccessToken!);
+        var token = resets.Create(session.AccessToken!, session.User!.Id);
         return Ok(new ResetTokenResponse(token, (int)PasswordResetStore.Lifetime.TotalSeconds));
     }
 
@@ -120,8 +122,8 @@ public sealed class AuthController(SupabaseAuthClient auth, AppDbContext db, Pas
     [HttpPost("complete-reset")]
     public async Task<IActionResult> CompleteReset(CompleteResetRequest request, CancellationToken ct)
     {
-        var accessToken = resets.Find(request.ResetToken);
-        if (accessToken is null)
+        var entry = resets.Find(request.ResetToken);
+        if (entry is null)
         {
             return Problem(
                 statusCode: StatusCodes.Status410Gone,
@@ -129,11 +131,12 @@ public sealed class AuthController(SupabaseAuthClient auth, AppDbContext db, Pas
                 extensions: new Dictionary<string, object?> { ["code"] = "reset_expired" });
         }
 
-        await auth.UpdatePasswordAsync(accessToken, request.NewPassword, ct);
+        await auth.UpdatePasswordAsync(entry.AccessToken, request.NewPassword, ct);
+        await db.MarkPasswordSetAsync(entry.UserId, ct);
         resets.Remove(request.ResetToken);
         try
         {
-            await auth.SignOutAsync(accessToken, ct);
+            await auth.SignOutAsync(entry.AccessToken, ct);
         }
         catch (SupabaseAuthException)
         {
@@ -167,9 +170,9 @@ public sealed class AuthController(SupabaseAuthClient auth, AppDbContext db, Pas
     }
 
     /// <summary>
-    /// Adds a password to an account that has none (created with Google), so the user can also log
-    /// in with email + password. Accounts that already have one must use change-password, which
-    /// checks the current password.
+    /// Adds a password to an account where the user hasn't chosen one yet (created with Google, or
+    /// with an emailed code during sign-up). Accounts that already have one must use
+    /// change-password, which checks the current password.
     /// </summary>
     [Authorize]
     [HttpPost("set-password")]
@@ -184,6 +187,7 @@ public sealed class AuthController(SupabaseAuthClient auth, AppDbContext db, Pas
         }
 
         await auth.UpdatePasswordAsync(await GetAccessTokenAsync(), request.NewPassword, ct);
+        await db.MarkPasswordSetAsync(User.GetUserId(), ct);
         return NoContent();
     }
 

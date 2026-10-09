@@ -99,7 +99,7 @@ export const RegisterScreen = () => {
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const dispatch = useAppDispatch();
-  const { beginNewUser, beginReturningUser } = useUserMode();
+  const { beginNewUser } = useUserMode();
   const guard = useAuthGuard();
 
   const [stepIdx, setStepIdx] = useState(0);
@@ -327,7 +327,7 @@ export const RegisterScreen = () => {
     if (result.existingAccount) {
       // They proved they own the email, so it's safe to say it already has an account.
       clearSignUpProgress();
-      beginReturningUser();
+      beginNewUser({ tour: !result.profile.tourCompleted });
       dispatch(setProfile(result.profile));
       showToast('You already have an account with this email. You are signed in.', 'success');
       return;
@@ -341,7 +341,7 @@ export const RegisterScreen = () => {
   const finishSignUp = () => {
     if (!created) return;
     // A fresh account: empty states, Getting started checklist and the guided tour.
-    beginNewUser();
+    beginNewUser({ tour: !created.tourCompleted });
     dispatch(setProfile(created));
     showToast('Account created successfully! Welcome to EZFinance.', 'success');
   };

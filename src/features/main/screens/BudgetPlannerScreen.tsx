@@ -15,13 +15,10 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
-import { useAppSelector, useAppDispatch } from '../../../store/hooks';
-import {
-  deleteCategory,
-  setTotalMonthlyBudget,
-  BudgetCategory as IBudgetCategory,
-} from '../../../store/slices/budgetSlice';
+import { BudgetCategory as IBudgetCategory } from '../../../store/slices/budgetSlice';
 import { AnimatedModal } from '../../../components/AnimatedModal';
+import { EmptyState } from '../newUser/shared';
+import { useBudgetPlan } from './budget/useBudgetPlan';
 
 const MONTHS = [
   'JANUARY',
@@ -81,68 +78,68 @@ export const BudgetPlannerScreen = () => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const dispatch = useAppDispatch();
   const { showToast } = useToast();
 
-  const categories = useAppSelector(state => state.budget.categories);
-  const totalMonthlyBudget = useAppSelector(
-    state => state.budget.totalMonthlyBudget,
-  );
-  const accounts = useAppSelector(state => state.bankAccounts.accounts);
-  const allTransactions = Object.values(
-    useAppSelector(state => state.bankAccounts.transactions),
-  ).flat();
+  // The user's own budget and envelopes, or the sample budget in the Explore demo.
+  const plan = useBudgetPlan();
+  const { isUser, categories, totalMonthlyBudget } = plan;
 
   const [selectedCategory, setSelectedCategory] =
     useState<IBudgetCategory | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [editBudgetVisible, setEditBudgetVisible] = useState(false);
   const [newBudgetInput, setNewBudgetInput] = useState(
-    totalMonthlyBudget.toString(),
+    plan.hasBudget ? totalMonthlyBudget.toString() : '',
   );
 
   useEffect(() => {
-    setNewBudgetInput(totalMonthlyBudget.toString());
-  }, [totalMonthlyBudget]);
+    setNewBudgetInput(plan.hasBudget ? totalMonthlyBudget.toString() : '');
+  }, [totalMonthlyBudget, plan.hasBudget]);
 
   const now = new Date();
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
   const monthName = MONTHS[currentMonth];
 
-  const totalAccountBalance = accounts.reduce(
-    (acc, curr) => acc + curr.balance,
-    0,
-  );
-
-  const spentByCategoryId: Record<string, number> = {};
-  allTransactions.forEach(tx => {
-    const txDate = new Date(tx.date);
-    if (
-      tx.type === 'expense' &&
-      txDate.getUTCMonth() === currentMonth &&
-      txDate.getUTCFullYear() === currentYear
-    ) {
-      const cat = categories.find(c => c.name === tx.category);
-      if (cat) {
-        spentByCategoryId[cat.id] = (spentByCategoryId[cat.id] || 0) + tx.amount;
-      }
-    }
-  });
+  const totalAccountBalance = plan.accountBalance;
 
   const categoriesWithSpent = categories.map(cat => ({
     ...cat,
-    spent: spentByCategoryId[cat.id] || 0,
+    spent: plan.spentIn(cat),
   }));
 
-  const totalSpentAll = categoriesWithSpent.reduce(
-    (sum, c) => sum + c.spent,
-    0,
-  );
+  // A user's "Spent" is everything spent this month; the sample counts its envelopes.
+  const totalSpentAll = isUser
+    ? plan.monthSpent
+    : categoriesWithSpent.reduce((sum, c) => sum + c.spent, 0);
   const totalAllocatedAll = categoriesWithSpent.reduce(
     (sum, c) => sum + c.limit,
     0,
   );
+
+  // Recommendation: the sample's fixed advice, or one drawn from the user's envelopes.
+  const recommendation = (() => {
+    if (!isUser) return null;
+    const tight = [...categoriesWithSpent]
+      .filter(c => c.limit > 0 && c.spent / c.limit >= 0.8)
+      .sort((a, b) => b.spent / b.limit - a.spent / a.limit)[0];
+    if (tight) {
+      const daysLeft =
+        new Date(currentYear, currentMonth + 1, 0).getDate() - now.getDate();
+      return tight.spent >= tight.limit
+        ? `Your ${tight.name} envelope is over its cap by PKR ${(tight.spent - tight.limit).toLocaleString()}. Raise the cap or move money from another envelope.`
+        : `Your ${tight.name} envelope is ${Math.round((tight.spent / tight.limit) * 100)}% used with ${daysLeft} days left this month. Slow down here or raise its cap.`;
+    }
+    const unallocated = totalMonthlyBudget - totalAllocatedAll;
+    if (categoriesWithSpent.length > 0 && unallocated > 0) {
+      return `PKR ${unallocated.toLocaleString()} of your budget isn't in an envelope yet. Give it a job so every rupee is planned.`;
+    }
+    return '';
+  })();
+
+  // A user sets a monthly budget before adding envelopes.
+  const onAdd = () =>
+    plan.hasBudget ? navigation.navigate('AddCategory') : setEditBudgetVisible(true);
 
   const handleEditCategory = (category: IBudgetCategory) => {
     setMenuVisible(false);
@@ -151,7 +148,7 @@ export const BudgetPlannerScreen = () => {
 
   const handleDeleteCategory = (id: string) => {
     setMenuVisible(false);
-    dispatch(deleteCategory(id));
+    plan.remove(id);
     showToast('Category envelope deleted successfully.', 'success', 'Deleted');
   };
 
@@ -171,7 +168,7 @@ export const BudgetPlannerScreen = () => {
       return;
     }
 
-    dispatch(setTotalMonthlyBudget(val));
+    plan.setTotal(val);
     setEditBudgetVisible(false);
     showToast(
       `Total monthly budget updated to PKR ${val.toLocaleString()}`,
@@ -217,13 +214,26 @@ export const BudgetPlannerScreen = () => {
 
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => navigation.navigate('AddCategory')}
+            onPress={onAdd}
             style={[styles.addBtn, { backgroundColor: theme.TEXT }]}
           >
             <Feather name="plus" size={18} color={theme.BG} />
           </TouchableOpacity>
         </View>
 
+        {!plan.hasBudget && (
+          <View style={styles.emptyWrap}>
+            <EmptyState
+              icon="pie-chart"
+              title="No budget yet"
+              line="Set one monthly spending limit, then split it into envelopes. We'll track what you spend against each one."
+              primary={{ label: 'Set a monthly budget', onPress: () => setEditBudgetVisible(true) }}
+            />
+          </View>
+        )}
+
+        {plan.hasBudget && (
+        <>
         {/* Hero Budget Card (Always Dark / Premium Slate) */}
         <View style={styles.sectionMargin}>
           <View style={[styles.heroCard, { backgroundColor: theme.HERO_BG }]}>
@@ -283,6 +293,22 @@ export const BudgetPlannerScreen = () => {
           </View>
 
           <View style={styles.envelopesList}>
+            {categoriesWithSpent.length === 0 && (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => navigation.navigate('AddCategory')}
+                style={[styles.envelopeCard, styles.noEnvelopes, { backgroundColor: theme.CARD }]}
+              >
+                <View style={[styles.envIconSquare, { backgroundColor: theme.MODAL }]}>
+                  <Feather name="plus" size={16} color={theme.ACTIVE} />
+                </View>
+                <Text style={[styles.envTitle, { color: theme.TEXT }]}>No envelopes yet</Text>
+                <Text style={[styles.noEnvelopesLine, { color: theme.MUTED }]}>
+                  Split your budget into envelopes like Groceries or Fuel. Spending in that category counts against its cap.
+                </Text>
+                <Text style={[styles.noEnvelopesAction, { color: theme.ACTIVE }]}>Add an envelope</Text>
+              </TouchableOpacity>
+            )}
             {categoriesWithSpent.map(cat => {
               const pct =
                 cat.limit > 0
@@ -372,6 +398,7 @@ export const BudgetPlannerScreen = () => {
         </View>
 
         {/* CA Recommendation Banner */}
+        {recommendation !== '' && (
         <View style={styles.sectionMargin}>
           <View
             style={[
@@ -380,14 +407,21 @@ export const BudgetPlannerScreen = () => {
             ]}
           >
             <Text style={styles.caLabel}>CA Recommendation</Text>
+            {recommendation ? (
+              <Text style={styles.caText}>{recommendation}</Text>
+            ) : (
             <Text style={styles.caText}>
               Allocating{' '}
               <Text style={{ fontWeight: '800' }}>PKR 15,000 more</Text> into your
               groceries envelope will prevent unexpected mid-month deficit and align
               with FBR Section 62 savings benchmarks.
             </Text>
+            )}
           </View>
         </View>
+        )}
+        </>
+        )}
       </ScrollView>
 
       {/* Edit Budget Modal Sheet */}
@@ -418,6 +452,14 @@ export const BudgetPlannerScreen = () => {
               </TouchableOpacity>
             </View>
 
+            {isUser ? (
+              <Text style={[styles.balSubhead, { color: theme.MUTED }]}>
+                Spent so far this month: PKR{' '}
+                <Text style={{ fontWeight: '700', color: theme.TEXT }}>
+                  {plan.monthSpent.toLocaleString()}
+                </Text>
+              </Text>
+            ) : (
             <Text style={[styles.balSubhead, { color: theme.MUTED }]}>
               Max available across linked accounts: PKR{' '}
               <Text style={{ fontWeight: '700', color: theme.TEXT }}>
@@ -426,6 +468,7 @@ export const BudgetPlannerScreen = () => {
                   : '382,000'}
               </Text>
             </Text>
+            )}
 
             <View style={styles.inputContainer}>
               <Text style={[styles.inputLabel, { color: theme.MUTED }]}>
@@ -435,6 +478,8 @@ export const BudgetPlannerScreen = () => {
                 value={newBudgetInput}
                 onChangeText={setNewBudgetInput}
                 keyboardType="numeric"
+                placeholder="0"
+                placeholderTextColor={theme.MUTED}
                 style={[styles.budgetInput, { color: theme.TEXT }]}
               />
             </View>
@@ -526,6 +571,24 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
+  },
+  // EmptyState carries its own 16px side margin; the scroll content already has it.
+  emptyWrap: {
+    marginHorizontal: -16,
+  },
+  noEnvelopes: {
+    alignItems: 'center',
+  },
+  noEnvelopesLine: {
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
+    marginTop: 6,
+  },
+  noEnvelopesAction: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 12,
   },
   headerRow: {
     flexDirection: 'row',

@@ -9,6 +9,8 @@ import Feather from 'react-native-vector-icons/Feather';
 import { Typography, Card } from '../../../components';
 import { useAppSelector } from '../../../store/hooks';
 import { getBankById } from '../../../constants/pakistaniBanks';
+import { ScreenBackHeader } from '../../../components/ScreenBackHeader';
+import type { BankAccount } from '../../../store/slices/bankAccountsSlice';
 import { Image } from 'react-native';
 
 const TransactionDetailScreen = () => {
@@ -16,7 +18,9 @@ const TransactionDetailScreen = () => {
   const { transaction } = route.params;
 
   const { accounts } = useAppSelector(state => state.bankAccounts);
-  const account = accounts.find(a => a.id === transaction.accountId);
+  // A user's account is passed in; sample accounts are looked up.
+  const account: BankAccount | undefined =
+    route.params.account ?? accounts.find(a => a.id === transaction.accountId);
   const bank = account ? getBankById(account.bankId) : null;
 
   const isIncome = transaction.type === 'income';
@@ -41,6 +45,8 @@ const TransactionDetailScreen = () => {
   };
 
   return (
+    <View style={styles.container}>
+    <ScreenBackHeader title="Transaction" back="Account" />
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Amount Hero */}
       <View style={styles.amountSection}>
@@ -136,6 +142,7 @@ const TransactionDetailScreen = () => {
         )}
       </Card>
     </ScrollView>
+    </View>
   );
 };
 

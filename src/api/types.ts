@@ -38,6 +38,8 @@ export interface ApiProfile {
   createdAt: string;
   /** False for accounts created with Google until a password is set. */
   hasPassword: boolean;
+  /** True once the first-visit app tour was finished or skipped. */
+  tourCompleted: boolean;
 }
 
 export interface UpdateProfileRequest {

@@ -18,10 +18,11 @@ import { useToast } from '../../../context/ToastContext';
 import { useAppSelector } from '../../../store/hooks';
 import { Transaction } from '../../../store/slices/bankAccountsSlice';
 import { CalendarPicker } from '../../../components';
+import { UNLOCK_AT, useUserMode } from '../../../context/UserModeContext';
+import { CAT_META, EmptyState } from '../newUser/shared';
+import { computeUserAnalytics, FilterType } from './analytics/userAnalytics';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-type FilterType = 'weekly' | 'monthly' | 'yearly' | 'custom';
 
 const DEMO_CATEGORIES = [
   { name: 'Groceries', spent: 15560, total: 38630, icon: 'shopping-cart', color: '#00A3FF' },
@@ -167,6 +168,57 @@ export const AnalyticsScreen = () => {
 
   const percentChange = +12.4;
 
+  // A signed-in user's analytics come from their own transactions; Explore shows the sample.
+  const userMode = useUserMode();
+  const isUser = userMode.isNewUser;
+  const u = computeUserAnalytics(userMode.txs, activeFilter, customDate);
+  const locked = isUser && userMode.txs.length < UNLOCK_AT;
+  const left = UNLOCK_AT - userMode.txs.length;
+
+  const isThisMonth = (d: Date) => d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  const userMonthSpent = userMode.txs
+    .filter(t => t.type === 'expense' && isThisMonth(t.date))
+    .reduce((a, t) => a + t.amount, 0);
+  const monthLabel = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  const view = isUser
+    ? {
+        label: u.label,
+        spent: u.spent,
+        change: u.change,
+        avgDaily: u.avgDaily,
+        topCategory: u.topCategory,
+        activeDays: u.activeDays,
+        trend: u.trend,
+        trendLabels: u.trendLabels,
+        categories: u.categories.map(c => ({
+          name: c.name,
+          spent: c.amount,
+          pct: c.pct,
+          icon: CAT_META[c.name]?.icon ?? 'tag',
+          color: CAT_META[c.name]?.color ?? theme.ACTIVE,
+        })),
+        budget: userMode.budget,
+        monthSpent: userMonthSpent,
+        insight: u.insight,
+      }
+    : {
+        label: 'MAY 2026',
+        spent: displaySpent,
+        change: percentChange as number | null,
+        avgDaily: Math.round(displaySpent / 30),
+        topCategory: 'Groceries',
+        activeDays: 24,
+        trend: TREND_VALUES,
+        trendLabels: ['May 1', 'May 10', 'May 20', 'Today'],
+        categories: DEMO_CATEGORIES.map(c => ({ ...c, pct: Math.round((c.spent / c.total) * 100) })),
+        budget: 150000 as number | null,
+        monthSpent: 38630,
+        insight: '',
+      };
+  const budgetPct = view.budget ? Math.round((view.monthSpent / view.budget) * 100) : 0;
+  const changeUp = (view.change ?? 0) >= 0;
+
   return (
     <View style={[styles.container, { backgroundColor: theme.BG }]}>
       <StatusBar
@@ -201,6 +253,19 @@ export const AnalyticsScreen = () => {
           </Text>
         </View>
 
+        {locked && (
+          <View style={styles.emptyWrap}>
+            <EmptyState
+              icon="bar-chart-2"
+              title="Analytics unlock soon"
+              line={`Log ${left} more transaction${left === 1 ? '' : 's'} and we'll show where your money goes, by category and over time.`}
+              primary={{ label: 'Log a transaction', onPress: () => userMode.setFirstActionOpen(true) }}
+            />
+          </View>
+        )}
+
+        {!locked && (
+        <>
         {/* Timeframe Filter Switcher Pills */}
         <View style={styles.sectionMargin}>
           <ScrollView
@@ -257,22 +322,24 @@ export const AnalyticsScreen = () => {
           <View style={[styles.heroCard, { backgroundColor: theme.HERO_BG }]}>
             <View style={styles.heroTopRow}>
               <Text style={styles.heroLabel}>
-                TOTAL SPENT · MAY 2026
+                TOTAL SPENT · {view.label}
               </Text>
-              <View style={styles.badgeRow}>
-                <Feather
-                  name="arrow-up-right"
-                  size={12}
-                  color={theme.RED}
-                />
-                <Text style={[styles.badgeText, { color: theme.RED }]}>
-                  {percentChange}% vs last mo
-                </Text>
-              </View>
+              {view.change !== null && (
+                <View style={styles.badgeRow}>
+                  <Feather
+                    name={changeUp ? 'arrow-up-right' : 'arrow-down-right'}
+                    size={12}
+                    color={changeUp ? theme.RED : theme.GREEN}
+                  />
+                  <Text style={[styles.badgeText, { color: changeUp ? theme.RED : theme.GREEN }]}>
+                    {Math.abs(view.change)}% vs {isUser ? 'previous' : 'last mo'}
+                  </Text>
+                </View>
+              )}
             </View>
 
             <Text style={styles.heroAmountDisplay}>
-              {displaySpent.toLocaleString()}
+              {view.spent.toLocaleString()}
             </Text>
             <Text style={styles.heroCurrency}>PKR</Text>
 
@@ -281,21 +348,21 @@ export const AnalyticsScreen = () => {
               <View style={styles.heroStatCol}>
                 <Text style={styles.heroStatLabel}>Avg. Daily</Text>
                 <Text style={[styles.heroStatValue, { color: '#FFFFFF' }]}>
-                  PKR {Math.round(displaySpent / 30).toLocaleString()}
+                  PKR {view.avgDaily.toLocaleString()}
                 </Text>
               </View>
 
               <View style={styles.heroStatColBordered}>
                 <Text style={styles.heroStatLabel}>Top Category</Text>
-                <Text style={[styles.heroStatValue, { color: theme.ACTIVE }]}>
-                  Groceries
+                <Text numberOfLines={1} style={[styles.heroStatValue, { color: theme.ACTIVE }]}>
+                  {view.topCategory}
                 </Text>
               </View>
 
               <View style={styles.heroStatColBordered}>
                 <Text style={styles.heroStatLabel}>Active Days</Text>
                 <Text style={[styles.heroStatValue, { color: theme.GREEN }]}>
-                  24 days
+                  {view.activeDays} {view.activeDays === 1 ? 'day' : 'days'}
                 </Text>
               </View>
             </View>
@@ -314,21 +381,14 @@ export const AnalyticsScreen = () => {
               </Text>
             </View>
 
-            <SpendingTrendChart data={TREND_VALUES} color={theme.ACTIVE} />
+            <SpendingTrendChart data={view.trend} color={theme.ACTIVE} />
 
             <View style={styles.trendLabelsRow}>
-              <Text style={[styles.trendLabel, { color: theme.MUTED }]}>
-                May 1
-              </Text>
-              <Text style={[styles.trendLabel, { color: theme.MUTED }]}>
-                May 10
-              </Text>
-              <Text style={[styles.trendLabel, { color: theme.MUTED }]}>
-                May 20
-              </Text>
-              <Text style={[styles.trendLabel, { color: theme.MUTED }]}>
-                Today
-              </Text>
+              {view.trendLabels.map((l, i) => (
+                <Text key={`${l}-${i}`} style={[styles.trendLabel, { color: theme.MUTED }]}>
+                  {l}
+                </Text>
+              ))}
             </View>
           </View>
         </View>
@@ -341,13 +401,18 @@ export const AnalyticsScreen = () => {
                 Category Breakdown
               </Text>
               <Text style={[styles.subText, { color: theme.MUTED }]}>
-                5 Categories
+                {view.categories.length} {view.categories.length === 1 ? 'Category' : 'Categories'}
               </Text>
             </View>
 
             <View style={styles.catList}>
-              {DEMO_CATEGORIES.map((cat, i) => {
-                const pct = Math.round((cat.spent / cat.total) * 100);
+              {view.categories.length === 0 && (
+                <Text style={[styles.subText, { color: theme.MUTED }]}>
+                  No spending in this period.
+                </Text>
+              )}
+              {view.categories.map((cat, i) => {
+                const pct = cat.pct;
                 return (
                   <View
                     key={cat.name}
@@ -355,7 +420,7 @@ export const AnalyticsScreen = () => {
                       styles.catItemRow,
                       {
                         borderBottomWidth:
-                          i < DEMO_CATEGORIES.length - 1 ? 1 : 0,
+                          i < view.categories.length - 1 ? 1 : 0,
                         borderBottomColor: theme.BORDER,
                       },
                     ]}
@@ -401,11 +466,43 @@ export const AnalyticsScreen = () => {
               <Text style={[styles.cardTitle, { color: theme.TEXT }]}>
                 Budget Utilization
               </Text>
-              <Text style={[styles.pctText, { color: theme.GREEN }]}>
-                26% Used
-              </Text>
+              {view.budget !== null && (
+                <Text style={[styles.pctText, { color: budgetPct >= 100 ? theme.RED : budgetPct >= 80 ? '#FF9500' : theme.GREEN }]}>
+                  {budgetPct}% Used
+                </Text>
+              )}
             </View>
 
+            {view.budget === null ? (
+              <>
+                <Text style={[styles.subText, { color: theme.MUTED }]}>
+                  No monthly budget set. PKR {view.monthSpent.toLocaleString()} spent in {monthLabel}.
+                </Text>
+                <TouchableOpacity activeOpacity={0.8} onPress={() => navigation.navigate('BudgetPlanner')}>
+                  <Text style={[styles.remText, styles.linkText, { color: theme.ACTIVE }]}>
+                    Set a monthly budget →
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : isUser ? (
+              <>
+                <Text style={[styles.bigNum, { color: theme.TEXT }]}>
+                  {view.monthSpent.toLocaleString()}
+                </Text>
+                <Text style={[styles.subText, { color: theme.MUTED }]}>
+                  of PKR {view.budget.toLocaleString()} monthly budget
+                </Text>
+
+                <Track pct={budgetPct} color={budgetPct >= 100 ? theme.RED : budgetPct >= 80 ? '#FF9500' : theme.GREEN} />
+
+                <Text style={[styles.remText, { color: theme.MUTED }]}>
+                  {view.monthSpent > view.budget
+                    ? `PKR ${(view.monthSpent - view.budget).toLocaleString()} over budget for ${monthLabel}`
+                    : `PKR ${(view.budget - view.monthSpent).toLocaleString()} remaining for ${monthLabel}`}
+                </Text>
+              </>
+            ) : (
+            <>
             <Text style={[styles.bigNum, { color: theme.TEXT }]}>
               38,630
             </Text>
@@ -418,6 +515,8 @@ export const AnalyticsScreen = () => {
             <Text style={[styles.remText, { color: theme.MUTED }]}>
               PKR 1,11,370 remaining for May 2026
             </Text>
+            </>
+            )}
           </View>
         </View>
 
@@ -425,11 +524,13 @@ export const AnalyticsScreen = () => {
         <TouchableOpacity
           activeOpacity={0.85}
           onPress={() =>
-            showToast(
-              'Audit recommendations dispatched to AI CA.',
-              'info',
-              'Analytics Insight',
-            )
+            isUser
+              ? navigation.navigate('MainTabs', { screen: 'AI Advisor' })
+              : showToast(
+                  'Audit recommendations dispatched to AI CA.',
+                  'info',
+                  'Analytics Insight',
+                )
           }
           style={styles.sectionMargin}
         >
@@ -452,12 +553,14 @@ export const AnalyticsScreen = () => {
               <Text style={{ fontWeight: '700', color: theme.ACTIVE }}>
                 ANALYTICS INSIGHT:{' '}
               </Text>
-              Your grocery spend increased by 18% compared to last month.
-              Consider auditing supermarket receipts to claim Section 62 tax
-              offsets.
+              {isUser
+                ? view.insight
+                : `Your grocery spend increased by 18% compared to last month. Consider auditing supermarket receipts to claim Section 62 tax offsets.`}
             </Text>
           </View>
         </TouchableOpacity>
+        </>
+        )}
       </ScrollView>
 
       {/* Calendar Picker Modal for Custom Date Range */}
@@ -478,6 +581,9 @@ export const AnalyticsScreen = () => {
 export default AnalyticsScreen;
 
 const styles = StyleSheet.create({
+  // EmptyState carries its own 16px side margin.
+  emptyWrap: { marginHorizontal: -16 },
+  linkText: { fontWeight: '700' },
   container: {
     flex: 1,
   },

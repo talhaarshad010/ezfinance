@@ -2,15 +2,21 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EzFinance.Api.Infrastructure.Data;
 
-/// <summary>Read-only lookups on Supabase's auth.users table (the backend connects as postgres).</summary>
+/// <summary>Whether a user has chosen a password (profiles.has_password).</summary>
+/// <remarks>
+/// Not read from auth.users: Supabase gives accounts created with an emailed code a random
+/// password, so its password column can't tell whether the user can log in with one.
+/// </remarks>
 public static class AuthUserQueries
 {
-    /// <summary>
-    /// Whether the user can log in with email + password. Accounts created through Google have no
-    /// password until they set one (Set password, or Forgot password).
-    /// </summary>
-    public static Task<bool> HasPasswordAsync(this AppDbContext db, Guid userId, CancellationToken ct) =>
-        db.Database
-            .SqlQuery<bool>($"select coalesce(encrypted_password, '') <> '' as \"Value\" from auth.users where id = {userId}")
-            .SingleOrDefaultAsync(ct);
+    public static async Task<bool> HasPasswordAsync(this AppDbContext db, Guid userId, CancellationToken ct) =>
+        await db.Profiles.Where(p => p.Id == userId).Select(p => p.HasPassword).FirstOrDefaultAsync(ct);
+
+    /// <summary>Records that the user chose a password (creating the profile first if missing).</summary>
+    public static async Task MarkPasswordSetAsync(this AppDbContext db, Guid userId, CancellationToken ct)
+    {
+        await db.Database.ExecuteSqlAsync($"select public.ensure_profile({userId})", ct);
+        await db.Database.ExecuteSqlAsync(
+            $"update public.profiles set has_password = true where id = {userId} and not has_password", ct);
+    }
 }

@@ -12,7 +12,8 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
-import { AMBER, SAVINGS_GOALS } from '../../../constants/savingsGoals';
+import { AMBER } from '../../../constants/savingsGoals';
+import { useSavingsGoals } from './goals/useSavingsGoals';
 
 export const PauseGoalScreen = () => {
   const navigation = useNavigation<any>();
@@ -21,11 +22,14 @@ export const PauseGoalScreen = () => {
   const { theme } = useTheme();
   const { showToast } = useToast();
 
-  const goalId = route.params?.goalId ?? SAVINGS_GOALS[0].id;
-  const goal = SAVINGS_GOALS.find(g => g.id === goalId) ?? SAVINGS_GOALS[0];
-  const isPaused = goal.status === 'paused';
+  const { goals, userGoalOf, userMode } = useSavingsGoals();
+  const goalId = route.params?.goalId ?? goals[0]?.id;
+  const goal = goals.find(g => g.id === goalId) ?? goals[0];
+  const isPaused = goal?.status === 'paused';
 
   const [selected, setSelected] = useState<string | null>(null);
+
+  if (!goal) return <View style={[styles.container, { backgroundColor: theme.BG }]} />;
 
   const options = [
     {
@@ -44,6 +48,8 @@ export const PauseGoalScreen = () => {
   const confirm = () => {
     if (!selected) return;
     const chosen = options.find(o => o.id === selected);
+    const own = userGoalOf(goal.id);
+    if (own) userMode.updateGoal(own.id, { paused: !isPaused });
     showToast(
       isPaused
         ? `${goal.label} resumed. Contributions restart next cycle.`

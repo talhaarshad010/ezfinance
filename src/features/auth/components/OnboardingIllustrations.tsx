@@ -2,13 +2,16 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Svg, {
   Circle,
+  ClipPath,
   Defs,
   Ellipse,
   G,
   Line,
   LinearGradient,
   Path,
+  Pattern,
   Polyline,
+  RadialGradient,
   Rect,
   Stop,
   Text as SvgText,
@@ -47,45 +50,114 @@ export function GlowCard({ tone, children }: { tone: GlowTone; children: React.R
 
 const T = { fontFamily: 'System' } as const;
 
-/** Slide 1 — Track every rupee: stacked transaction cards with a rising line. */
+/**
+ * Card fill: translucent glass on the dark theme; solid white on the light theme, where stacked
+ * translucent fills turn grey and let the glow behind them show through.
+ */
+function glass(dark: boolean, ink: (a: number) => string, alpha: number) {
+  return dark ? ink(alpha) : '#FFFFFF';
+}
+
+/**
+ * Slide 1 — Track every rupee: three layered cards (grid, transaction rows, trend line) with
+ * floating amount chips. Dark theme uses translucent glass fills; light theme uses solid white
+ * cards so the layers stay crisp instead of stacking into grey.
+ */
 export function TrackIllustration() {
-  const ink = useAuthTheme().INK;
+  const A = useAuthTheme();
+  const ink = A.INK;
+  const dark = A.isDark;
+  const purpleText = dark ? 'rgba(216,205,255,0.9)' : '#7C3AED';
   return (
     <Svg width={280} height={200} viewBox="0 0 280 200" fill="none">
-      <Ellipse cx="140" cy="110" rx="90" ry="60" fill="rgba(0,230,138,0.07)" />
-      <G transform="rotate(-6 140 120)">
-        <Rect x="52" y="68" width="176" height="108" rx="16" fill={ink(0.06)} stroke={ink(0.12)} strokeWidth="1" />
+      <Defs>
+        <LinearGradient id="trkBack" x1="64" y1="22" x2="216" y2="136" gradientUnits="userSpaceOnUse">
+          <Stop offset="0" stopColor="#00E68A" stopOpacity={dark ? 0.1 : 0.08} />
+          <Stop offset="1" stopColor={dark ? '#FFFFFF' : '#F4FBF8'} stopOpacity={dark ? 0.025 : 1} />
+        </LinearGradient>
+        <LinearGradient id="trkMid" x1="46" y1="48" x2="234" y2="152" gradientUnits="userSpaceOnUse">
+          <Stop offset="0" stopColor="#FFFFFF" stopOpacity={dark ? 0.1 : 1} />
+          <Stop offset="1" stopColor="#FFFFFF" stopOpacity={dark ? 0.035 : 1} />
+        </LinearGradient>
+        <LinearGradient id="trkFront" x1="35" y1="104" x2="245" y2="180" gradientUnits="userSpaceOnUse">
+          <Stop offset="0" stopColor="#FFFFFF" stopOpacity={dark ? 0.13 : 1} />
+          <Stop offset="1" stopColor="#FFFFFF" stopOpacity={dark ? 0.055 : 1} />
+        </LinearGradient>
+        <LinearGradient id="trkLine" x1="57" y1="164" x2="220" y2="122" gradientUnits="userSpaceOnUse">
+          <Stop offset="0" stopColor="#059669" />
+          <Stop offset="1" stopColor="#00E68A" />
+        </LinearGradient>
+        {/* Soft blurred glows, drawn as radial gradients (no SVG filters needed). */}
+        <RadialGradient id="trkAmbient" cx="140" cy="127" rx="110" ry="50" gradientUnits="userSpaceOnUse">
+          <Stop offset="0" stopColor="#00E68A" stopOpacity={dark ? 0.18 : 0.14} />
+          <Stop offset="1" stopColor="#00E68A" stopOpacity={0} />
+        </RadialGradient>
+        <RadialGradient id="trkPoint" cx="220" cy="121" r="11" gradientUnits="userSpaceOnUse">
+          <Stop offset="0" stopColor="#00E68A" stopOpacity={0.55} />
+          <Stop offset="1" stopColor="#00E68A" stopOpacity={0} />
+        </RadialGradient>
+        <Pattern id="trkGrid" width="18" height="18" patternUnits="userSpaceOnUse">
+          <Path d="M18 0H0V18" stroke={ink(dark ? 0.055 : 0.07)} strokeWidth="1" fill="none" />
+        </Pattern>
+        <ClipPath id="trkBackClip">
+          <Rect x="64" y="22" width="152" height="112" rx="18" />
+        </ClipPath>
+      </Defs>
+
+      {/* Soft emerald atmosphere */}
+      <Ellipse cx="140" cy="127" rx="110" ry="50" fill="url(#trkAmbient)" />
+
+      {/* Back depth: subtle grid and edge glow */}
+      <G transform="rotate(5 140 78)">
+        <Rect x="64" y="22" width="152" height="112" rx="18" fill="url(#trkBack)" stroke={dark ? 'rgba(0,230,138,0.12)' : 'rgba(0,230,138,0.3)'} />
+        <Rect x="64" y="22" width="152" height="112" fill="url(#trkGrid)" clipPath="url(#trkBackClip)" opacity={0.7} />
+        <Path d="M86 22H194" stroke="rgba(0,230,138,0.28)" strokeLinecap="round" />
       </G>
-      <G transform="rotate(-2 140 120)">
-        <Rect x="44" y="60" width="192" height="116" rx="16" fill={ink(0.07)} stroke={ink(0.14)} strokeWidth="1" />
+
+      {/* Middle depth: simple transaction rows */}
+      <G transform="rotate(-3 140 101)">
+        <Rect x="46" y="48" width="188" height="108" rx="18" fill="url(#trkMid)" stroke={ink(dark ? 0.14 : 0.1)} />
+        <Circle cx="68" cy="72" r="8" fill="rgba(14,165,233,0.16)" stroke="rgba(14,165,233,0.28)" />
+        <Path d="M65 72H71M68 69V75" stroke="#0EA5E9" strokeWidth="1.4" strokeLinecap="round" />
+        <Rect x="84" y="67" width="58" height="6" rx="3" fill={ink(dark ? 0.22 : 0.16)} />
+        <Rect x="84" y="78" width="36" height="4" rx="2" fill={ink(0.08)} />
+        <Circle cx="68" cy="103" r="8" fill="rgba(168,139,250,0.14)" stroke="rgba(168,139,250,0.25)" />
+        <Path d="M64.5 103H71.5" stroke={dark ? 'rgba(196,181,253,0.85)' : '#8B5CF6'} strokeWidth="1.5" strokeLinecap="round" />
+        <Rect x="84" y="98" width="72" height="6" rx="3" fill={ink(dark ? 0.18 : 0.13)} />
+        <Rect x="84" y="109" width="45" height="4" rx="2" fill={ink(0.07)} />
       </G>
-      <Rect x="36" y="52" width="208" height="120" rx="16" fill={ink(0.09)} stroke={ink(0.18)} strokeWidth="1" />
-      <Rect x="52" y="70" width="72" height="8" rx="4" fill={ink(0.2)} />
-      <Rect x="52" y="85" width="48" height="6" rx="3" fill={ink(0.1)} />
-      <Rect x="172" y="68" width="56" height="20" rx="10" fill="rgba(0,230,138,0.2)" />
-      <SvgText x="200" y="82" textAnchor="middle" fill="#00E68A" fontSize="10" fontWeight="700" {...T}>+Rs 500</SvgText>
-      <Rect x="52" y="104" width="60" height="7" rx="3.5" fill={ink(0.15)} />
-      <Rect x="172" y="102" width="56" height="20" rx="10" fill="rgba(255,59,48,0.18)" />
-      <SvgText x="200" y="116" textAnchor="middle" fill="#FF3B30" fontSize="10" fontWeight="700" {...T}>Rs 320</SvgText>
-      <Line x1="52" y1="130" x2="228" y2="130" stroke={ink(0.08)} strokeWidth="1" />
-      <Polyline points="52,156 80,144 108,149 140,130 172,120 204,108" stroke="#00E68A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-      <Circle cx="204" cy="108" r="5" fill="#00E68A" />
-      <Circle cx="204" cy="108" r="10" fill="#00E68A" opacity={0.2} />
-      <Line x1="218" y1="100" x2="228" y2="96" stroke="#00E68A" strokeWidth="1.5" strokeLinecap="round" opacity={0.5} />
-      <Path d="M230 72 L232 66 L234 72 L240 74 L234 76 L232 82 L230 76 L224 74 Z" fill="#00E68A" opacity={0.6} />
+
+      {/* Front depth: focused trend card */}
+      <G>
+        <Rect x="35" y="104" width="210" height="76" rx="18" fill="url(#trkFront)" stroke={ink(dark ? 0.2 : 0.12)} />
+        <Path d="M52 121H228M52 143H228M52 165H228" stroke={ink(0.045)} />
+        <Path d="M55 161C76 158 83 143 104 147C124 151 137 133 155 137C177 142 190 119 220 121" stroke="url(#trkLine)" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+        <Circle cx="220" cy="121" r="11" fill="url(#trkPoint)" />
+        <Circle cx="220" cy="121" r="4" fill="#00E68A" />
+        <Circle cx="220" cy="121" r="8" stroke="rgba(0,230,138,0.22)" />
+        <Rect x="51" y="116" width="35" height="4" rx="2" fill={ink(0.14)} />
+      </G>
+
+      {/* Amount chips float above the cards */}
+      <G>
+        <Rect x="196" y="55" width="66" height="23" rx="11.5" fill={dark ? 'rgba(0,230,138,0.16)' : '#E6FBF2'} stroke="rgba(0,230,138,0.38)" />
+        <SvgText x="229" y="70.5" textAnchor="middle" fill={A.EMERALD_TEXT} fontSize="10" fontWeight="700" {...T}>+Rs 500</SvgText>
+        <Rect x="18" y="94" width="64" height="23" rx="11.5" fill={dark ? 'rgba(168,139,250,0.13)' : '#F3EEFF'} stroke="rgba(168,139,250,0.3)" />
+        <SvgText x="50" y="109.5" textAnchor="middle" fill={purpleText} fontSize="10" fontWeight="700" {...T}>-Rs 200</SvgText>
+      </G>
     </Svg>
   );
 }
 
 /** Slide 2 — Taxes in plain language: FBR document with filer badges and a check. */
 export function TaxIllustration() {
-  const ink = useAuthTheme().INK;
+  const { INK: ink, isDark: dark } = useAuthTheme();
   return (
     <Svg width={280} height={200} viewBox="0 0 280 200" fill="none">
       <Ellipse cx="140" cy="110" rx="80" ry="55" fill="rgba(14,165,233,0.08)" />
       <G transform="rotate(3 140 110)">
-        <Rect x="70" y="28" width="130" height="160" rx="14" fill={ink(0.05)} stroke={ink(0.14)} strokeWidth="1" />
-        <Path d="M170 28 L200 58 L170 58 Z" fill={ink(0.06)} stroke={ink(0.1)} strokeWidth="1" />
+        <Rect x="70" y="28" width="130" height="160" rx="14" fill={glass(dark, ink, 0.05)} stroke={ink(dark ? 0.14 : 0.12)} strokeWidth="1" />
+        <Path d="M170 28 L200 58 L170 58 Z" fill={dark ? ink(0.06) : '#F2F4F7'} stroke={ink(0.1)} strokeWidth="1" />
         <Rect x="84" y="72" width="80" height="6" rx="3" fill={ink(0.2)} />
         <Rect x="84" y="86" width="60" height="5" rx="2.5" fill={ink(0.12)} />
         <Rect x="84" y="98" width="70" height="5" rx="2.5" fill={ink(0.12)} />
@@ -93,9 +165,9 @@ export function TaxIllustration() {
         <Rect x="84" y="124" width="44" height="18" rx="9" fill="rgba(14,165,233,0.2)" />
         <SvgText x="106" y="137" textAnchor="middle" fill="#0EA5E9" fontSize="10" fontWeight="700" {...T}>FBR</SvgText>
       </G>
-      <Rect x="178" y="44" width="82" height="22" rx="11" fill={ink(0.07)} stroke="rgba(14,165,233,0.35)" strokeWidth="1" />
+      <Rect x="178" y="44" width="82" height="22" rx="11" fill={glass(dark, ink, 0.07)} stroke="rgba(14,165,233,0.35)" strokeWidth="1" />
       <SvgText x="219" y="59" textAnchor="middle" fill={ink(0.7)} fontSize="10" fontWeight="500" {...T}>Filer status</SvgText>
-      <Rect x="18" y="100" width="76" height="22" rx="11" fill={ink(0.07)} stroke="rgba(14,165,233,0.3)" strokeWidth="1" />
+      <Rect x="18" y="100" width="76" height="22" rx="11" fill={glass(dark, ink, 0.07)} stroke="rgba(14,165,233,0.3)" strokeWidth="1" />
       <SvgText x="56" y="115" textAnchor="middle" fill={ink(0.7)} fontSize="10" fontWeight="500" {...T}>Tax proof</SvgText>
       <Line x1="180" y1="55" x2="168" y2="62" stroke="rgba(14,165,233,0.3)" strokeWidth="1" strokeDasharray="3 3" />
       <Line x1="94" y1="108" x2="94" y2="122" stroke="rgba(14,165,233,0.25)" strokeWidth="1" strokeDasharray="3 3" />
@@ -108,7 +180,7 @@ export function TaxIllustration() {
   );
 }
 
-/** Slide 3 — Save toward what matters: concentric goal rings with a legend. */
+/** Slide 3 — Save toward what matters: concentric goal rings with colour coded goal bars. */
 export function SavingsIllustration() {
   const ink = useAuthTheme().INK;
   return (
@@ -135,13 +207,10 @@ export function SavingsIllustration() {
       <Line x1="122" y1="107" x2="134" y2="107" stroke={ink(0.35)} strokeWidth="2" strokeLinecap="round" />
       <Rect x="206" y="76" width="56" height="12" rx="6" fill="rgba(0,230,138,0.15)" stroke="rgba(0,230,138,0.35)" strokeWidth="1" />
       <Rect x="206" y="76" width="40" height="12" rx="6" fill="rgba(0,230,138,0.45)" />
-      <SvgText x="262" y="86" textAnchor="end" fill={ink(0.5)} fontSize="8" {...T}>74%</SvgText>
       <Rect x="206" y="96" width="56" height="12" rx="6" fill="rgba(14,165,233,0.12)" stroke="rgba(14,165,233,0.3)" strokeWidth="1" />
       <Rect x="206" y="96" width="28" height="12" rx="6" fill="rgba(14,165,233,0.45)" />
-      <SvgText x="262" y="106" textAnchor="end" fill={ink(0.5)} fontSize="8" {...T}>50%</SvgText>
       <Rect x="206" y="116" width="56" height="12" rx="6" fill="rgba(168,139,250,0.1)" stroke="rgba(168,139,250,0.25)" strokeWidth="1" />
       <Rect x="206" y="116" width="19" height="12" rx="6" fill="rgba(168,139,250,0.4)" />
-      <SvgText x="262" y="126" textAnchor="end" fill={ink(0.5)} fontSize="8" {...T}>34%</SvgText>
       <Circle cx="202" cy="82" r="2" fill="rgba(0,230,138,0.5)" />
       <Circle cx="202" cy="102" r="2" fill="rgba(14,165,233,0.5)" />
       <Circle cx="202" cy="122" r="2" fill="rgba(168,139,250,0.5)" />
@@ -153,14 +222,14 @@ export function SavingsIllustration() {
 
 /** Slide 4 — Grow your money, the halal way: bar chart with a "✓ Halal" badge. */
 export function InvestIllustration() {
-  const ink = useAuthTheme().INK;
+  const { INK: ink, isDark: dark } = useAuthTheme();
   return (
     <Svg width={280} height={200} viewBox="0 0 280 200" fill="none">
       <Ellipse cx="140" cy="168" rx="110" ry="22" fill="rgba(14,165,233,0.13)" />
-      <Rect x="20" y="22" width="240" height="152" rx="18" fill={ink(0.05)} stroke={ink(0.12)} strokeWidth="1" />
+      <Rect x="20" y="22" width="240" height="152" rx="18" fill={glass(dark, ink, 0.05)} stroke={ink(dark ? 0.12 : 0.1)} strokeWidth="1" />
       <Line x1="60" y1="22" x2="200" y2="22" stroke="rgba(14,165,233,0.4)" strokeWidth="1" strokeLinecap="round" />
-      <Rect x="172" y="34" width="72" height="20" rx="10" fill="rgba(0,230,138,0.15)" stroke="rgba(0,230,138,0.4)" strokeWidth="1" />
-      <SvgText x="186" y="48" fill="#00E68A" fontSize="10" fontWeight="600" {...T}>✓ Halal</SvgText>
+      <Rect x="172" y="34" width="72" height="20" rx="10" fill={dark ? 'rgba(0,230,138,0.15)' : '#E6FBF2'} stroke="rgba(0,230,138,0.4)" strokeWidth="1" />
+      <SvgText x="186" y="48" fill={dark ? '#00E68A' : '#059669'} fontSize="10" fontWeight="600" {...T}>✓ Halal</SvgText>
       <Rect x="40" y="118" width="22" height="38" rx="5" fill={ink(0.1)} />
       <Rect x="70" y="100" width="22" height="56" rx="5" fill={ink(0.1)} />
       <Rect x="100" y="78" width="22" height="78" rx="5" fill="rgba(0,230,138,0.55)" />

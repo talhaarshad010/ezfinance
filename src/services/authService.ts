@@ -207,6 +207,36 @@ export async function restoreSession(): Promise<UserProfile | null> {
   }
 }
 
+/** Saves edited profile details (name, income, city, province, filer status) to the server. */
+export async function updateProfileDetails(
+  current: UserProfile,
+  changes: Partial<Pick<UserProfile, 'name' | 'monthlyIncome' | 'city' | 'province' | 'filerStatus'>>,
+): Promise<UserProfile> {
+  const next = { ...current, ...changes };
+  const profile = await profileApi.update({
+    fullName: next.name.trim(),
+    monthlyIncome: next.monthlyIncome ? INCOME_TO_CODE[next.monthlyIncome] ?? null : null,
+    city: next.city?.trim() || null,
+    province: (next.province as ProvinceCode) || null,
+    filerStatus: FILER_TO_CODE[next.filerStatus || 'unsure'],
+  });
+  const stored = getStoredAuth();
+  if (stored) {
+    await saveStoredAuth({ session: stored.session, profile });
+  }
+  return toUserProfile(profile);
+}
+
+/** Records that the first-visit tour is done, so it doesn't show again on any device. */
+export async function markTourCompleted(): Promise<UserProfile> {
+  const profile = await profileApi.tourCompleted();
+  const stored = getStoredAuth();
+  if (stored) {
+    await saveStoredAuth({ session: stored.session, profile });
+  }
+  return toUserProfile(profile);
+}
+
 /** Loads the latest profile from the server and caches it with the session. */
 export async function refreshProfile(): Promise<UserProfile> {
   const profile = await profileApi.get();
@@ -265,5 +295,7 @@ function toUserProfile(profile: ApiProfile): UserProfile {
     province: profile.province,
     filerStatus: CODE_TO_FILER[profile.filerStatus],
     hasPassword: profile.hasPassword,
+    tourCompleted: profile.tourCompleted,
+    createdAt: profile.createdAt,
   };
 }
