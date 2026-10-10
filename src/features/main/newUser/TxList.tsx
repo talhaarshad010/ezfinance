@@ -3,7 +3,13 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
-import { PendingBadge, useNetwork } from '../../../context/NetworkContext';
+import { PendingBadge } from '../../../context/NetworkContext';
+import { ApiError } from '../../../api/client';
+import { useTransactionActions } from '../../../hooks/useTransactionActions';
+import { accountNameOf } from '../screens/bankAccounts/useBankAccounts';
+import { SAVE_ERROR } from '../../../utils/validation';
+
+const errorText = (e: unknown) => (e instanceof ApiError ? e.message : SAVE_ERROR);
 import { UserTx, useUserMode } from '../../../context/UserModeContext';
 import { abbr, dayLabel, fullAmt } from '../../../utils/format';
 import { CAT_META, PrimaryButton, Sheet } from './shared';
@@ -11,8 +17,8 @@ import { CAT_META, PrimaryButton, Sheet } from './shared';
 /** The new user's transactions; a tap opens the full detail with Edit and Delete. */
 export function TxList({ limit }: { limit?: number }) {
   const { theme } = useTheme();
-  const { txs } = useUserMode();
-  const [openId, setOpenId] = useState<number | null>(null);
+  const { txs, bankAccounts } = useUserMode();
+  const [openId, setOpenId] = useState<string | null>(null);
   const [lastOpen, setLastOpen] = useState<UserTx | null>(null);
   const rows = limit ? txs.slice(0, limit) : txs;
   const open = txs.find(t => t.id === openId) ?? null;
@@ -43,7 +49,7 @@ export function TxList({ limit }: { limit?: number }) {
                 </Text>
                 <Text style={[l.sub, { color: theme.MUTED }]} numberOfLines={1}>
                   {t.category}
-                  {t.account ? ` · ${t.account}` : ''} · {dayLabel(t.date)}
+                  {` · ${accountNameOf(t.accountId, bankAccounts)}`} · {dayLabel(t.date)}
                 </Text>
                 <View style={l.badge}>
                   <PendingBadge entity="tx" id={t.id} />
@@ -66,30 +72,30 @@ export function TxList({ limit }: { limit?: number }) {
 /** Full detail (full name + full amount), with Edit and Delete (Undo toast; queued while offline). */
 export function TxDetailSheet({ tx, visible, onClose }: { tx: UserTx | null; visible: boolean; onClose: () => void }) {
   const { theme } = useTheme();
-  const { txs, deleteTx, restoreTx, openTxSheet } = useUserMode();
-  const { record, remove } = useNetwork();
+  const { openTxSheet, bankAccounts } = useUserMode();
+  const txActions = useTransactionActions();
   const { showToast } = useToast();
   if (!tx) return null;
 
-  function del() {
+  async function del() {
     if (!tx) return;
-    const removed = tx;
-    const index = txs.findIndex(t => t.id === removed.id);
-    deleteTx(removed.id);
-    const opId = record({ entity: 'tx', entityId: removed.id, action: 'delete', label: `Delete · ${removed.note ?? removed.category}` });
     onClose();
-    showToast('Transaction deleted', 'info', undefined, 5000, {
-      label: 'Undo',
-      onPress: () => {
-        restoreTx(removed, index);
-        if (opId) remove(opId);
-      },
-    });
+    try {
+      const { tx: removed, index } = await txActions.remove(tx.id);
+      showToast('Transaction deleted', 'info', undefined, 5000, {
+        label: 'Undo',
+        onPress: () => {
+          txActions.restore(removed, index).catch(e => showToast(errorText(e), 'error'));
+        },
+      });
+    } catch (e) {
+      showToast(errorText(e), 'error');
+    }
   }
 
   const rows: [string, string][] = [
     ['Category', tx.category],
-    ['Account', tx.account ?? '—'],
+    ['Account', accountNameOf(tx.accountId, bankAccounts)],
     ['Date', tx.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })],
   ];
 
@@ -123,7 +129,7 @@ export function TxDetailSheet({ tx, visible, onClose }: { tx: UserTx | null; vis
                 category: tx.category,
                 amount: tx.amount,
                 note: tx.note,
-                account: tx.account,
+                accountId: tx.accountId,
                 date: tx.date,
               }),
             280,

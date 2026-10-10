@@ -8,8 +8,11 @@ import { useUserMode } from './UserModeContext';
  * coming back to a screen is instant. Keys are section-level, so one failed card
  * never takes down the rest of the screen.
  *
- * Mock phase: the default loader just waits. Pass a real `loader` (a promise that
- * fetches the data) to useLoadState and failures become real error states.
+ * Signed-in users: the default loader is the real load of their transactions from the
+ * server (shared by every section), so each skeleton stays until the data is there, and a
+ * failed load shows the error state. Once the transactions are in, sections open straight
+ * to their content. The Explore demo keeps a short mock delay. Pass `loader` to load
+ * something else.
  */
 
 export type LoadStatus = 'loading' | 'error' | 'ready';
@@ -59,17 +62,23 @@ export function LoadingProvider({ children }: { children: ReactNode }) {
 /**
  * Skeleton → error | data for one section. `retry` shows the skeleton again and re-runs the loader.
  */
-export function useLoadState(key: string, loader: () => Promise<unknown> = mockLoad) {
+export function useLoadState(key: string, loader?: () => Promise<unknown>) {
   const ctx = useContext(Ctx);
   if (!ctx) throw new Error('useLoadState must be used inside LoadingProvider');
-  const { isNewUser } = useUserMode();
+  const { isNewUser, loadTxs, txStatus } = useUserMode();
   const fullKey = `${isNewUser ? 'new' : 'returning'}:${key}`;
   const settled = ctx.status(fullKey);
-  const status: LoadStatus = settled ?? 'loading';
+  // A signed-in user's data already loaded: no skeleton, not even for a frame.
+  const dataReady = !loader && isNewUser && txStatus === 'ready';
+  const status: LoadStatus = settled ?? (dataReady ? 'ready' : 'loading');
 
-  const loaderRef = useRef(loader);
-  loaderRef.current = loader;
+  const loaderRef = useRef(loader ?? (isNewUser ? loadTxs : mockLoad));
+  loaderRef.current = loader ?? (isNewUser ? loadTxs : mockLoad);
   const { settle, forget } = ctx;
+
+  useEffect(() => {
+    if (!settled && dataReady) settle(fullKey, true);
+  }, [settled, dataReady, settle, fullKey]);
 
   useEffect(() => {
     if (status !== 'loading') return;

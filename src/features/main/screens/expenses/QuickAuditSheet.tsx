@@ -24,6 +24,8 @@ interface QuickAuditSheetProps {
   onDelete: (tx: LedgerTransaction) => void;
   onDetail: (tx: LedgerTransaction) => void;
   onChangeCategory?: (tx: LedgerTransaction) => void;
+  /** Leaves the transaction out of (or back into) budget totals; the sample just closes. */
+  onToggleExclude?: (tx: LedgerTransaction) => void;
 }
 
 export default function QuickAuditSheet({
@@ -35,6 +37,7 @@ export default function QuickAuditSheet({
   onDelete,
   onDetail,
   onChangeCategory,
+  onToggleExclude,
 }: QuickAuditSheetProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -49,7 +52,11 @@ export default function QuickAuditSheet({
     { label: 'Change\nCategory', icon: 'tag', action: () => onChangeCategory ? onChangeCategory(tx) : onEdit(tx) },
     { label: 'Add\nReceipt', icon: 'camera', action: () => onEdit(tx) },
     { label: 'Split', icon: 'scissors', action: () => onSplit(tx) },
-    { label: 'Exclude\nBudget', icon: 'check-square', action: onClose },
+    {
+      label: tx.excluded ? 'Include\nBudget' : 'Exclude\nBudget',
+      icon: tx.excluded ? 'square' : 'check-square',
+      action: () => (onToggleExclude ? onToggleExclude(tx) : onClose()),
+    },
   ];
 
   return (
@@ -406,20 +413,28 @@ export function SplitTxModal({
   tx,
   onClose,
   onConfirm,
+  categories,
 }: {
   visible: boolean;
   tx: LedgerTransaction | null;
   onClose: () => void;
   onConfirm: (part1: number, part2: number, cat1: string, cat2: string) => void;
+  /** Categories each part can take; defaults to the sample ledger's pairs. */
+  categories?: string[];
 }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const total = Math.abs(tx?.amount || 0);
 
   const [split1, setSplit1] = useState(Math.floor(total * 0.6));
-  const split2 = total - split1;
-  const [cat1, setCat1] = useState('Groceries');
-  const [cat2, setCat2] = useState('Dining');
+  // Two decimals, so the parts add up to the original exactly.
+  const split2 = Math.round((total - split1) * 100) / 100;
+  const cats1 = categories ?? ['Groceries', 'Household'];
+  const cats2 = categories ?? ['Dining', 'Personal'];
+  const [cat1, setCat1] = useState(cats1[0]);
+  const [cat2, setCat2] = useState(cats2[1] ?? cats2[0]);
+  // Both parts need some money in them.
+  const canSplit = split1 > 0 && split2 > 0;
 
   // Start each split at 60 / 40 of the transaction being split.
   React.useEffect(() => {
@@ -466,8 +481,8 @@ export function SplitTxModal({
           <View style={[styles.splitCard, { backgroundColor: theme.MODAL }]}>
             <View style={styles.splitHeader}>
               <Text style={[styles.splitTitle, { color: theme.TEXT }]}>Split 1</Text>
-              <View style={{ flexDirection: 'row', gap: 6 }}>
-                {['Groceries', 'Household'].map(c => (
+              <View style={styles.splitCatRow}>
+                {cats1.map(c => (
                   <TouchableOpacity
                     key={c}
                     onPress={() => setCat1(c)}
@@ -485,7 +500,7 @@ export function SplitTxModal({
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 }}>
               <TouchableOpacity
-                onPress={() => setSplit1(Math.max(0, split1 - 500))}
+                onPress={() => setSplit1(Math.max(0, Math.min(split1, total) - 500))}
                 style={[styles.stepBtn, { backgroundColor: theme.MODAL }]}
               >
                 <Text style={{ color: theme.TEXT, fontSize: 16 }}>−</Text>
@@ -506,8 +521,8 @@ export function SplitTxModal({
           <View style={[styles.splitCard, { backgroundColor: theme.MODAL }]}>
             <View style={styles.splitHeader}>
               <Text style={[styles.splitTitle, { color: theme.TEXT }]}>Split 2</Text>
-              <View style={{ flexDirection: 'row', gap: 6 }}>
-                {['Dining', 'Personal'].map(c => (
+              <View style={styles.splitCatRow}>
+                {cats2.map(c => (
                   <TouchableOpacity
                     key={c}
                     onPress={() => setCat2(c)}
@@ -533,11 +548,12 @@ export function SplitTxModal({
 
           <TouchableOpacity
             activeOpacity={0.88}
+            disabled={!canSplit}
             onPress={() => {
               onConfirm(split1, split2, cat1, cat2);
               onClose();
             }}
-            style={[styles.saveBtn, { backgroundColor: theme.TEXT }]}
+            style={[styles.saveBtn, { backgroundColor: theme.TEXT, opacity: canSplit ? 1 : 0.4 }]}
           >
             <Text style={[styles.saveBtnText, { color: theme.BG }]}>
               Confirm Split
@@ -615,6 +631,7 @@ export function DeleteConfirmModal({
 }
 
 const styles = StyleSheet.create({
+  splitCatRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6, flexShrink: 1, marginLeft: 12 },
   backdrop: {
     flex: 1,
     backgroundColor: 'transparent',

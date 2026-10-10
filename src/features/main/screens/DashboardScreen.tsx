@@ -39,6 +39,16 @@ import {
   UNASSIGNED_CASH,
 } from '../../../constants/envelopes';
 import { AnimatedModal } from '../../../components/AnimatedModal';
+import { useUserMode } from '../../../context/UserModeContext';
+import { GettingStartedCard } from '../newUser/NewUserScreens';
+import { useSavingsGoals } from './goals/useSavingsGoals';
+import { useBankAccounts } from './bankAccounts/useBankAccounts';
+import { computeUserDashboard, DashInsight } from './dashboard/userDashboard';
+import { monthlyIncomeOf } from '../../../utils/income';
+import { usePlanningActions } from '../../../hooks/usePlanningActions';
+import { ApiError } from '../../../api/client';
+import { SAVE_ERROR } from '../../../utils/validation';
+import { CAT_META } from '../newUser/shared';
 
 type DashTab = 'live' | 'monthly' | 'health' | 'insights';
 const DASH_TAB_ORDER: DashTab[] = ['live', 'monthly', 'health', 'insights'];
@@ -210,7 +220,7 @@ const BUDGETS = [
   { label: 'Fuel', remaining: 2000, limit: 10000, pct: 80 },
 ];
 
-type InsightItem = typeof INSIGHTS_DATA[0];
+type InsightItem = typeof INSIGHTS_DATA[0] & { go?: DashInsight['go'] };
 
 function Track({ pct, color }: { pct: number; color?: string }) {
   const { theme } = useTheme();
@@ -260,12 +270,15 @@ function CategoryDetailSheet({
   budget,
   onClose,
   onSaveLimit,
+  transactions,
 }: {
   visible: boolean;
   categoryName: string;
   budget: number;
   onClose: () => void;
   onSaveLimit?: (newLimit: number) => void;
+  /** A user's own transactions in this category; the sample's are used otherwise. */
+  transactions?: { date: string; desc: string; amount: number }[];
 }) {
   const { theme } = useTheme();
   const [limit, setLimit] = useState(budget);
@@ -274,7 +287,7 @@ function CategoryDetailSheet({
     setLimit(budget);
   }, [budget]);
 
-  const txns = CAT_TRANSACTIONS[categoryName] ?? [];
+  const txns = transactions ?? CAT_TRANSACTIONS[categoryName] ?? [];
   const spent = txns.reduce((s, t) => s + t.amount, 0);
   const pct = Math.min(Math.round((spent / (limit || 1)) * 100), 100);
   const barColor = pct >= 100 ? theme.RED : pct > 75 ? '#FF9500' : theme.GREEN;
@@ -446,6 +459,37 @@ export const DashboardScreen = () => {
 
   const profile = useAppSelector(state => state.user.profile);
   const userName = profile?.name?.split(' ')[0] || 'Talha';
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
+  // A signed-in user's Home is worked out from their own data; Explore shows the sample.
+  const userMode = useUserMode();
+  const isUser = userMode.isNewUser;
+  const planning = usePlanningActions();
+  const userGoals = useSavingsGoals().goals;
+  const userBank = useBankAccounts();
+  const u = computeUserDashboard({
+    txs: userMode.txs,
+    goals: userMode.goals,
+    holdings: userMode.holdings,
+    budget: userMode.budget,
+    envelopes: userMode.envelopes,
+    accountBalances: isUser ? userBank.accounts.map(a => a.balance) : [],
+    profileIncome: monthlyIncomeOf(profile?.monthlyIncome),
+    debts: userMode.debts,
+  });
+  const fmt = (n: number) => Math.round(n).toLocaleString('en-PK');
+  const signed = (n: number) => (n === 0 ? '0' : `${n < 0 ? '−' : '+'}${fmt(Math.abs(n))}`);
+  const goalList = isUser ? userGoals : SAVINGS_GOALS;
+  const insightList: InsightItem[] = isUser ? u.insights : INSIGHTS_DATA;
+  const goTo = (target: DashInsight['go']) =>
+    target === 'BudgetPlanner'
+      ? navigation.navigate('BudgetPlanner')
+      : navigation.navigate('Drawer', { screen: 'MainTabs', params: { screen: target } });
+  const runwaySegs = isUser
+    ? Math.round((Math.min(u.runwayMonths ?? 0, RUNWAY_MAX_MONTHS) / RUNWAY_MAX_MONTHS) * RUNWAY_SEGMENTS)
+    : runwayFilledSegs;
+  const spendPct = isUser ? Math.min(u.budgetPct ?? 0, 100) : 53;
 
   const { accounts } = useAppSelector(state => state.bankAccounts);
   const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
@@ -537,8 +581,15 @@ export const DashboardScreen = () => {
     burnPct > 80 ? theme.RED : burnPct > 60 ? '#FF9500' : theme.GREEN;
 
   // State for MonthlyView
-  const [mIdx, setMIdx] = useState(2);
-  const months = ['Mar 2026', 'Apr 2026', 'May 2026', 'Jun 2026'];
+  const [sampleMIdx, setSampleMIdx] = useState(2);
+  // A user's months end at the current one; `monthsBack` counts back from it, so it stays put
+  // when older transactions add months to the front of the list.
+  const [monthsBack, setMonthsBack] = useState(0);
+  const months = isUser ? u.months.map(m => m.label) : ['Mar 2026', 'Apr 2026', 'May 2026', 'Jun 2026'];
+  const mIdx = isUser ? Math.max(0, months.length - 1 - monthsBack) : sampleMIdx;
+  const setMIdx = (next: (i: number) => number) =>
+    isUser ? setMonthsBack(months.length - 1 - next(mIdx)) : setSampleMIdx(next);
+  const userMonth = u.months[mIdx] ?? u.months[u.months.length - 1];
 
   // State for AccountSheet
   const [currency, setCurrency] = useState<'PKR' | 'USD'>('PKR');
@@ -584,6 +635,23 @@ export const DashboardScreen = () => {
     setSelectedCat({ label, budget: catLimits[label] ?? budget });
     setCategoryDetailVisible(true);
   };
+  // A user's transactions in the tapped category, this month, newest first.
+  const userCatTxns = selectedCat
+    ? userMode.txs
+        .filter(
+          t =>
+            t.type === 'expense' &&
+            t.category === selectedCat.label &&
+            t.date.getMonth() === now.getMonth() &&
+            t.date.getFullYear() === now.getFullYear(),
+        )
+        .sort((a, b) => b.date.getTime() - a.date.getTime())
+        .map(t => ({
+          date: t.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          desc: t.note || t.category,
+          amount: t.amount,
+        }))
+    : [];
 
   // State for InsightsView
   const [expandedInsight, setExpandedInsight] = useState<number | null>(null);
@@ -620,7 +688,7 @@ export const DashboardScreen = () => {
             </TouchableOpacity>
             <View>
               <Text style={[styles.greetingText, { color: theme.MUTED }]}>
-                Good morning
+                {greeting}
               </Text>
               <Text style={[styles.userNameText, { color: theme.TEXT }]}>
                 {userName}
@@ -687,7 +755,9 @@ export const DashboardScreen = () => {
         <FadeInView key={subTab} from={subTabDir} distance={24}>
         {/* Loads once per visit; sub-tabs share the screen's load and never replay it. */}
         {dashLoad.status === 'error' && <ErrorState onRetry={dashLoad.retry} />}
-        {dashLoad.status === 'loading' && subTab === 'live' && <DashLiveSkeleton />}
+        {dashLoad.status === 'loading' && subTab === 'live' && (
+          <DashLiveSkeleton checklist={isUser && !userMode.checklistHidden} />
+        )}
         {dashLoad.status === 'loading' && subTab === 'monthly' && <DashMonthlySkeleton />}
         {dashLoad.status === 'loading' && subTab === 'health' && <DashHealthSkeleton />}
         {dashLoad.status === 'loading' && subTab === 'insights' && <DashInsightsSkeleton />}
@@ -695,10 +765,12 @@ export const DashboardScreen = () => {
         {/* 1. LIVE VIEW */}
         {dashReady && subTab === 'live' && (
           <View>
+            {isUser && <GettingStartedCard style={styles.sectionMargin} />}
+
             {/* Monthly Planning Ritual Banner */}
             <TouchableOpacity
               activeOpacity={0.9}
-              onPress={() => setOverlay('envelopeBudget')}
+              onPress={() => (isUser ? navigation.navigate('BudgetPlanner') : setOverlay('envelopeBudget'))}
               style={styles.sectionMargin}
             >
               <View
@@ -714,11 +786,16 @@ export const DashboardScreen = () => {
                   <Text style={styles.planBannerBolt}>⚡</Text>
                   <View style={styles.flexShrink}>
                     <Text style={[styles.planBannerTitle, { color: theme.ACTIVE }]}>
-                      {planMonthLabel} — Unused money left
+                      {isUser && u.budget === null
+                        ? `${planMonthLabel} — Plan your month`
+                        : `${planMonthLabel} — Unused money left`}
                     </Text>
                     <Text style={[styles.planBannerSub, { color: theme.MUTED }]}>
-                      Set spending limits for PKR{' '}
-                      {MONTHLY_INCOME_POOL.toLocaleString('en-PK')} →
+                      {isUser
+                        ? u.budget === null
+                          ? 'Set a monthly budget and spending limits →'
+                          : `PKR ${fmt(Math.max(0, u.budgetLeft ?? 0))} of your budget left →`
+                        : `Set spending limits for PKR ${MONTHLY_INCOME_POOL.toLocaleString('en-PK')} →`}
                     </Text>
                   </View>
                 </View>
@@ -745,29 +822,29 @@ export const DashboardScreen = () => {
                     color="rgba(255,255,255,0.8)"
                   />
                 </TouchableOpacity>
-                <Text style={styles.heroSubhead}>Net Worth · May 2026</Text>
-                <Text style={styles.heroAmount}>{mask(displayBalance)}</Text>
+                <Text style={styles.heroSubhead}>Net Worth · {isUser ? u.monthLabel : 'May 2026'}</Text>
+                <Text style={styles.heroAmount}>{mask(isUser ? fmt(u.netWorth) : displayBalance)}</Text>
                 <Text style={styles.heroCurrency}>PKR</Text>
 
                 <View style={styles.heroDividerRow}>
                   <View style={styles.heroStatCol}>
                     <Text style={styles.heroStatLabel}>Income</Text>
                     <Text style={[styles.heroStatValue, { color: theme.GREEN }]}>
-                      {mask('1,50,000')}
+                      {mask(isUser ? fmt(u.income) : '1,50,000')}
                     </Text>
                   </View>
 
                   <View style={styles.heroStatColBordered}>
                     <Text style={styles.heroStatLabel}>Spent</Text>
                     <Text style={[styles.heroStatValue, { color: theme.RED }]}>
-                      {mask('80,000')}
+                      {mask(isUser ? fmt(u.spent) : '80,000')}
                     </Text>
                   </View>
 
                   <View style={styles.heroStatColBordered}>
                     <Text style={styles.heroStatLabel}>Saved</Text>
-                    <Text style={[styles.heroStatValue, { color: '#FFFFFF' }]}>
-                      {mask('30,000')}
+                    <Text style={[styles.heroStatValue, { color: isUser && u.saved < 0 ? theme.RED : '#FFFFFF' }]}>
+                      {mask(isUser ? (u.saved < 0 ? signed(u.saved) : fmt(u.saved)) : '30,000')}
                     </Text>
                   </View>
                 </View>
@@ -786,16 +863,26 @@ export const DashboardScreen = () => {
                 <Text style={[styles.metricTileLabel, { color: theme.MUTED }]}>
                   MONTHLY SPENDING
                 </Text>
-                <Text style={[styles.metricTileValue, { color: theme.TEXT, lineHeight: 30, marginBottom: 3 }]}>
-                  80,000
+                <Text style={[styles.metricTileValue, { color: theme.TEXT, lineHeight: 30, marginBottom: 3 }]} numberOfLines={1}>
+                  {isUser ? fmt(u.spent) : '80,000'}
                 </Text>
                 <Text style={[styles.metricTileSub, { color: theme.MUTED }]}>
-                  of PKR 1,50,000
+                  {isUser ? (u.budget === null ? 'No budget set' : `of PKR ${fmt(u.budget)}`) : 'of PKR 1,50,000'}
                 </Text>
                 <View style={{ marginTop: 'auto' }}>
                   <View style={styles.metricTileBarHead}>
-                    <Text style={{ fontSize: 9, color: theme.MUTED }}>PKR 70k left</Text>
-                    <Text style={[styles.metricTileAccent, { color: TEAL }]}>53%</Text>
+                    <Text style={{ fontSize: 9, color: theme.MUTED }}>
+                      {isUser
+                        ? u.budgetLeft === null
+                          ? 'Set a budget'
+                          : u.budgetLeft < 0
+                          ? `PKR ${abbr(-u.budgetLeft)} over`
+                          : `PKR ${abbr(u.budgetLeft)} left`
+                        : 'PKR 70k left'}
+                    </Text>
+                    <Text style={[styles.metricTileAccent, { color: isUser && (u.budgetPct ?? 0) > 100 ? theme.RED : TEAL }]}>
+                      {isUser ? (u.budgetPct === null ? '' : `${u.budgetPct}%`) : '53%'}
+                    </Text>
                   </View>
                   <View
                     style={[
@@ -807,10 +894,10 @@ export const DashboardScreen = () => {
                       style={{
                         height: '100%',
                         borderRadius: 3,
-                        backgroundColor: TEAL,
+                        backgroundColor: isUser && (u.budgetPct ?? 0) > 100 ? theme.RED : TEAL,
                         width: spendBarAnim.interpolate({
                           inputRange: [0, 1],
-                          outputRange: ['0%', '53%'],
+                          outputRange: ['0%', `${spendPct}%`],
                         }),
                       }}
                     />
@@ -825,16 +912,29 @@ export const DashboardScreen = () => {
                 style={[styles.metricTile, { backgroundColor: metricTileBg }]}
               >
                 {!theme.isDark && <DotGrid id="dotsTax" />}
-                <View style={[styles.metricTileBadge, { backgroundColor: TEAL }]}>
-                  <Feather name="check" size={13} color="#FFFFFF" />
-                </View>
+                {(!isUser || profile?.filerStatus === 'yes') && (
+                  <View style={[styles.metricTileBadge, { backgroundColor: TEAL }]}>
+                    <Feather name="check" size={13} color="#FFFFFF" />
+                  </View>
+                )}
                 <Text style={[styles.metricTileLabel, { color: theme.MUTED, paddingRight: 36 }]}>
-                  TAX SAVED THIS YEAR
+                  {isUser ? 'TAX STATUS' : 'TAX SAVED THIS YEAR'}
                 </Text>
                 <Text style={[styles.metricTileValue, { color: theme.TEXT, marginBottom: 6 }]} numberOfLines={1}>
-                  {abbr(18400)}
+                  {isUser
+                    ? profile?.filerStatus === 'yes'
+                      ? 'Filer'
+                      : profile?.filerStatus === 'no'
+                      ? 'Non-filer'
+                      : 'Unknown'
+                    : abbr(18400)}
                 </Text>
-                {!online && (
+                {isUser && (
+                  <Text style={[styles.metricTileSub, { color: theme.MUTED }]}>
+                    Ask the AI Advisor how to save tax
+                  </Text>
+                )}
+                {!isUser && !online && (
                   <View style={styles.offlineNote}>
                     <Feather name="wifi-off" size={10} color={theme.MUTED} />
                     <Text style={[styles.offlineNoteText, { color: theme.MUTED }]} numberOfLines={1}>
@@ -843,7 +943,9 @@ export const DashboardScreen = () => {
                   </View>
                 )}
                 <View style={{ marginTop: 'auto' }}>
-                  <Text style={[styles.metricTileAccent, { color: TEAL }]}>FBR Filer</Text>
+                  <Text style={[styles.metricTileAccent, { color: TEAL }]}>
+                    {isUser ? 'Tax tips →' : 'FBR Filer'}
+                  </Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -859,9 +961,21 @@ export const DashboardScreen = () => {
                 <Text style={[styles.metricTileLabel, { color: theme.MUTED }]}>
                   INVESTMENTS
                 </Text>
-                <Text style={[styles.metricTileValue, { color: theme.TEXT, marginBottom: 8 }]}>
-                  {abbr(248000)}
+                <Text style={[styles.metricTileValue, { color: theme.TEXT, marginBottom: 8 }]} numberOfLines={1}>
+                  {isUser ? (u.holdingsCount ? abbr(u.invested) : '—') : abbr(248000)}
                 </Text>
+                {isUser ? (
+                  <View style={{ marginTop: 'auto' }}>
+                    <Text style={[styles.metricTileSub, { color: theme.MUTED, marginBottom: 6 }]}>
+                      {u.holdingsCount
+                        ? `${u.holdingsCount} holding${u.holdingsCount === 1 ? '' : 's'}`
+                        : 'Nothing tracked yet'}
+                    </Text>
+                    <Text style={[styles.metricTileAccent, { color: TEAL }]}>
+                      {u.holdingsCount ? 'View →' : 'Add a holding →'}
+                    </Text>
+                  </View>
+                ) : (
                 <View style={{ marginTop: 'auto' }}>
                   <Svg width="100%" height={36} viewBox="0 0 100 36" preserveAspectRatio="none" style={{ marginBottom: 6 }}>
                     <Polyline
@@ -875,12 +989,13 @@ export const DashboardScreen = () => {
                   </Svg>
                   <Text style={[styles.metricTileAccent, { color: TEAL }]}>+14.8%</Text>
                 </View>
+                )}
               </TouchableOpacity>
 
               {/* Cash on Hand */}
               <TouchableOpacity
                 activeOpacity={0.85}
-                onPress={() => navigation.navigate('AgeOfMoney')}
+                onPress={() => (isUser ? navigation.navigate('BankAccounts') : navigation.navigate('AgeOfMoney'))}
                 style={[styles.metricTile, { backgroundColor: metricTileBg }]}
               >
                 {!theme.isDark && <DotGrid id="dotsCash" />}
@@ -888,10 +1003,14 @@ export const DashboardScreen = () => {
                   CASH ON HAND
                 </Text>
                 <Text style={[styles.metricTileValue, { color: theme.TEXT, lineHeight: 30, marginBottom: 4 }]}>
-                  48 Days
+                  {isUser ? (u.runwayMonths === null ? '—' : `${Math.round(u.runwayMonths * 30)} Days`) : '48 Days'}
                 </Text>
                 <Text style={[styles.metricTileSub, { color: theme.MUTED }]}>
-                  3.2 months without income
+                  {isUser
+                    ? u.runwayMonths === null
+                      ? 'Log spending and add your cash to see this'
+                      : `${u.runwayMonths.toFixed(1)} months without income`
+                    : '3.2 months without income'}
                 </Text>
                 <View style={styles.runwaySegRow}>
                   {Array.from({ length: RUNWAY_SEGMENTS }).map((_, idx) => (
@@ -901,7 +1020,7 @@ export const DashboardScreen = () => {
                         styles.runwaySeg,
                         {
                           backgroundColor:
-                            idx < runwayFilledSegs
+                            idx < runwaySegs
                               ? TEAL
                               : theme.isDark
                               ? 'rgba(255,255,255,0.08)'
@@ -931,13 +1050,18 @@ export const DashboardScreen = () => {
                     }
                   >
                     <Text style={[styles.viewAllText, { color: theme.ACTIVE }]}>
-                      View All ({SAVINGS_GOALS.length}) →
+                      {isUser && goalList.length === 0 ? 'Create one →' : `View All (${goalList.length}) →`}
                     </Text>
                   </TouchableOpacity>
                 </View>
 
+                {goalList.length === 0 && (
+                  <Text style={[styles.subText, { color: theme.MUTED }]}>
+                    No savings goals yet. Pick a target and we'll show how much to put aside each month.
+                  </Text>
+                )}
                 <View style={styles.goalRingsRow}>
-                  {SAVINGS_GOALS.slice(0, 3).map(goal => {
+                  {goalList.slice(0, 3).map(goal => {
                     const pct = goalPct(goal);
                     const color = goalColor(goal, theme.GREEN, theme.ACTIVE);
                     const shortName = goal.label
@@ -949,6 +1073,10 @@ export const DashboardScreen = () => {
                         key={goal.id}
                         activeOpacity={0.8}
                         onPress={() => {
+                          if (isUser) {
+                            navigation.navigate('GoalDetail', { goalId: goal.id });
+                            return;
+                          }
                           setQuickDepositGoalId(goal.id);
                           setOverlay('quickDeposit');
                         }}
@@ -999,7 +1127,11 @@ export const DashboardScreen = () => {
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={() =>
-                showToast('Grocery audit details opened.', 'info', 'SMART INSIGHT')
+                isUser
+                  ? u.insights[0]
+                    ? goTo(u.insights[0].go)
+                    : userMode.setFirstActionOpen(true)
+                  : showToast('Grocery audit details opened.', 'info', 'SMART INSIGHT')
               }
               style={styles.sectionMargin}
             >
@@ -1022,8 +1154,9 @@ export const DashboardScreen = () => {
                   <Text style={{ fontWeight: '700', color: theme.ACTIVE }}>
                     SMART INSIGHT:{' '}
                   </Text>
-                  Grocery spending has expanded by Rs. 5,000 this week. Tap to
-                  audit raw receipts.
+                  {isUser
+                    ? u.insights[0]?.body ?? 'Log your spending and income and we will point out what to watch.'
+                    : 'Grocery spending has expanded by Rs. 5,000 this week. Tap to audit raw receipts.'}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -1037,13 +1170,22 @@ export const DashboardScreen = () => {
                     Category Spend
                   </Text>
                   <Text style={[styles.subText, { color: theme.MUTED }]}>
-                    May 2026
+                    {isUser ? u.monthLabel : 'May 2026'}
                   </Text>
                 </View>
 
-                {CATS.map((cat, i) => {
-                  const limit = catLimits[cat.label] ?? cat.budget;
-                  const pct = Math.min(Math.round((cat.spent / limit) * 100), 100);
+                {isUser && u.categories.length === 0 && (
+                  <Text style={[styles.subText, { color: theme.MUTED }]}>
+                    No spending logged this month.
+                  </Text>
+                )}
+                {(isUser
+                  ? u.categories.map(c => ({ label: c.label, spent: c.spent, budget: c.limit ?? 0 }))
+                  : CATS
+                ).map((cat, i, list) => {
+                  // A user's category with no envelope is shown as its share of this month's spending.
+                  const limit = catLimits[cat.label] ?? (cat.budget || (isUser ? u.spent : 0));
+                  const pct = Math.min(Math.round((cat.spent / (limit || 1)) * 100), 100);
                   return (
                     <TouchableOpacity
                       key={cat.label}
@@ -1051,7 +1193,7 @@ export const DashboardScreen = () => {
                       onPress={() => handleCategoryTap(cat.label, limit)}
                       style={[
                         styles.catRow,
-                        { marginBottom: i < CATS.length - 1 ? 16 : 4 },
+                        { marginBottom: i < list.length - 1 ? 16 : 4 },
                       ]}
                     >
                       <View style={styles.catHeader}>
@@ -1065,7 +1207,7 @@ export const DashboardScreen = () => {
                           <Text
                             style={[styles.catBudget, { color: theme.MUTED }]}
                           >
-                            / {limit.toLocaleString()}
+                            {isUser && !cat.budget && !catLimits[cat.label] ? ' · no cap' : `/ ${limit.toLocaleString()}`}
                           </Text>
                         </View>
                       </View>
@@ -1171,8 +1313,8 @@ export const DashboardScreen = () => {
                   <Text style={[styles.flowSubLabel, { color: theme.MUTED }]}>
                     Total Inflows
                   </Text>
-                  <Text style={[styles.flowBigAmount, { color: theme.GREEN }]}>
-                    1,54,200
+                  <Text style={[styles.flowBigAmount, { color: theme.GREEN }]} numberOfLines={1}>
+                    {isUser ? fmt(userMonth.inflow) : '1,54,200'}
                   </Text>
                   <Text style={[styles.flowCurrencyText, { color: theme.MUTED }]}>
                     PKR
@@ -1183,8 +1325,8 @@ export const DashboardScreen = () => {
                   <Text style={[styles.flowSubLabel, { color: theme.MUTED }]}>
                     Total Outflows
                   </Text>
-                  <Text style={[styles.flowBigAmount, { color: theme.RED }]}>
-                    80,000
+                  <Text style={[styles.flowBigAmount, { color: theme.RED }]} numberOfLines={1}>
+                    {isUser ? fmt(userMonth.outflow) : '80,000'}
                   </Text>
                   <Text style={[styles.flowCurrencyText, { color: theme.MUTED }]}>
                     PKR
@@ -1193,21 +1335,21 @@ export const DashboardScreen = () => {
               </View>
 
               <View style={[styles.splitTrack, { backgroundColor: theme.MODAL }]}>
-                <View style={{ width: '66%', height: '100%', backgroundColor: theme.GREEN }} />
-                <View style={{ width: '34%', height: '100%', backgroundColor: theme.RED }} />
+                <View style={{ width: `${isUser ? userMonth.wantsPct : 66}%`, height: '100%', backgroundColor: theme.GREEN }} />
+                <View style={{ width: `${isUser ? userMonth.needsPct : 34}%`, height: '100%', backgroundColor: theme.RED }} />
               </View>
 
               <View style={styles.legendRow}>
                 <View style={styles.legendItem}>
                   <View style={[styles.legendDot, { backgroundColor: theme.GREEN }]} />
                   <Text style={[styles.legendText, { color: theme.MUTED }]}>
-                    Spent on wants 66%
+                    Spent on wants {isUser ? userMonth.wantsPct : 66}%
                   </Text>
                 </View>
                 <View style={styles.legendItem}>
                   <View style={[styles.legendDot, { backgroundColor: theme.RED }]} />
                   <Text style={[styles.legendText, { color: theme.MUTED }]}>
-                    Spent on needs 34%
+                    Spent on needs {isUser ? userMonth.needsPct : 34}%
                   </Text>
                 </View>
               </View>
@@ -1219,8 +1361,8 @@ export const DashboardScreen = () => {
                 <Text style={[styles.miniCardLabel, { color: theme.MUTED }]}>
                   Remaining balance
                 </Text>
-                <Text style={[styles.miniCardValue, { color: theme.GREEN }]}>
-                  +74,200
+                <Text style={[styles.miniCardValue, { color: isUser && userMonth.net < 0 ? theme.RED : theme.GREEN }]} numberOfLines={1}>
+                  {isUser ? signed(userMonth.net) : '+74,200'}
                 </Text>
                 <Text style={[styles.badgeText, { color: theme.MUTED }]}>
                   PKR Retained
@@ -1231,8 +1373,8 @@ export const DashboardScreen = () => {
                 <Text style={[styles.miniCardLabel, { color: theme.MUTED }]}>
                   Daily Burn
                 </Text>
-                <Text style={[styles.miniCardValue, { color: theme.TEXT }]}>
-                  2,666
+                <Text style={[styles.miniCardValue, { color: theme.TEXT }]} numberOfLines={1}>
+                  {isUser ? fmt(userMonth.dailyBurn) : '2,666'}
                 </Text>
                 <Text style={[styles.badgeText, { color: theme.MUTED }]}>
                   PKR / Day Avg
@@ -1245,12 +1387,20 @@ export const DashboardScreen = () => {
               <Text style={[styles.cardTitle, { color: theme.TEXT, marginBottom: 14 }]}>
                 Spending by Category
               </Text>
-              {SPEND_CATS.map((cat, i) => (
+              {isUser && userMonth.categories.length === 0 && (
+                <Text style={[styles.subText, { color: theme.MUTED }]}>
+                  No spending logged in {userMonth.label}.
+                </Text>
+              )}
+              {(isUser
+                ? userMonth.categories.map(c => ({ ...c, flag: false }))
+                : SPEND_CATS
+              ).map((cat, i, list) => (
                 <TouchableOpacity
                   key={cat.label}
                   activeOpacity={0.75}
                   onPress={() => handleCategoryTap(cat.label, Math.round(cat.amount * 1.2))}
-                  style={{ marginBottom: i < SPEND_CATS.length - 1 ? 14 : 0 }}
+                  style={{ marginBottom: i < list.length - 1 ? 14 : 0 }}
                 >
                   <View style={styles.catHeader}>
                     <View style={styles.catLabelGroup}>
@@ -1287,24 +1437,34 @@ export const DashboardScreen = () => {
                   Remaining Allowance
                 </Text>
               </View>
-              {BUDGETS.map((b, i) => {
+              {isUser && u.envelopeUse.length === 0 && (
+                <TouchableOpacity activeOpacity={0.8} onPress={() => navigation.navigate('BudgetPlanner')}>
+                  <Text style={[styles.subText, { color: theme.MUTED }]}>
+                    No spending caps yet.{' '}
+                    <Text style={{ color: theme.ACTIVE, fontWeight: '700' }}>Add envelopes in the Budget Planner →</Text>
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {(isUser ? u.envelopeUse : BUDGETS).map((b, i, list) => {
                 const c = b.pct >= 85 ? theme.RED : b.pct >= 70 ? '#FF9500' : theme.GREEN;
                 return (
                   <TouchableOpacity
                     key={b.label}
                     activeOpacity={0.75}
                     onPress={() => handleCategoryTap(b.label, b.limit)}
-                    style={{ marginBottom: i < BUDGETS.length - 1 ? 14 : 0 }}
+                    style={{ marginBottom: i < list.length - 1 ? 14 : 0 }}
                   >
                     <View style={styles.catHeader}>
                       <Text style={[styles.catLabel, { color: theme.TEXT }]}>
                         {b.label}
                       </Text>
                       <Text style={[styles.catSpent, { color: c, fontSize: 12 }]}>
-                        PKR {b.remaining.toLocaleString()} left
+                        {b.remaining < 0
+                          ? `PKR ${(-b.remaining).toLocaleString()} over`
+                          : `PKR ${b.remaining.toLocaleString()} left`}
                       </Text>
                     </View>
-                    <Track pct={b.pct} color={c} />
+                    <Track pct={Math.min(b.pct, 100)} color={c} />
                     <Text style={[styles.remainingText, { color: theme.MUTED, marginTop: 4 }]}>
                       of PKR {b.limit.toLocaleString()} · {b.pct}% used
                     </Text>
@@ -1317,18 +1477,18 @@ export const DashboardScreen = () => {
             <View style={styles.twoColRow}>
               <TouchableOpacity
                 activeOpacity={0.8}
-                onPress={() => setDateRangeModalVisible(true)}
+                onPress={() => (isUser ? navigation.navigate('Analytics') : setDateRangeModalVisible(true))}
                 style={[styles.actionPillButton, { backgroundColor: theme.MODAL }]}
               >
-                <Feather name="calendar" size={14} color={theme.ACTIVE} />
+                <Feather name={isUser ? 'bar-chart-2' : 'calendar'} size={14} color={theme.ACTIVE} />
                 <Text style={[styles.actionPillText, { color: theme.TEXT }]}>
-                  Date Range
+                  {isUser ? 'Analytics' : 'Date Range'}
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 activeOpacity={0.8}
-                onPress={() => setAccountModalVisible(true)}
+                onPress={() => (isUser ? navigation.navigate('BankAccounts') : setAccountModalVisible(true))}
                 style={[styles.actionPillButton, { backgroundColor: theme.MODAL }]}
               >
                 <Feather name="briefcase" size={14} color={theme.ACTIVE} />
@@ -1341,30 +1501,57 @@ export const DashboardScreen = () => {
         )}
 
         {/* 3. HEALTH VIEW */}
-        {dashReady && subTab === 'health' && (
+        {dashReady && subTab === 'health' && isUser && !u.hasHealthData && (
+          <View style={styles.tabContentGap}>
+            <View style={[styles.card, styles.centerCard, { backgroundColor: theme.CARD }]}>
+              <View style={[styles.scoreCircle, { borderColor: theme.BORDER }]}>
+                <Feather name="activity" size={28} color={theme.MUTED} />
+              </View>
+              <Text style={[styles.scoreStatusTitle, { color: theme.TEXT }]}>
+                Not enough data yet
+              </Text>
+              <Text style={[styles.scoreSubText, { color: theme.MUTED }]}>
+                Log your income and spending and we'll score your savings, emergency fund and debt.
+              </Text>
+            </View>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => userMode.setFirstActionOpen(true)}
+              style={[styles.actionPillButtonFull, { backgroundColor: theme.MODAL }]}
+            >
+              <Feather name="plus" size={15} color={theme.ACTIVE} />
+              <Text style={[styles.actionPillText, { color: theme.TEXT }]}>
+                Log a transaction
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {dashReady && subTab === 'health' && (!isUser || u.hasHealthData) && (
           <View style={styles.tabContentGap}>
             {/* Score Badge Card */}
             <View style={[styles.card, styles.centerCard, { backgroundColor: theme.CARD }]}>
               <View
                 style={[
                   styles.scoreCircle,
-                  { borderColor: theme.GREEN },
+                  { borderColor: isUser ? (u.score >= 75 ? theme.GREEN : u.score >= 50 ? '#FF9500' : theme.RED) : theme.GREEN },
                 ]}
               >
-                <Text style={[styles.scoreNumber, { color: theme.TEXT }]}>78</Text>
+                <Text style={[styles.scoreNumber, { color: theme.TEXT }]}>{isUser ? u.score : 78}</Text>
                 <Text style={[styles.scoreDenom, { color: theme.MUTED }]}>/100</Text>
               </View>
-              <Text style={[styles.scoreStatusTitle, { color: theme.GREEN }]}>
-                Stable Growth
+              <Text style={[styles.scoreStatusTitle, { color: isUser ? (u.score >= 75 ? theme.GREEN : u.score >= 50 ? '#FF9500' : theme.RED) : theme.GREEN }]}>
+                {isUser ? u.scoreLabel : 'Stable Growth'}
               </Text>
               <Text style={[styles.scoreSubText, { color: theme.MUTED }]}>
-                Financial health above average for PKR 1,50,000/mo income bracket.
+                {isUser
+                  ? 'Based on your savings rate, emergency fund and debt over the last 3 months.'
+                  : 'Financial health above average for PKR 1,50,000/mo income bracket.'}
               </Text>
             </View>
 
             {/* Plain-language metric stack */}
             <View style={styles.metricStack}>
-              {RATIOS.map(r => {
+              {(isUser ? u.ratios : RATIOS).map(r => {
                 const c =
                   r.status === 'good'
                     ? theme.GREEN
@@ -1413,7 +1600,14 @@ export const DashboardScreen = () => {
               AI Financial Insights
             </Text>
 
-            {INSIGHTS_DATA.map(ins => {
+            {insightList.length === 0 && (
+              <View style={[styles.card, { backgroundColor: theme.CARD }]}>
+                <Text style={[styles.subText, { color: theme.MUTED }]}>
+                  Nothing to flag right now. Insights appear here as you log spending, set a budget and add goals.
+                </Text>
+              </View>
+            )}
+            {insightList.map(ins => {
               const isExp = expandedInsight === ins.id;
               return (
                 <View
@@ -1473,7 +1667,7 @@ export const DashboardScreen = () => {
                       <View style={styles.twoColRow}>
                         <TouchableOpacity
                           activeOpacity={0.8}
-                          onPress={() => setActionInsight(ins)}
+                          onPress={() => (isUser && ins.go ? goTo(ins.go) : setActionInsight(ins))}
                           style={[
                             styles.insightActionBtn,
                             { backgroundColor: ins.color },
@@ -1488,7 +1682,7 @@ export const DashboardScreen = () => {
                               },
                             ]}
                           >
-                            Execute Strategy via AI
+                            {isUser ? 'Take Me There' : 'Execute Strategy via AI'}
                           </Text>
                         </TouchableOpacity>
 
@@ -1816,13 +2010,37 @@ export const DashboardScreen = () => {
           visible={categoryDetailVisible}
           categoryName={selectedCat.label}
           budget={selectedCat.budget}
+          transactions={isUser ? userCatTxns : undefined}
           onClose={() => {
             setCategoryDetailVisible(false);
             setSelectedCat(null);
           }}
           onSaveLimit={newLimit => {
             if (selectedCat) {
-              setCatLimits(prev => ({ ...prev, [selectedCat.label]: newLimit }));
+              if (isUser) {
+                // A user's limit is the envelope of the same name in the Budget Planner (saved on the server).
+                const name = selectedCat.label;
+                const existing = userMode.envelopes.find(e => e.name.toLowerCase() === name.toLowerCase());
+                const meta = CAT_META[name];
+                (existing
+                  ? planning.updateEnvelope({ ...existing, limit: newLimit })
+                  : planning.addEnvelope({
+                      id: '',
+                      name,
+                      icon: meta?.icon ?? 'tag',
+                      color: meta?.color ?? '#0047AB',
+                      limit: newLimit,
+                      isMain: false,
+                    })
+                )
+                  .then(() =>
+                    showToast(`Limit for ${name} updated to PKR ${newLimit.toLocaleString()}`, 'success', 'BUDGET UPDATED'),
+                  )
+                  .catch(error => showToast(error instanceof ApiError ? error.message : SAVE_ERROR, 'error'));
+                return;
+              } else {
+                setCatLimits(prev => ({ ...prev, [selectedCat.label]: newLimit }));
+              }
               showToast(
                 `Limit for ${selectedCat.label} updated to PKR ${newLimit.toLocaleString()}`,
                 'success',
@@ -1863,7 +2081,7 @@ export const DashboardScreen = () => {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              {[
+              {(isUser ? u.breakdown : [
                 {
                   label: 'Health Score (78/100)',
                   formula:
@@ -1888,7 +2106,7 @@ export const DashboardScreen = () => {
                     'Actual Sec-62 Invest ÷ Max Cap\nPKR 1,10,000 ÷ PKR 1,70,000',
                   result: '= 64.7% ≈ 65% Leveraged',
                 },
-              ].map((m, i) => (
+              ]).map((m, i) => (
                 <View
                   key={i}
                   style={[styles.formulaBox, { backgroundColor: theme.MODAL }]}

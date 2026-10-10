@@ -1,3 +1,4 @@
+import { usePlanningActions } from '../../../hooks/usePlanningActions';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -19,7 +20,7 @@ import { PendingBadge, useNetwork } from '../../../context/NetworkContext';
 import { UNLOCK_AT, UserGoal, useUserMode } from '../../../context/UserModeContext';
 import { ConfirmDialog } from '../../../components/Feedback';
 import { abbr, fullAmt } from '../../../utils/format';
-import { MSG, parseAmount, useFormErrors } from '../../../utils/validation';
+import { MSG, SAVE_ERROR, parseAmount, useFormErrors } from '../../../utils/validation';
 import { TxList } from './TxList';
 import { BudgetSheet, GoalSheet } from './sheets';
 import {
@@ -44,15 +45,7 @@ const fmt = (n: number) => n.toLocaleString('en-IN');
 export function NewDashboard() {
   const { theme } = useTheme();
   const navigation = useNavigation<any>();
-  const { txs, goals, holdings, budget, setFirstActionOpen, checklistHidden, setChecklistHidden } = useUserMode();
-  const [sheet, setSheet] = useState<null | 'budget' | 'goal'>(null);
-
-  const steps = [
-    { label: 'Log a transaction', done: txs.length > 0, go: () => setFirstActionOpen(true) },
-    { label: 'Set a goal', done: goals.length > 0, go: () => setSheet('goal') },
-    { label: 'Set a budget', done: budget !== null, go: () => setSheet('budget') },
-  ];
-  const doneCount = steps.filter(x => x.done).length;
+  const { txs, goals, holdings, budget, setFirstActionOpen } = useUserMode();
   const unlocked = txs.length >= UNLOCK_AT;
   const spent = txs.filter(t => t.type === 'expense').reduce((a, t) => a + t.amount, 0);
   const income = txs.filter(t => t.type === 'income').reduce((a, t) => a + t.amount, 0);
@@ -77,40 +70,7 @@ export function NewDashboard() {
         </TouchableOpacity>
       }
     >
-      {/* Getting started */}
-      {!checklistHidden && doneCount < steps.length && (
-        <View style={[d.checklist, { backgroundColor: theme.HERO_BG }]}>
-          <View style={d.checkHead}>
-            <Text style={d.checkTitle}>Getting started</Text>
-            <View style={d.checkHeadRight}>
-              <Text style={d.checkCount}>
-                {doneCount}/{steps.length}
-              </Text>
-              <TouchableOpacity accessibilityLabel="Hide checklist" hitSlop={10} onPress={() => setChecklistHidden(true)}>
-                <Feather name="x" size={14} color="rgba(255,255,255,0.5)" />
-              </TouchableOpacity>
-            </View>
-          </View>
-          <Text style={d.checkSub}>Three quick steps to set up your money</Text>
-          <View style={d.checkTrack}>
-            <View style={[d.checkFill, { width: `${(doneCount / steps.length) * 100}%` }]} />
-          </View>
-          {steps.map((x, i) => (
-            <TouchableOpacity
-              key={x.label}
-              activeOpacity={x.done ? 1 : 0.7}
-              onPress={() => !x.done && x.go()}
-              style={[d.step, i > 0 && d.stepDivider]}
-            >
-              <View style={[d.stepDot, x.done ? d.stepDotDone : d.stepDotTodo]}>
-                {x.done && <Feather name="check" size={12} color="#FFFFFF" />}
-              </View>
-              <Text style={[d.stepLabel, x.done && d.stepLabelDone]}>{x.label}</Text>
-              {!x.done && <Text style={d.stepGo}>Start →</Text>}
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
+      <GettingStartedCard />
 
       {/* Metric grid — locked until there's enough data, never fake zeros */}
       <View style={d.row}>
@@ -207,9 +167,61 @@ export function NewDashboard() {
         </View>
       )}
 
+    </ScreenShell>
+  );
+}
+
+/** First-run checklist (log a transaction, set a goal, set a budget); hides when done or dismissed. */
+export function GettingStartedCard({ style }: { style?: object }) {
+  const { theme } = useTheme();
+  const { txs, goals, budget, setFirstActionOpen, checklistHidden, setChecklistHidden } = useUserMode();
+  const [sheet, setSheet] = useState<null | 'budget' | 'goal'>(null);
+  const steps = [
+    { label: 'Log a transaction', done: txs.length > 0, go: () => setFirstActionOpen(true) },
+    { label: 'Set a goal', done: goals.length > 0, go: () => setSheet('goal') },
+    { label: 'Set a budget', done: budget !== null, go: () => setSheet('budget') },
+  ];
+  const doneCount = steps.filter(x => x.done).length;
+  return (
+    <View style={style}>
+      {/* Getting started */}
+      {!checklistHidden && doneCount < steps.length && (
+        <View style={[d.checklist, style ? d.checklistFlush : null, { backgroundColor: theme.HERO_BG }]}>
+          <View style={d.checkHead}>
+            <Text style={d.checkTitle}>Getting started</Text>
+            <View style={d.checkHeadRight}>
+              <Text style={d.checkCount}>
+                {doneCount}/{steps.length}
+              </Text>
+              <TouchableOpacity accessibilityLabel="Hide checklist" hitSlop={10} onPress={() => setChecklistHidden(true)}>
+                <Feather name="x" size={14} color="rgba(255,255,255,0.5)" />
+              </TouchableOpacity>
+            </View>
+          </View>
+          <Text style={d.checkSub}>Three quick steps to set up your money</Text>
+          <View style={d.checkTrack}>
+            <View style={[d.checkFill, { width: `${(doneCount / steps.length) * 100}%` }]} />
+          </View>
+          {steps.map((x, i) => (
+            <TouchableOpacity
+              key={x.label}
+              activeOpacity={x.done ? 1 : 0.7}
+              onPress={() => !x.done && x.go()}
+              style={[d.step, i > 0 && d.stepDivider]}
+            >
+              <View style={[d.stepDot, x.done ? d.stepDotDone : d.stepDotTodo]}>
+                {x.done && <Feather name="check" size={12} color="#FFFFFF" />}
+              </View>
+              <Text style={[d.stepLabel, x.done && d.stepLabelDone]}>{x.label}</Text>
+              {!x.done && <Text style={d.stepGo}>Start →</Text>}
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
       <BudgetSheet visible={sheet === 'budget'} onClose={() => setSheet(null)} />
       <GoalSheet visible={sheet === 'goal'} onClose={() => setSheet(null)} />
-    </ScreenShell>
+    </View>
   );
 }
 
@@ -259,8 +271,8 @@ const monthsUntil = (date: Date) => Math.max(1, Math.ceil((date.getTime() - Date
 
 export function NewGoals() {
   const { theme } = useTheme();
-  const { goals, deleteGoal } = useUserMode();
-  const { record } = useNetwork();
+  const { goals } = useUserMode();
+  const planning = usePlanningActions();
   const { showToast } = useToast();
   const [toDelete, setToDelete] = useState<UserGoal | null>(null);
   const [lastDelete, setLastDelete] = useState<UserGoal | null>(null);
@@ -334,10 +346,12 @@ export function NewGoals() {
         onCancel={() => setToDelete(null)}
         onConfirm={() => {
           if (!toDelete) return;
-          deleteGoal(toDelete.id);
-          record({ entity: 'goal', entityId: toDelete.id, action: 'delete', label: `Delete goal · ${toDelete.name}` });
+          const goal = toDelete;
           setToDelete(null);
-          showToast('Goal deleted', 'success');
+          planning
+            .archiveGoal(goal.id)
+            .then(() => showToast('Goal deleted', 'success'))
+            .catch(() => showToast(SAVE_ERROR, 'error'));
         }}
       />
     </ScreenShell>
@@ -554,6 +568,8 @@ const d = StyleSheet.create({
   flex: { flex: 1 },
   iconBtn: { width: 42, height: 42, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
   checklist: { marginHorizontal: 16, marginBottom: 12, borderRadius: 24, paddingTop: 18, paddingHorizontal: 18, paddingBottom: 10 },
+  // Inside a screen that already pads its content.
+  checklistFlush: { marginHorizontal: 0 },
   checkHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   checkHeadRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   checkTitle: { fontSize: 16, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.4 },

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useUserMode } from '../../../../context/UserModeContext';
+import { usePlanningActions } from '../../../../hooks/usePlanningActions';
 import { useAppDispatch, useAppSelector } from '../../../../store/hooks';
 import {
   addCategory,
@@ -22,6 +23,7 @@ export function useBudgetPlan() {
   const userMode = useUserMode();
   const isUser = userMode.isNewUser;
   const dispatch = useAppDispatch();
+  const planning = usePlanningActions();
 
   const sampleCategories = useAppSelector(state => state.budget.categories);
   const sampleTotal = useAppSelector(state => state.budget.totalMonthlyBudget);
@@ -32,7 +34,7 @@ export function useBudgetPlan() {
   const monthExpenses = useMemo(() => {
     if (isUser) {
       return userMode.txs
-        .filter(t => t.type === 'expense' && isThisMonth(t.date))
+        .filter(t => t.type === 'expense' && !t.excludeFromBudget && isThisMonth(t.date))
         .map(t => ({ category: t.category, amount: t.amount }));
     }
     const now = new Date();
@@ -68,14 +70,22 @@ export function useBudgetPlan() {
     monthSpent: monthExpenses.reduce((a, e) => a + e.amount, 0),
     /** Linked account balance (sample only; 0 for users, who have no linked accounts yet). */
     accountBalance: isUser ? 0 : accounts.reduce((a, c) => a + c.balance, 0),
-    setTotal: (n: number) => (isUser ? userMode.setBudget(n) : dispatch(setTotalMonthlyBudget(n))),
-    add: (c: BudgetCategory) =>
-      isUser ? userMode.setEnvelopes(p => [...p, c]) : dispatch(addCategory(c)),
-    update: (c: BudgetCategory) =>
-      isUser
-        ? userMode.setEnvelopes(p => p.map(x => (x.id === c.id ? c : x)))
-        : dispatch(updateCategory(c)),
-    remove: (id: string) =>
-      isUser ? userMode.setEnvelopes(p => p.filter(x => x.id !== id)) : dispatch(deleteCategory(id)),
+    // A user's changes are saved on the server (rejected changes throw); the sample's stay local.
+    setTotal: async (n: number) => {
+      if (isUser) await planning.setMonthlyBudget(n);
+      else dispatch(setTotalMonthlyBudget(n));
+    },
+    add: async (c: BudgetCategory) => {
+      if (isUser) await planning.addEnvelope(c);
+      else dispatch(addCategory(c));
+    },
+    update: async (c: BudgetCategory) => {
+      if (isUser) await planning.updateEnvelope(c);
+      else dispatch(updateCategory(c));
+    },
+    remove: async (id: string) => {
+      if (isUser) await planning.removeEnvelope(id);
+      else dispatch(deleteCategory(id));
+    },
   };
 }

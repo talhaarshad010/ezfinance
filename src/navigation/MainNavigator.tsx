@@ -18,7 +18,6 @@ import { LoadGate } from '../components/LoadGate';
 import { AISkeleton, GoalsSkeleton, NewUserSkeleton } from '../components/Skeletons';
 import {
   NewAI,
-  NewDashboard,
   NewInvestments,
 } from '../features/main/newUser/NewUserScreens';
 import { TourOverlay } from '../features/main/newUser/TourOverlay';
@@ -55,16 +54,8 @@ const tabTransition: BottomTabNavigationOptions = {
 // Home, Expenses and Investments show their skeletons inside the screen, so
 // their headers and sub-tabs stay put while each section loads.
 
-const HomeTab = () => {
-  const { isNewUser } = useUserMode();
-  return isNewUser ? (
-    <LoadGate id="home" skeleton={<NewUserSkeleton dashboard />}>
-      <NewDashboard />
-    </LoadGate>
-  ) : (
-    <DashboardScreen />
-  );
-};
+// Same dashboard for both; a real account sees only its own figures.
+const HomeTab = () => <DashboardScreen />;
 
 // Same ledger layout for both; a real account sees only its own entries.
 const ExpensesTab = () => {

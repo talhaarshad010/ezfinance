@@ -9,7 +9,8 @@
 export type GoalStatus = 'active' | 'paused' | 'shared';
 
 export interface SavingsGoal {
-  id: number;
+  /** Sample goals use numbers; a signed-in user's goals use their UUID. */
+  id: number | string;
   /** Feather icon name */
   icon: string;
   label: string;

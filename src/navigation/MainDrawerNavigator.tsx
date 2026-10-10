@@ -18,6 +18,8 @@ import AnalyticsScreen from '../features/main/screens/AnalyticsScreen';
 import PortfolioScreen from '../features/main/screens/PortfolioScreen';
 
 import SettingsScreen from '../features/main/screens/SettingsScreen';
+import { LoadGate } from '../components/LoadGate';
+import { AnalyticsSkeleton, BankAccountsSkeleton, BudgetPlannerSkeleton } from '../components/Skeletons';
 import BudgetPlannerScreen from '../features/main/screens/BudgetPlannerScreen';
 import NotificationsScreen from '../features/main/screens/NotificationsScreen';
 import BankAccountsScreen from '../features/main/screens/BankAccountsScreen';
@@ -119,17 +121,22 @@ const AddExpenseWrapper = React.memo(() => (
   </SceneWrapper>
 ));
 
-// Same analytics for both; a real account sees only its own spending.
+// Same analytics for both; a real account sees only its own spending. Each screen built from
+// the user's transactions shows its skeleton until they've loaded.
 const AnalyticsWrapper = React.memo(() => (
   <SceneWrapper>
-    <AnalyticsScreen />
+    <LoadGate id="analytics" skeleton={<AnalyticsSkeleton />}>
+      <AnalyticsScreen />
+    </LoadGate>
   </SceneWrapper>
 ));
 
 // Same planner for both; a real account sees only its own budget and envelopes.
 const BudgetPlannerWrapper = React.memo(() => (
   <SceneWrapper>
-    <BudgetPlannerScreen />
+    <LoadGate id="budget-planner" skeleton={<BudgetPlannerSkeleton />}>
+      <BudgetPlannerScreen />
+    </LoadGate>
   </SceneWrapper>
 ));
 
@@ -153,7 +160,9 @@ const NotificationsWrapper = React.memo(() => {
 // Same accounts screen for both; a real account sees only the accounts it added.
 const BankAccountsWrapper = React.memo(() => (
   <SceneWrapper>
-    <BankAccountsScreen />
+    <LoadGate id="bank-accounts" skeleton={<BankAccountsSkeleton />}>
+      <BankAccountsScreen />
+    </LoadGate>
   </SceneWrapper>
 ));
 

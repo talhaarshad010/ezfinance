@@ -4,6 +4,9 @@ import Feather from 'react-native-vector-icons/Feather';
 import { useTheme } from './ThemeContext';
 import { useToast } from './ToastContext';
 import { useUserMode } from './UserModeContext';
+import { ApiError } from '../api/client';
+import { transactionsApi } from '../api/transactionsApi';
+import type { CreateTransactionRequest, SplitPartRequest, TransactionFieldsRequest } from '../api/types';
 
 /**
  * Connectivity + offline sync queue — the single place offline changes are
@@ -11,14 +14,15 @@ import { useUserMode } from './UserModeContext';
  *
  * Rules
  * - Only a new user's real data is queued (sample data of a returning demo user is local only).
- * - Only changes made while offline are queued; online saves go straight through.
+ * - Changes made while offline are queued; online saves go straight through, and are queued
+ *   only when the server can't be reached (`force`).
  * - What the user sees is local state, so totals already include pending items.
- * - Conflicts: last change wins.
- * Mock phase: `pushOne` fakes the network — swap its body for the real API call.
+ * - Conflicts: last change wins. Undo of a queued delete just drops the delete.
+ * Transactions sync to the API; goals, budget and holdings are still local (mock push).
  */
 
 export type SyncEntity = 'tx' | 'goal' | 'budget' | 'holding';
-export type SyncAction = 'create' | 'update' | 'delete';
+export type SyncAction = 'create' | 'update' | 'delete' | 'restore' | 'split';
 export interface SyncOp {
   id: string;
   entity: SyncEntity;
@@ -34,8 +38,11 @@ interface NetworkCtx {
   online: boolean;
   syncing: boolean;
   queue: SyncOp[];
-  /** Records a change if it needs syncing. Returns the op id (or null when nothing was queued). */
-  record: (op: Omit<SyncOp, 'id' | 'at' | 'status'>) => string | null;
+  /**
+   * Records a change if it needs syncing (offline, or `force` when an online save couldn't reach
+   * the server). Returns the op id (or null when nothing was queued).
+   */
+  record: (op: Omit<SyncOp, 'id' | 'at' | 'status'>, options?: { force?: boolean }) => string | null;
   /** Drop a queued op (used by Undo). */
   remove: (opId: string) => void;
   statusOf: (entity: SyncEntity, entityId: string | number) => SyncOp['status'] | undefined;
@@ -63,10 +70,42 @@ async function probe(): Promise<boolean> {
   }
 }
 
-/** Mock network call for one queued change. Replace with the real backend request. */
-async function pushOne(_op: SyncOp) {
-  await wait(120);
+const RETRY_MS = 10000;
+
+/** Sends one queued change to the server. Transactions use the API; other entities are still local. */
+async function pushOne(op: SyncOp) {
+  if (op.entity !== 'tx') {
+    await wait(120);
+    return;
+  }
+  const id = String(op.entityId);
+  switch (op.action) {
+    case 'create':
+      await transactionsApi.create(op.payload as CreateTransactionRequest);
+      return;
+    case 'update':
+      await transactionsApi.update(id, op.payload as TransactionFieldsRequest);
+      return;
+    case 'delete':
+      try {
+        await transactionsApi.remove(id);
+      } catch (error) {
+        // Already gone on the server: nothing left to do.
+        if (!(error instanceof ApiError && error.status === 404)) throw error;
+      }
+      return;
+    case 'restore':
+      await transactionsApi.restore(id);
+      return;
+    case 'split':
+      await transactionsApi.split(id, (op.payload as { parts: SplitPartRequest[] }).parts);
+      return;
+  }
 }
+
+/** The server turned the change down (bad data, not found): retrying won't help. */
+const isPermanent = (error: unknown) =>
+  error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 401 && error.status !== 429;
 
 /**
  * Real connectivity, without a native dependency: a tiny reachability request on
@@ -132,9 +171,14 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
         await pushOne(op);
         synced++;
         setQueue(q => q.filter(o => o.id !== id));
-      } catch {
+      } catch (error) {
         failed++;
-        setQueue(q => q.map(o => (o.id === id ? { ...o, status: 'failed' } : o)));
+        if (isPermanent(error)) {
+          // Rejected by the server: drop it so it doesn't block the rest of the queue.
+          setQueue(q => q.filter(o => o.id !== id));
+        } else {
+          setQueue(q => q.map(o => (o.id === id ? { ...o, status: 'failed' } : o)));
+        }
       }
     }
     setSyncing(false);
@@ -151,6 +195,13 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     wasOnline.current = online;
   }, [online, runSync]);
 
+  // Changes queued while online (the server couldn't be reached) are retried every few seconds.
+  useEffect(() => {
+    if (!online || syncing || !queue.length) return;
+    const t = setTimeout(runSync, RETRY_MS);
+    return () => clearTimeout(t);
+  }, [online, syncing, queue, runSync]);
+
   // A different account never inherits another account's queue.
   useEffect(() => {
     setQueue([]);
@@ -161,14 +212,24 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
       online,
       syncing,
       queue,
-      record: op => {
-        if (!isNewUser || online) return null;
+      record: (op, options) => {
+        if (!isNewUser || (online && !options?.force)) return null;
         const id = `${op.entity}:${op.entityId}:${Date.now()}`;
         setQueue(q => {
-          const created = q.find(o => o.entity === op.entity && o.entityId === op.entityId && o.action === 'create');
+          const same = (o: SyncOp) => o.entity === op.entity && o.entityId === op.entityId;
+          const created = q.find(o => same(o) && o.action === 'create');
           // An edit of a not-yet-synced create folds into it (last change wins).
           if (op.action === 'update' && created) {
-            return q.map(o => (o === created ? { ...o, payload: op.payload, label: op.label, status: 'pending' } : o));
+            const payload =
+              op.entity === 'tx'
+                ? { ...(created.payload as object), ...(op.payload as object) }
+                : op.payload;
+            return q.map(o => (o === created ? { ...o, payload, label: op.label, status: 'pending' } : o));
+          }
+          // Undo of a delete that hasn't been sent: just forget the delete.
+          const deleted = q.find(o => same(o) && o.action === 'delete');
+          if (op.action === 'restore' && deleted) {
+            return q.filter(o => o !== deleted);
           }
           return [...q, { ...op, id, at: Date.now(), status: 'pending' }];
         });

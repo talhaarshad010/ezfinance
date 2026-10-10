@@ -74,6 +74,40 @@ The API listens on `http://0.0.0.0:5080`, so it is reachable from:
 | POST   | `/api/auth/set-password`    | ✓    | Add a password to a Google-only account (409 if one exists)   |
 | GET    | `/api/profile`              | ✓    | The signed-in user's profile (recreated if missing), with `hasPassword` |
 | PUT    | `/api/profile`              | ✓    | Update name, income, city, province, filer status             |
+| GET    | `/api/accounts`             | ✓    | The user's linked bank accounts with live `balance` (opening balance + their transactions) |
+| POST   | `/api/accounts`             | ✓    | Link an account (app-generated UUID `id`; only `accountLast4` is stored) |
+| PUT    | `/api/accounts/{id}/balance` | ✓   | Set what the account holds now (its transactions stay as they are) |
+| DELETE | `/api/accounts/{id}`        | ✓    | Remove an account (soft delete; its transactions keep the link) |
+| GET    | `/api/bills`                | ✓    | Repeated monthly bills (each paid from a linked account)      |
+| POST   | `/api/bills`                | ✓    | Add a bill (app-generated UUID `id`)                          |
+| PUT    | `/api/bills/{id}`           | ✓    | Edit a bill                                                   |
+| DELETE | `/api/bills/{id}`           | ✓    | Remove a bill (soft delete)                                   |
+| POST   | `/api/bills/{id}/pay`       | ✓    | Mark paid: logs an expense (`transactionId`, `date`) in the bill's account |
+| GET    | `/api/loans`                | ✓    | Loans and debts                                               |
+| POST   | `/api/loans`                | ✓    | Add a loan (app-generated UUID `id`)                          |
+| PUT    | `/api/loans/{id}`           | ✓    | Edit a loan                                                   |
+| DELETE | `/api/loans/{id}`           | ✓    | Remove a loan (soft delete)                                   |
+| GET    | `/api/transfers`            | ✓    | Money moved between the user's own accounts                   |
+| POST   | `/api/transfers`            | ✓    | Move money (`fromAccountId` ≠ `toAccountId`, both linked)     |
+| DELETE | `/api/transfers/{id}`       | ✓    | Delete a transfer (soft delete)                               |
+| POST   | `/api/transfers/{id}/restore` | ✓  | Undo a delete                                                 |
+| GET    | `/api/goals`                | ✓    | Savings goals, each with `saved` (sum of its contributions)   |
+| POST   | `/api/goals`                | ✓    | Add a goal (app-generated UUID `id`)                          |
+| PUT    | `/api/goals/{id}`           | ✓    | Edit name, target, deadline, icon, paused                     |
+| DELETE | `/api/goals/{id}`           | ✓    | Archive a goal (soft delete)                                  |
+| POST   | `/api/goals/{id}/contributions` | ✓ | Put money towards a goal (negative to withdraw; total can't go below 0) |
+| GET    | `/api/budget`               | ✓    | Monthly limit (null until set) and envelopes                  |
+| PUT    | `/api/budget`               | ✓    | Set the monthly limit (not below what envelopes hold)         |
+| POST   | `/api/budget/envelopes`     | ✓    | Add an envelope (needs a budget; must fit in it; unique name) |
+| PUT    | `/api/budget/envelopes/{id}` | ✓   | Edit an envelope                                              |
+| DELETE | `/api/budget/envelopes/{id}` | ✓   | Remove an envelope (soft delete)                              |
+| GET    | `/api/transactions`         | ✓    | The user's transactions, newest first, paged (`limit` ≤ 500, `cursor`); filters `from`, `to`, `type`, `category`, `accountId`, `q` |
+| GET    | `/api/transactions/{id}`    | ✓    | One transaction                                               |
+| POST   | `/api/transactions`         | ✓    | Create with an app-generated UUID `id` (same id again returns the existing row) |
+| PUT    | `/api/transactions/{id}`    | ✓    | Edit amount, type, category, note, `accountId`, date, `excludeFromBudget` |
+| DELETE | `/api/transactions/{id}`    | ✓    | Soft delete (204, also when already deleted)                  |
+| POST   | `/api/transactions/{id}/restore` | ✓ | Undo a delete                                                |
+| POST   | `/api/transactions/{id}/split` | ✓  | Replace with 2–10 parts that add up to the original           |
 | GET    | `/health`                   |      | Liveness: the API process is up                               |
 | GET    | `/health/ready`             |      | Readiness: Supabase Auth and the database are reachable       |
 | GET    | `/scalar`                   |      | API docs and test UI (Development only)                       |
@@ -89,6 +123,19 @@ Errors are [ProblemDetails](https://www.rfc-editor.org/rfc/rfc9457) JSON. Auth e
 Profile values: `monthlyIncome` is one of `under_25k`, `25k_50k`, `50k_100k`, `100k_150k`,
 `150k_plus`; `province` is one of `Punjab`, `Sindh`, `KPK`, `Balochistan`, `ICT`, `AJK`, `GB`;
 `filerStatus` is one of `filer`, `non_filer`, `unsure`.
+
+Transactions: `type` is `expense` or `income`; `amount` is positive (0.01 to 1,000,000,000);
+`category` is one of `Groceries`, `Fuel`, `Salary`, `Bills`, `Dining`, `Other`; `date` is a
+calendar date (`YYYY-MM-DD`, not in the future); `source` is `manual`, `scan` or `import`;
+`accountId` (required) is one of the user's linked, not removed, bank accounts. Another user's
+transaction or account answers 404. Error codes: `transaction_not_found` / `account_not_found`
+(404), `id_conflict` (409), `future_date` (400), `split_total_mismatch` (400),
+`invalid_split` (400), `invalid_account` (400). Bills, loans and transfers follow the same
+rules (owned by the user, soft delete, 404 for another user's row) with codes `bill_not_found`,
+`loan_not_found`, `transfer_not_found`, `same_account` and `remaining_exceeds_total`. An account's
+`balance` includes its transfers in and out. Goals and budget codes: `goal_not_found`,
+`insufficient_saved`, `envelope_not_found`, `no_budget`, `duplicate_envelope`, `over_budget`,
+`below_allocated`.
 
 ## Authentication model
 

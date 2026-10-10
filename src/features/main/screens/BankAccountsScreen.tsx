@@ -17,6 +17,8 @@ import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import { BankAccount } from '../../../store/slices/bankAccountsSlice';
 import { useBankAccounts } from './bankAccounts/useBankAccounts';
+import { ApiError } from '../../../api/client';
+import { SAVE_ERROR } from '../../../utils/validation';
 import { getBankById } from '../../../constants/pakistaniBanks';
 import { AnimatedModal } from '../../../components/AnimatedModal';
 
@@ -61,26 +63,34 @@ export const BankAccountsScreen = () => {
     }
 
     setIsUpdating(true);
-    setTimeout(() => {
-      bank.setBalance(selectedAccount.id, val);
-      setBalanceModalVisible(false);
-      setIsUpdating(false);
-      showToast(
-        `Balance for ${selectedAccount.bankName} updated to PKR ${val.toLocaleString()}`,
-        'success',
-        'Balance Updated',
-      );
-    }, 200);
+    bank
+      .setBalance(selectedAccount.id, val)
+      .then(() => {
+        setBalanceModalVisible(false);
+        showToast(
+          `Balance for ${selectedAccount.bankName} updated to PKR ${val.toLocaleString()}`,
+          'success',
+          'Balance Updated',
+        );
+      })
+      .catch(error => showToast(error instanceof ApiError ? error.message : SAVE_ERROR, 'error'))
+      .finally(() => setIsUpdating(false));
   };
 
   const handleConfirmRemove = (acc: BankAccount) => {
     setActionMenuVisible(false);
-    bank.remove(acc.id);
-    showToast(
-      `${acc.bankName} account removed successfully.`,
-      'success',
-      'Account Removed',
-    );
+    bank
+      .remove(acc.id)
+      .then(() =>
+        showToast(
+          isUser
+            ? `${acc.bankName} account removed. Its transactions are kept.`
+            : `${acc.bankName} account removed successfully.`,
+          'success',
+          'Account Removed',
+        ),
+      )
+      .catch(error => showToast(error instanceof ApiError ? error.message : SAVE_ERROR, 'error'));
   };
 
   return (

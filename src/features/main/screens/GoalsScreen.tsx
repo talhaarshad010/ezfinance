@@ -22,7 +22,9 @@ import {
   totalEarmarked,
 } from '../../../constants/savingsGoals';
 import { AnimatedModal } from '../../../components/AnimatedModal';
-import { useNetwork } from '../../../context/NetworkContext';
+import { usePlanningActions } from '../../../hooks/usePlanningActions';
+import { ApiError } from '../../../api/client';
+import { SAVE_ERROR } from '../../../utils/validation';
 import { EmptyState, Sample, TEAL } from '../newUser/shared';
 import { GoalSheet } from '../newUser/sheets';
 import { useSavingsGoals } from './goals/useSavingsGoals';
@@ -196,7 +198,7 @@ export const GoalsScreen = () => {
   const { showToast } = useToast();
 
   const { goals, isUser, userGoalOf, userMode } = useSavingsGoals();
-  const network = useNetwork();
+  const planning = usePlanningActions();
 
   const [overlay, setOverlay] = useState<GoalOverlay>(null);
   const [activeGoal, setActiveGoal] = useState<SavingsGoal | null>(null);
@@ -227,13 +229,17 @@ export const GoalsScreen = () => {
     return income > 0 ? Math.round(((income - spent) / income) * 100) : null;
   })();
 
-  /** Moves a user's goal deadline out by `days` (from today if it has none). */
-  const pushDeadline = (days: number) => {
+  const failed = (error: unknown) => showToast(error instanceof ApiError ? error.message : SAVE_ERROR, 'error');
+
+  /** Moves a user's goal deadline out by `days` (from today if it has none) and saves it. */
+  const pushDeadline = (days: number, text: string, title: string) => {
     const own = activeGoal ? userGoalOf(activeGoal.id) : undefined;
-    if (!own) return null;
+    if (!own) return;
     const deadline = addDays(own.deadline ?? addDays(new Date(), 365), days);
-    userMode.updateGoal(own.id, { deadline });
-    return deadline.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    planning
+      .updateGoal(own.id, { deadline })
+      .then(() => showToast(text, 'success', title))
+      .catch(failed);
   };
 
   const closeOverlay = () => setOverlay(null);
@@ -256,7 +262,10 @@ export const GoalsScreen = () => {
       color: theme.TEXT,
       onPress: () => {
         closeOverlay();
-        if (isUser) pushDeadline(60);
+        if (isUser) {
+          pushDeadline(60, `${activeGoal?.label} target extended by 60 days.`, 'Target Extended');
+          return;
+        }
         showToast(
           `${activeGoal?.label} target extended by 60 days.`,
           'success',
@@ -271,7 +280,10 @@ export const GoalsScreen = () => {
       onPress: () => {
         closeOverlay();
         // A user's lower pace comes from a later deadline (3 months out).
-        if (isUser) pushDeadline(90);
+        if (isUser) {
+          pushDeadline(90, 'Monthly pace lowered. Deadline pushed out 3 months.', 'Pace Reduced');
+          return;
+        }
         showToast(
           'Monthly pace target lowered. Deadline pushed out accordingly.',
           'info',
@@ -598,8 +610,11 @@ export const GoalsScreen = () => {
                   closeOverlay();
                   const own = activeGoal ? userGoalOf(activeGoal.id) : undefined;
                   if (own) {
-                    userMode.deleteGoal(own.id);
-                    network.record({ entity: 'goal', entityId: own.id, action: 'delete', label: `Archive goal · ${own.name}` });
+                    planning
+                      .archiveGoal(own.id)
+                      .then(() => showToast(`${own.name} archived.`, 'success', 'Goal Archived'))
+                      .catch(failed);
+                    return;
                   }
                   showToast(
                     `${activeGoal?.label} archived. Funds returned to Net Worth.`,

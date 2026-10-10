@@ -92,5 +92,95 @@ Content-Type: application/json
   "filerStatus": "filer"
 }
 
+### List linked accounts (with live balances)
+GET {{host}}/api/accounts
+Authorization: Bearer {{accessToken}}
+
+### Link an account (the app generates the id; only the last 4 digits are sent)
+@accountId = 3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f
+POST {{host}}/api/accounts
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "id": "{{accountId}}",
+  "bankId": "meezan",
+  "bankName": "Meezan Bank",
+  "accountTitle": "Salary Account",
+  "accountLast4": "4521",
+  "balance": 50000
+}
+
+### Set what an account holds now
+PUT {{host}}/api/accounts/{{accountId}}/balance
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{ "balance": 48000 }
+
+### Remove an account (soft delete)
+DELETE {{host}}/api/accounts/{{accountId}}
+Authorization: Bearer {{accessToken}}
+
+### List transactions (newest first; optional from, to, type, category, accountId, q, limit, cursor)
+GET {{host}}/api/transactions?limit=50
+Authorization: Bearer {{accessToken}}
+
+### Create a transaction (the app generates the id; sending it again returns the same row)
+@txId = 6f1c2a3e-8b4d-4c5e-9a7b-1d2e3f4a5b6c
+POST {{host}}/api/transactions
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "id": "{{txId}}",
+  "type": "expense",
+  "amount": 1200,
+  "category": "Groceries",
+  "note": "Imtiaz Supermarket",
+  "accountId": "{{accountId}}",
+  "date": "2026-10-10",
+  "source": "manual"
+}
+
+### Get one transaction
+GET {{host}}/api/transactions/{{txId}}
+Authorization: Bearer {{accessToken}}
+
+### Edit a transaction
+PUT {{host}}/api/transactions/{{txId}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "type": "expense",
+  "amount": 1500,
+  "category": "Groceries",
+  "note": "Imtiaz Supermarket",
+  "accountId": "{{accountId}}",
+  "date": "2026-10-10",
+  "excludeFromBudget": false
+}
+
+### Split a transaction (parts must add up to the amount)
+POST {{host}}/api/transactions/{{txId}}/split
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "parts": [
+    { "id": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "amount": 1000, "category": "Groceries" },
+    { "id": "1b2c3d4e-5f6a-4b7c-9d8e-0f1a2b3c4d5e", "amount": 500, "category": "Dining" }
+  ]
+}
+
+### Delete a transaction (soft delete)
+DELETE {{host}}/api/transactions/{{txId}}
+Authorization: Bearer {{accessToken}}
+
+### Undo a delete
+POST {{host}}/api/transactions/{{txId}}/restore
+Authorization: Bearer {{accessToken}}
+
 ### Readiness
 GET {{host}}/health/ready

@@ -31,12 +31,18 @@ interface AddRecurringBillSheetProps {
   visible: boolean;
   onClose: () => void;
   onSave: (bill: UpcomingBill) => void;
+  /** A signed-in user's linked accounts to pay from (replaces the sample payment methods). */
+  accounts?: { id: string; label: string }[];
+  /** Categories to pick from (replaces the sample ones). */
+  categories?: string[];
 }
 
 export function AddRecurringBillSheet({
   visible,
   onClose,
   onSave,
+  accounts,
+  categories,
 }: AddRecurringBillSheetProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -44,13 +50,21 @@ export function AddRecurringBillSheet({
   const [billerName, setBillerName] = useState('');
   const [amount, setAmount] = useState('');
   const [dueDay, setDueDay] = useState(1);
-  const [category, setCategory] = useState('Utilities');
+  const cats = categories ?? ['Utilities', 'Housing', 'Telecom', 'Transport', 'Entertainment', 'Health', 'Loan'];
+  const methods = React.useMemo(
+    () => (accounts ? accounts.map(a => a.label) : ['Cash', 'Meezan', 'HBL', 'Easypaisa', 'Alfalah']),
+    [accounts],
+  );
+  const [category, setCategory] = useState(categories ? (categories.includes('Bills') ? 'Bills' : cats[0]) : 'Utilities');
   const [remindDays, setRemindDays] = useState(3);
-  const [payMethod, setPayMethod] = useState('Meezan');
+  const [payMethod, setPayMethod] = useState(methods[0] ?? '');
+
+  // A newly linked account shows up (and is picked) without reopening the app.
+  React.useEffect(() => {
+    if (visible && !methods.includes(payMethod)) setPayMethod(methods[0] ?? '');
+  }, [visible, methods, payMethod]);
 
   const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'];
-  const cats = ['Utilities', 'Housing', 'Telecom', 'Transport', 'Entertainment', 'Health', 'Loan'];
-  const methods = ['Cash', 'Meezan', 'HBL', 'Easypaisa', 'Alfalah'];
 
   const tapKey = (k: string) => {
     if (k === '⌫') {
@@ -63,7 +77,7 @@ export function AddRecurringBillSheet({
   };
 
   const handleSave = () => {
-    if (!billerName.trim() || !amount) return;
+    if (!billerName.trim() || !(parseFloat(amount) > 0) || !payMethod) return;
     onSave({
       id: Date.now(),
       icon: category === 'Housing' ? 'home' : category === 'Utilities' ? 'zap' : 'clock',
@@ -73,6 +87,10 @@ export function AddRecurringBillSheet({
       tag: payMethod,
       tagColor: theme.ACTIVE,
       paid: false,
+      accountId: accounts?.find(a => a.label === payMethod)?.id,
+      dueDay,
+      category,
+      remindDaysBefore: remindDays,
     });
     setBillerName('');
     setAmount('');
@@ -216,7 +234,7 @@ export function AddRecurringBillSheet({
 
             {/* Payment Method */}
             <Text style={[styles.sectionLabel, { color: theme.MUTED, marginTop: 14 }]}>
-              PAYMENT METHOD
+              {accounts ? 'PAY FROM ACCOUNT' : 'PAYMENT METHOD'}
             </Text>
             <View style={styles.chipsWrap}>
               {methods.map(m => (
@@ -402,21 +420,29 @@ export function MarkAsPaidSheet({
   bill,
   onClose,
   onConfirmPaid,
+  accountName,
 }: {
   visible: boolean;
   bill: UpcomingBill | null;
   onClose: () => void;
   onConfirmPaid: (method: string) => void;
+  /** A signed-in user's bill: the account it's paid from (logs the payment there). */
+  accountName?: string;
 }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   if (!bill) return null;
 
-  const options = [
-    { label: 'Mark Paid via Cash', sub: 'Cash Wallet', icon: 'check', color: theme.GREEN },
-    { label: 'Mark Paid via Bank Account', sub: 'Meezan Bank', icon: 'briefcase', color: theme.ACTIVE },
-    { label: 'Snooze Reminder', sub: 'Postpone 3 days', icon: 'clock', color: theme.MUTED },
-  ];
+  const options = accountName
+    ? [
+        { label: `Paid from ${accountName}`, sub: 'Logs it as an expense in this account', icon: 'briefcase', color: theme.ACTIVE },
+        { label: 'Snooze Reminder', sub: 'Postpone 3 days', icon: 'clock', color: theme.MUTED },
+      ]
+    : [
+        { label: 'Mark Paid via Cash', sub: 'Cash Wallet', icon: 'check', color: theme.GREEN },
+        { label: 'Mark Paid via Bank Account', sub: 'Meezan Bank', icon: 'briefcase', color: theme.ACTIVE },
+        { label: 'Snooze Reminder', sub: 'Postpone 3 days', icon: 'clock', color: theme.MUTED },
+      ];
 
   return (
     <AnimatedModal visible={visible} transparent animationType="slide" onRequestClose={onClose}>

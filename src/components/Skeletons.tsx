@@ -110,7 +110,8 @@ function Screen({ children, title = 28, right = true }: { children: ReactNode; t
 
 // ── Home sub-tabs ────────────────────────────────────────────────────────────
 
-export function DashLiveSkeleton() {
+/** `checklist`: a signed-in user who still sees the Getting started card. */
+export function DashLiveSkeleton({ checklist }: { checklist?: boolean }) {
   const { theme } = useTheme();
   const metric = (
     <View style={[sk.metric, { backgroundColor: theme.isDark ? theme.CARD : '#FAFAF8' }]}>
@@ -122,6 +123,19 @@ export function DashLiveSkeleton() {
   );
   return (
     <Busy style={sk.stack12}>
+      {checklist && (
+        <View style={[sk.checklist, { backgroundColor: theme.HERO_BG }]}>
+          <Sk w={130} h={16} tone="#2A2A2E" style={sk.mb8} />
+          <Sk w={190} h={11} tone="#2A2A2E" style={sk.mb12} />
+          <Sk h={4} r={2} tone="#2A2A2E" style={sk.mb8} />
+          {[0, 1, 2].map(i => (
+            <Row key={i} style={sk.pad10}>
+              <Sk w={22} h={22} r={100} tone="#2A2A2E" />
+              <Sk w="50%" h={13} tone="#2A2A2E" />
+            </Row>
+          ))}
+        </View>
+      )}
       <Card pad={14}>
         <Row>
           <Sk w={18} h={18} r={100} />
@@ -434,6 +448,127 @@ export function AISkeleton() {
   );
 }
 
+/** Dark summary card shared by the side-menu screens (amount + three stats). */
+function HeroCard() {
+  const { theme } = useTheme();
+  return (
+    <View style={[sk.heroShort, { backgroundColor: theme.HERO_BG }]}>
+      <Sk w={170} h={10} tone="#2A2A2E" style={sk.mb12} />
+      <Sk w={190} h={44} r={10} tone="#2A2A2E" />
+      <Sk w={32} h={11} tone="#2A2A2E" style={sk.mt8} />
+      <Row gap={32} style={sk.pushDown}>
+        {[0, 1, 2].map(i => (
+          <View key={i} style={sk.col6}>
+            <Sk w="60%" h={9} tone="#2A2A2E" />
+            <Sk w="85%" h={15} tone="#2A2A2E" />
+          </View>
+        ))}
+      </Row>
+    </View>
+  );
+}
+
+const SectionLabel = () => (
+  <Row style={sk.sectionLabel}>
+    <Sk w={140} h={10} />
+    <Sk w={70} h={10} />
+  </Row>
+);
+
+export function AnalyticsSkeleton() {
+  return (
+    <Screen right={false}>
+      <View style={sk.screenBody}>
+        <Row gap={8}>
+          {[64, 76, 62, 66].map((w, i) => (
+            <Sk key={i} w={w} h={32} r={100} />
+          ))}
+        </Row>
+        <HeroCard />
+        <Card r={24} pad={18}>
+          <Row style={sk.spaceBetween}>
+            <Sk w={120} h={14} />
+            <Sk w={80} h={10} />
+          </Row>
+          <Sk h={110} r={12} style={sk.mb10} />
+          <Row style={sk.spaceBetweenFlat}>
+            {[0, 1, 2, 3].map(i => (
+              <Sk key={i} w={40} h={9} />
+            ))}
+          </Row>
+        </Card>
+        <Card r={24} pad={18}>
+          <Row style={sk.spaceBetween}>
+            <Sk w={150} h={14} />
+            <Sk w={70} h={10} />
+          </Row>
+          {[0, 1, 2].map(i => (
+            <Row key={i} style={sk.mb16}>
+              <Sk w={34} h={34} r={10} />
+              <View style={sk.col6}>
+                <Row style={sk.spaceBetweenFlat}>
+                  <Sk w="40%" h={12} />
+                  <Sk w="30%" h={12} />
+                </Row>
+                <Sk h={5} r={3} />
+              </View>
+            </Row>
+          ))}
+        </Card>
+      </View>
+    </Screen>
+  );
+}
+
+export function BudgetPlannerSkeleton() {
+  return (
+    <Screen>
+      <View style={sk.screenBody}>
+        <HeroCard />
+        <SectionLabel />
+        {[0, 1, 2].map(i => (
+          <Card key={i} r={22} pad={18}>
+            <Row style={sk.mb12}>
+              <Sk w={38} h={38} r={12} />
+              <Lines a="45%" b="30%" />
+            </Row>
+            <Sk w="50%" h={16} style={sk.mb10} />
+            <Sk h={6} r={3} style={sk.mb10} />
+            <Row style={sk.spaceBetweenFlat}>
+              <Sk w="28%" h={10} />
+              <Sk w="24%" h={10} />
+            </Row>
+          </Card>
+        ))}
+      </View>
+    </Screen>
+  );
+}
+
+export function BankAccountsSkeleton() {
+  return (
+    <Screen>
+      <View style={sk.screenBody}>
+        <HeroCard />
+        <SectionLabel />
+        {[0, 1].map(i => (
+          <Card key={i} r={22} pad={18}>
+            <Row style={sk.mb12}>
+              <Sk w={40} h={40} r={12} />
+              <Lines a="45%" b="60%" />
+            </Row>
+            <Sk w="55%" h={20} style={sk.mb12} />
+            <Row gap={8}>
+              <Sk w={130} h={32} r={100} />
+              <Sk w={100} h={32} r={100} />
+            </Row>
+          </Card>
+        ))}
+      </View>
+    </Screen>
+  );
+}
+
 /** New-user screens: header + empty-state card shape (icon, title, line, 3 samples, button). */
 export function NewUserSkeleton({ dashboard }: { dashboard?: boolean }) {
   const { theme } = useTheme();
@@ -504,6 +639,10 @@ const sk = StyleSheet.create({
   stack10: { gap: 10 },
   metric: { flex: 1, borderRadius: 24, padding: 15, minHeight: 158 },
   hero: { borderRadius: 28, padding: 24, height: 226 },
+  heroShort: { borderRadius: 28, padding: 24, height: 214 },
+  checklist: { borderRadius: 24, paddingTop: 18, paddingHorizontal: 18, paddingBottom: 8 },
+  sectionLabel: { justifyContent: 'space-between', paddingHorizontal: 4, marginTop: 4 },
+  spaceBetweenFlat: { justifyContent: 'space-between' },
   col6: { flex: 1, gap: 6 },
   col7: { gap: 7 },
   flex1: { flex: 1 },

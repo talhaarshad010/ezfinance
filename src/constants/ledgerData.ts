@@ -7,7 +7,8 @@
 export type TxType = 'income' | 'expense' | 'transfer';
 
 export interface LedgerTransaction {
-  id: number;
+  /** Sample rows use numbers; a signed-in user's rows use their UUID. */
+  id: number | string;
   icon: string;
   label: string;
   account: string;
@@ -18,6 +19,8 @@ export interface LedgerTransaction {
   type: TxType;
   smsRef: string;
   status: string;
+  /** Left out of budget totals (a signed-in user's choice). */
+  excluded?: boolean;
 }
 
 export const TRANSACTIONS: LedgerTransaction[] = [
@@ -65,7 +68,8 @@ export const RECURRING = [
 ];
 
 export interface UpcomingBill {
-  id: number;
+  /** Sample bills use numbers; a signed-in user's bills use their UUID. */
+  id: number | string;
   icon: string;
   label: string;
   amount: number;
@@ -74,6 +78,11 @@ export interface UpcomingBill {
   tag: string;
   tagColor: string;
   paid: boolean;
+  /** A signed-in user's bill: the account it's paid from, its day of the month and category. */
+  accountId?: string;
+  dueDay?: number;
+  category?: string;
+  remindDaysBefore?: number;
 }
 
 export const UPCOMING_BILLS: UpcomingBill[] = [
@@ -128,7 +137,8 @@ export const LINKED_ACCOUNTS = [
 /* ── Debts ── */
 
 export interface DebtEntry {
-  id: number;
+  /** Sample entries use numbers; a signed-in user's loans use their UUID. */
+  id: number | string;
   name: string;
   lender: string;
   totalAmount: number;

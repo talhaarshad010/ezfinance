@@ -19,6 +19,8 @@ import { BudgetCategory as IBudgetCategory } from '../../../store/slices/budgetS
 import { AnimatedModal } from '../../../components/AnimatedModal';
 import { EmptyState } from '../newUser/shared';
 import { useBudgetPlan } from './budget/useBudgetPlan';
+import { ApiError } from '../../../api/client';
+import { SAVE_ERROR } from '../../../utils/validation';
 
 const MONTHS = [
   'JANUARY',
@@ -148,13 +150,15 @@ export const BudgetPlannerScreen = () => {
 
   const handleDeleteCategory = (id: string) => {
     setMenuVisible(false);
-    plan.remove(id);
-    showToast('Category envelope deleted successfully.', 'success', 'Deleted');
+    plan
+      .remove(id)
+      .then(() => showToast('Category envelope deleted successfully.', 'success', 'Deleted'))
+      .catch(error => showToast(error instanceof ApiError ? error.message : SAVE_ERROR, 'error'));
   };
 
   const handleUpdateTotalBudget = () => {
     const val = parseFloat(newBudgetInput);
-    if (isNaN(val) || val < 0) {
+    if (isNaN(val) || val <= 0) {
       showToast('Please enter a valid budget amount.', 'error', 'Invalid Input');
       return;
     }
@@ -168,13 +172,13 @@ export const BudgetPlannerScreen = () => {
       return;
     }
 
-    plan.setTotal(val);
-    setEditBudgetVisible(false);
-    showToast(
-      `Total monthly budget updated to PKR ${val.toLocaleString()}`,
-      'success',
-      'Budget Updated',
-    );
+    plan
+      .setTotal(val)
+      .then(() => {
+        setEditBudgetVisible(false);
+        showToast(`Total monthly budget updated to PKR ${val.toLocaleString()}`, 'success', 'Budget Updated');
+      })
+      .catch(error => showToast(error instanceof ApiError ? error.message : SAVE_ERROR, 'error'));
   };
 
   return (

@@ -19,7 +19,11 @@ import {
 } from '../../../store/slices/bankAccountsSlice';
 import { useToast } from '../../../context/ToastContext';
 import { ScreenBackHeader } from '../../../components/ScreenBackHeader';
-import { accountLabel, useBankAccounts } from './bankAccounts/useBankAccounts';
+import { TRANSFER_PREFIX, useBankAccounts } from './bankAccounts/useBankAccounts';
+import { useLedgerActions } from '../../../hooks/useLedgerActions';
+import { useTransactionActions } from '../../../hooks/useTransactionActions';
+import { ApiError } from '../../../api/client';
+import { SAVE_ERROR } from '../../../utils/validation';
 import { getBankById } from '../../../constants/pakistaniBanks';
 
 const AccountDetailScreen = () => {
@@ -32,13 +36,15 @@ const AccountDetailScreen = () => {
   // The user's own account and the transactions logged to it, or the sample account.
   const bank = useBankAccounts();
   const { isUser, userMode } = bank;
+  const txActions = useTransactionActions();
+  const ledger = useLedgerActions();
   const account = bank.accounts.find(a => a.id === accountId);
   const transactions = bank.transactionsOf(accountId);
 
   // A user adds a transaction with the regular sheet, already set to this account.
   const addTransaction = () =>
     isUser && account
-      ? userMode.openTxSheet({ type: 'expense', account: accountLabel(account), source: 'manual' })
+      ? userMode.openTxSheet({ type: 'expense', accountId: account.id, source: 'manual' })
       : navigation.navigate('AddTransaction', { accountId });
   const [refreshing, setRefreshing] = useState(false);
 
@@ -59,10 +65,33 @@ const AccountDetailScreen = () => {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
+            if (isUser && tx.id.startsWith(TRANSFER_PREFIX)) {
+              ledger
+                .deleteTransfer(tx.id.slice(TRANSFER_PREFIX.length))
+                .then(removed =>
+                  showToast('Transfer deleted', 'info', undefined, 5000, {
+                    label: 'Undo',
+                    onPress: () => {
+                      ledger.restoreTransfer(removed).catch(() => showToast(SAVE_ERROR, 'error'));
+                    },
+                  }),
+                )
+                .catch(e => showToast(e instanceof ApiError ? e.message : SAVE_ERROR, 'error'));
+              return;
+            }
             if (isUser) {
               // The balance follows from the remaining transactions.
-              userMode.deleteTx(Number(tx.id));
-              showToast('Transaction deleted', 'success', 'Done');
+              txActions
+                .remove(tx.id)
+                .then(({ tx: removed, index }) =>
+                  showToast('Transaction deleted', 'info', undefined, 5000, {
+                    label: 'Undo',
+                    onPress: () => {
+                      txActions.restore(removed, index).catch(() => showToast(SAVE_ERROR, 'error'));
+                    },
+                  }),
+                )
+                .catch(e => showToast(e instanceof ApiError ? e.message : SAVE_ERROR, 'error'));
               return;
             }
             dispatch(removeTransactionAction({ accountId, transactionId: tx.id }));

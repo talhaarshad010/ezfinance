@@ -14,6 +14,9 @@ import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import { AMBER } from '../../../constants/savingsGoals';
 import { useSavingsGoals } from './goals/useSavingsGoals';
+import { usePlanningActions } from '../../../hooks/usePlanningActions';
+import { ApiError } from '../../../api/client';
+import { SAVE_ERROR } from '../../../utils/validation';
 
 export const PauseGoalScreen = () => {
   const navigation = useNavigation<any>();
@@ -22,7 +25,8 @@ export const PauseGoalScreen = () => {
   const { theme } = useTheme();
   const { showToast } = useToast();
 
-  const { goals, userGoalOf, userMode } = useSavingsGoals();
+  const { goals, userGoalOf } = useSavingsGoals();
+  const planning = usePlanningActions();
   const goalId = route.params?.goalId ?? goals[0]?.id;
   const goal = goals.find(g => g.id === goalId) ?? goals[0];
   const isPaused = goal?.status === 'paused';
@@ -49,7 +53,20 @@ export const PauseGoalScreen = () => {
     if (!selected) return;
     const chosen = options.find(o => o.id === selected);
     const own = userGoalOf(goal.id);
-    if (own) userMode.updateGoal(own.id, { paused: !isPaused });
+    if (own) {
+      planning
+        .updateGoal(own.id, { paused: !isPaused })
+        .then(() => {
+          showToast(
+            isPaused ? `${goal.label} resumed.` : `${goal.label} paused — ${chosen?.label}. Progress kept.`,
+            'success',
+            isPaused ? 'Goal Resumed' : 'Goal Paused',
+          );
+          navigation.goBack();
+        })
+        .catch(error => showToast(error instanceof ApiError ? error.message : SAVE_ERROR, 'error'));
+      return;
+    }
     showToast(
       isPaused
         ? `${goal.label} resumed. Contributions restart next cycle.`

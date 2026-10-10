@@ -5,11 +5,16 @@ import { useTheme } from '../../../context/ThemeContext';
 import { useNetwork } from '../../../context/NetworkContext';
 import { TxSheetPreset, TxType, useUserMode } from '../../../context/UserModeContext';
 import { CalendarPicker } from '../../../components';
-import { accountLabel } from '../screens/bankAccounts/useBankAccounts';
+import { accountLabel, accountNameOf } from '../screens/bankAccounts/useBankAccounts';
+import { navigateTo } from '../../../navigation/navigationRef';
 import { fullAmt } from '../../../utils/format';
-import { MSG, isFuture, parseAmount, startOfToday, useFormErrors } from '../../../utils/validation';
+import { MSG, SAVE_ERROR, isFuture, parseAmount, startOfToday, useFormErrors } from '../../../utils/validation';
+import { useToast } from '../../../context/ToastContext';
+import { ApiError } from '../../../api/client';
+import { useTransactionActions } from '../../../hooks/useTransactionActions';
+import { useLedgerActions } from '../../../hooks/useLedgerActions';
+import { usePlanningActions } from '../../../hooks/usePlanningActions';
 import {
-  ACCOUNTS,
   AmountInput,
   CAT_META,
   CATS,
@@ -20,7 +25,6 @@ import {
   TEAL,
   TextField,
   TextLink,
-  useSave,
 } from './shared';
 
 const daysAgo = (n: number) => {
@@ -35,77 +39,152 @@ const longDate = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', mo
 
 function TransactionForm({ preset }: { preset: TxSheetPreset }) {
   const { theme } = useTheme();
-  const { closeTxSheet, addTx, updateTx, bankAccounts } = useUserMode();
+  const { closeTxSheet, bankAccounts } = useUserMode();
+  const txActions = useTransactionActions();
+  const { showToast } = useToast();
   const [type, setType] = useState<TxType>(preset.type ?? 'expense');
   const [cat, setCat] = useState(preset.category ?? '');
   const [amount, setAmount] = useState(preset.amount ? String(preset.amount) : '');
   const [note, setNote] = useState(preset.note ?? '');
-  const [account, setAccount] = useState(preset.account ?? (preset.source === 'import' ? 'HBL Debit' : ''));
+  // The account is picked by its name; with a single linked account it's chosen for you.
+  const [account, setAccount] = useState(
+    preset.accountId
+      ? accountNameOf(preset.accountId, bankAccounts)
+      : bankAccounts.length === 1
+      ? accountLabel(bankAccounts[0])
+      : '',
+  );
   const [date, setDate] = useState<Date>(preset.date ?? startOfToday());
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const { save, saving } = useSave();
+  const [saving, setSaving] = useState(false);
+  // Transfer: money moved between two of the user's linked accounts (not income or spending).
+  const [isTransfer, setIsTransfer] = useState(false);
+  const [toAccount, setToAccount] = useState('');
+  const ledger = useLedgerActions();
 
-  const form = useFormErrors<'amount' | 'category' | 'account' | 'date'>(() => ({
+  const form = useFormErrors<'amount' | 'category' | 'account' | 'toAccount' | 'date'>(() => ({
     amount: parseAmount(amount) ? undefined : MSG.amount,
-    category: cat ? undefined : MSG.category,
+    category: isTransfer || cat ? undefined : MSG.category,
     account: account ? undefined : MSG.account,
+    toAccount: !isTransfer ? undefined : !toAccount ? MSG.account : toAccount === account ? MSG.sameAccount : undefined,
     date: isFuture(date) ? MSG.futureDate : undefined,
   }));
 
-  // The user's own accounts (plus Cash) once they've added any; otherwise the starter list.
+  // Only the user's linked accounts (plus a removed one an older transaction still points at).
   const accountChoices = (() => {
-    const own = bankAccounts.map(accountLabel);
-    const base = own.length ? ['Cash', ...own] : ACCOUNTS;
+    const base = bankAccounts.map(accountLabel);
     return account && !base.includes(account) ? [...base, account] : base;
   })();
+  const accountIdOf = (name: string): string | null => {
+    const linked = bankAccounts.find(a => accountLabel(a) === name);
+    return linked ? linked.id : preset.accountId ?? null;
+  };
 
   const dateChoice = sameDay(date, daysAgo(0)) ? 'Today' : sameDay(date, daysAgo(1)) ? 'Yesterday' : longDate(date);
 
+  async function submitTransfer() {
+    const fromAccountId = accountIdOf(account);
+    const toAccountId = accountIdOf(toAccount);
+    if (!fromAccountId || !toAccountId) return;
+    setSaving(true);
+    try {
+      await ledger.addTransfer({ fromAccountId, toAccountId, amount: parseAmount(amount)!, note: note.trim() || undefined, date });
+      closeTxSheet();
+      showToast(`Moved PKR ${fullAmt(parseAmount(amount)!)} from ${account} to ${toAccount}`, 'success');
+    } catch (error) {
+      showToast(error instanceof ApiError ? error.message : SAVE_ERROR, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function submit() {
     if (saving) return;
-    form.submit(() =>
-      save(() => {
-        const data = { type, category: cat, amount: parseAmount(amount)!, note: note.trim() || undefined, account, date };
-        const label = `${data.note ?? data.category} · PKR ${fullAmt(data.amount)}`;
+    form.submit(async () => {
+      if (isTransfer) {
+        await submitTransfer();
+        return;
+      }
+      const accountId = accountIdOf(account);
+      if (!accountId) return;
+      const data = {
+        type,
+        category: cat,
+        amount: parseAmount(amount)!,
+        note: note.trim() || undefined,
+        accountId,
+        date,
+      };
+      setSaving(true);
+      try {
+        // The list updates at once; the sheet closes when the server has it (or it's queued offline).
+        const result = preset.editId
+          ? await txActions.update(preset.editId, data)
+          : (await txActions.create({ ...data, source: preset.source ?? 'manual' })).result;
         closeTxSheet();
-        if (preset.editId) {
-          updateTx(preset.editId, data);
-          return { entity: 'tx', entityId: preset.editId, action: 'update', label, payload: data };
-        }
-        return { entity: 'tx', entityId: addTx(data), action: 'create', label, payload: data };
-      }, preset.editId ? 'Changes saved' : type === 'income' ? 'Income added' : 'Transaction added'),
-    );
+        const text = preset.editId ? 'Changes saved' : type === 'income' ? 'Income added' : 'Transaction added';
+        showToast(
+          result === 'queued' ? `${text}. It'll sync when you're back online.` : text,
+          result === 'queued' ? 'info' : 'success',
+        );
+      } catch (error) {
+        showToast(error instanceof ApiError ? error.message : SAVE_ERROR, 'error');
+      } finally {
+        setSaving(false);
+      }
+    });
   }
 
   return (
     <>
       <View style={[st.segment, { backgroundColor: theme.BG }]}>
-        {(['expense', 'income'] as TxType[]).map(t => (
-          <TouchableOpacity
-            key={t}
-            activeOpacity={0.8}
-            onPress={() => {
-              setType(t);
-              if (t === 'income' && !cat) setCat('Salary');
-              else if (t === 'expense' && cat === 'Salary') setCat('');
-            }}
-            style={[st.segBtn, { backgroundColor: type === t ? theme.TEXT : 'transparent' }]}
-          >
-            <Text style={[st.segText, { color: type === t ? theme.BG : theme.MUTED }]}>
-              {t === 'expense' ? 'Expense' : 'Income'}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        {/* Transfers can't be made by editing a transaction. */}
+        {((preset.editId ? ['expense', 'income'] : ['expense', 'income', 'transfer']) as (TxType | 'transfer')[]).map(t => {
+          const on = t === 'transfer' ? isTransfer : !isTransfer && type === t;
+          return (
+            <TouchableOpacity
+              key={t}
+              activeOpacity={0.8}
+              onPress={() => {
+                if (t === 'transfer') {
+                  setIsTransfer(true);
+                  return;
+                }
+                setIsTransfer(false);
+                setType(t);
+                if (t === 'income' && !cat) setCat('Salary');
+                else if (t === 'expense' && cat === 'Salary') setCat('');
+              }}
+              style={[st.segBtn, { backgroundColor: on ? theme.TEXT : 'transparent' }]}
+            >
+              <Text style={[st.segText, { color: on ? theme.BG : theme.MUTED }]}>
+                {t === 'expense' ? 'Expense' : t === 'income' ? 'Income' : 'Transfer'}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
       <Field error={form.errors.amount}>
         <AmountInput value={amount} onChange={setAmount} autoFocus={!preset.amount} />
       </Field>
-      <Field label="Category" error={form.errors.category}>
-        <Chips options={CATS} value={cat} onChange={setCat} colorOf={c => CAT_META[c]?.color} iconOf={c => CAT_META[c]?.icon} />
-      </Field>
-      <Field label="Account" error={form.errors.account}>
+      {!isTransfer && (
+        <Field label="Category" error={form.errors.category}>
+          <Chips options={CATS} value={cat} onChange={setCat} colorOf={c => CAT_META[c]?.color} iconOf={c => CAT_META[c]?.icon} />
+        </Field>
+      )}
+      <Field label={isTransfer ? 'From account' : 'Account'} error={form.errors.account}>
         <Chips options={accountChoices} value={account} onChange={setAccount} />
       </Field>
+      {isTransfer &&
+        (accountChoices.length < 2 ? (
+          <Text style={[st.transferHint, { color: theme.MUTED }]}>
+            Link a second bank account to move money between your accounts.
+          </Text>
+        ) : (
+          <Field label="To account" error={form.errors.toAccount}>
+            <Chips options={accountChoices.filter(a => a !== account)} value={toAccount} onChange={setToAccount} />
+          </Field>
+        ))}
       <Field label="Date" error={form.errors.date}>
         <Chips
           options={['Today', 'Yesterday', dateChoice === 'Today' || dateChoice === 'Yesterday' ? 'Pick a date' : dateChoice]}
@@ -121,7 +200,7 @@ function TransactionForm({ preset }: { preset: TxSheetPreset }) {
         <TextField value={note} onChangeText={setNote} placeholder="e.g. Imtiaz Supermarket" maxLength={60} />
       </Field>
       <PrimaryButton
-        label={saving ? 'Saving…' : preset.editId ? 'Save changes' : 'Save transaction'}
+        label={saving ? 'Saving…' : preset.editId ? 'Save changes' : isTransfer ? 'Move money' : 'Save transaction'}
         dim={!form.valid}
         disabled={saving}
         onPress={submit}
@@ -141,8 +220,34 @@ function TransactionForm({ preset }: { preset: TxSheetPreset }) {
 }
 
 /** Global add / edit transaction sheet (opened from empty states, the first-action sheet, edit). */
+/** Every transaction belongs to a linked bank account, so logging one starts by linking an account. */
+function LinkAccountFirst() {
+  const { theme } = useTheme();
+  const { closeTxSheet } = useUserMode();
+  return (
+    <View style={st.linkFirst}>
+      <View style={[st.linkFirstIcon, { backgroundColor: `${TEAL}1c` }]}>
+        <Feather name="credit-card" size={22} color={TEAL} />
+      </View>
+      <Text style={[st.linkFirstTitle, { color: theme.TEXT }]}>Link a bank account first</Text>
+      <Text style={[st.linkFirstLine, { color: theme.MUTED }]}>
+        Every transaction is saved to the account it moved through, so its balance and your net worth stay right.
+      </Text>
+      <View style={st.linkFirstBtn}>
+        <PrimaryButton
+          label="Link a bank account"
+          onPress={() => {
+            closeTxSheet();
+            setTimeout(() => navigateTo('AddAccount'), 280);
+          }}
+        />
+      </View>
+    </View>
+  );
+}
+
 export function TransactionSheetHost() {
-  const { txSheet, closeTxSheet } = useUserMode();
+  const { txSheet, closeTxSheet, bankAccounts } = useUserMode();
   const p = txSheet.preset ?? {};
   // Fresh form state every time the sheet opens.
   const [formKey, setFormKey] = useState(0);
@@ -164,7 +269,7 @@ export function TransactionSheetHost() {
 
   return (
     <Sheet visible={txSheet.open} onClose={closeTxSheet} title={p.editId ? 'Edit transaction' : 'New transaction'} sub={sub}>
-      <TransactionForm key={formKey} preset={p} />
+      {bankAccounts.length === 0 && !p.editId ? <LinkAccountFirst /> : <TransactionForm key={formKey} preset={p} />}
     </Sheet>
   );
 }
@@ -274,9 +379,11 @@ export function FirstActionSheetHost() {
 // ── Budget + goal ────────────────────────────────────────────────────────────
 
 export function BudgetSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const { budget, setBudget } = useUserMode();
+  const { budget } = useUserMode();
+  const planning = usePlanningActions();
+  const { showToast } = useToast();
   const [v, setV] = useState(budget ? String(budget) : '');
-  const { save, saving } = useSave();
+  const [saving, setSaving] = useState(false);
   const form = useFormErrors<'amount'>(() => ({ amount: parseAmount(v) ? undefined : MSG.amount }));
   return (
     <Sheet visible={visible} onClose={onClose} title="Set a monthly budget" sub="How much do you want to spend this month?">
@@ -289,14 +396,18 @@ export function BudgetSheet({ visible, onClose }: { visible: boolean; onClose: (
         disabled={saving}
         onPress={() =>
           !saving &&
-          form.submit(() =>
-            save(() => {
-              const n = parseAmount(v)!;
-              setBudget(n);
+          form.submit(async () => {
+            setSaving(true);
+            try {
+              await planning.setMonthlyBudget(parseAmount(v)!);
               onClose();
-              return { entity: 'budget', entityId: 'monthly', action: budget ? 'update' : 'create', label: `Monthly budget · PKR ${fullAmt(n)}`, payload: n };
-            }, 'Budget saved'),
-          )
+              showToast('Budget saved', 'success');
+            } catch (error) {
+              showToast(error instanceof ApiError ? error.message : SAVE_ERROR, 'error');
+            } finally {
+              setSaving(false);
+            }
+          })
         }
       />
     </Sheet>
@@ -318,13 +429,14 @@ export function GoalSheet({
   preset?: { name: string; target: number };
   onClose: () => void;
 }) {
-  const { addGoal } = useUserMode();
   const [name, setName] = useState(preset?.name ?? '');
   const [target, setTarget] = useState(preset ? String(preset.target) : '');
   const [deadline, setDeadline] = useState<Date | null>(null);
   const [deadlineLabel, setDeadlineLabel] = useState('');
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const { save, saving } = useSave();
+  const planning = usePlanningActions();
+  const { showToast } = useToast();
+  const [saving, setSaving] = useState(false);
 
   // A new preset (e.g. tapping "Umrah") refills the form.
   useEffect(() => {
@@ -372,13 +484,18 @@ export function GoalSheet({
         disabled={saving}
         onPress={() =>
           !saving &&
-          form.submit(() =>
-            save(() => {
-              const g = { name: name.trim(), target: parseAmount(target)!, deadline: deadline! };
+          form.submit(async () => {
+            setSaving(true);
+            try {
+              await planning.createGoal({ name: name.trim(), target: parseAmount(target)!, deadline: deadline! });
               onClose();
-              return { entity: 'goal', entityId: addGoal(g), action: 'create', label: `Goal · ${g.name}`, payload: g };
-            }, 'Goal created'),
-          )
+              showToast('Goal created', 'success');
+            } catch (error) {
+              showToast(error instanceof ApiError ? error.message : SAVE_ERROR, 'error');
+            } finally {
+              setSaving(false);
+            }
+          })
         }
       />
       <CalendarPicker
@@ -396,6 +513,12 @@ export function GoalSheet({
 }
 
 const st = StyleSheet.create({
+  linkFirst: { alignItems: 'center', paddingTop: 6 },
+  transferHint: { fontSize: 12, lineHeight: 17, marginBottom: 16 },
+  linkFirstBtn: { alignSelf: 'stretch' },
+  linkFirstIcon: { width: 52, height: 52, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  linkFirstTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.4, marginBottom: 6 },
+  linkFirstLine: { fontSize: 13, lineHeight: 19, textAlign: 'center', marginBottom: 20, paddingHorizontal: 8 },
   flex: { flex: 1 },
   segment: { flexDirection: 'row', borderRadius: 100, padding: 3, gap: 3, marginBottom: 14 },
   segBtn: { flex: 1, height: 36, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },

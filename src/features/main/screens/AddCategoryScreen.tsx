@@ -19,6 +19,8 @@ import { BudgetCategory } from '../../../store/slices/budgetSlice';
 import { AnimatedModal } from '../../../components/AnimatedModal';
 import { CAT_META, CATS } from '../newUser/shared';
 import { useBudgetPlan } from './budget/useBudgetPlan';
+import { ApiError } from '../../../api/client';
+import { SAVE_ERROR } from '../../../utils/validation';
 
 // A user's envelope counts spending whose category has the same name, so suggest those names.
 const SPENDING_CATS = CATS.filter(c => c !== 'Salary');
@@ -103,33 +105,29 @@ export const AddCategoryScreen = () => {
     }
 
     setIsSaving(true);
-    setTimeout(() => {
+    try {
+      const categoryData: BudgetCategory = {
+        id: editingCategory?.id ?? 'cat_' + Date.now(),
+        name: name.trim(),
+        limit: parseFloat(limit),
+        icon,
+        color,
+        isMain: editingCategory?.isMain || false,
+      };
+      // A user's envelope is saved on the server (it gets its own id there).
       if (editingCategory) {
-        const categoryData: BudgetCategory = {
-          id: editingCategory.id,
-          name: name.trim(),
-          limit: parseFloat(limit),
-          icon,
-          color,
-          isMain: editingCategory.isMain || false,
-        };
-        plan.update(categoryData);
+        await plan.update(categoryData);
         showToast('Category updated successfully.', 'success', 'Success');
       } else {
-        const categoryData: BudgetCategory = {
-          id: 'cat_' + Date.now(),
-          name: name.trim(),
-          limit: parseFloat(limit),
-          icon,
-          color,
-          isMain: false,
-        };
-        plan.add(categoryData);
+        await plan.add(categoryData);
         showToast('New category added successfully.', 'success', 'Success');
       }
-      setIsSaving(false);
       navigation.goBack();
-    }, 200);
+    } catch (error) {
+      showToast(error instanceof ApiError ? error.message : SAVE_ERROR, 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (

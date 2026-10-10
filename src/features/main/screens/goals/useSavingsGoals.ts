@@ -50,6 +50,6 @@ export function useSavingsGoals() {
     () => (isUser ? userMode.goals.map(toSavingsGoal) : SAVINGS_GOALS),
     [isUser, userMode.goals],
   );
-  const userGoalOf = (id: number) => (isUser ? userMode.goals.find(g => g.id === id) : undefined);
+  const userGoalOf = (id: number | string) => (isUser ? userMode.goals.find(g => g.id === id) : undefined);
   return { goals, isUser, userGoalOf, userMode };
 }

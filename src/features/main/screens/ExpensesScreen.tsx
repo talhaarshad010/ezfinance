@@ -7,6 +7,7 @@ import {
   TextInput,
   StyleSheet,
   StatusBar,
+  RefreshControl,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -43,8 +44,16 @@ import {
   MarkAsPaidSheet,
 } from './expenses/RecurringSheets';
 import StatementImportModal from './expenses/StatementImportModal';
-import { UserTx, useUserMode } from '../../../context/UserModeContext';
-import { useNetwork } from '../../../context/NetworkContext';
+import { UserBill, UserTransfer, UserTx, useUserMode } from '../../../context/UserModeContext';
+import { useLedgerActions } from '../../../hooks/useLedgerActions';
+import { useAppSelector } from '../../../store/hooks';
+import { monthlyIncomeOf } from '../../../utils/income';
+import { navigateTo } from '../../../navigation/navigationRef';
+import type { BankAccount } from '../../../store/slices/bankAccountsSlice';
+import { accountLabel, accountNameOf, useBankAccounts } from './bankAccounts/useBankAccounts';
+import { useTransactionActions, SaveResult } from '../../../hooks/useTransactionActions';
+import { ApiError } from '../../../api/client';
+import { SAVE_ERROR } from '../../../utils/validation';
 import { CAT_META, CATS, EmptyState } from '../newUser/shared';
 
 type LedgerTab = 'transactions' | 'recurring' | 'debts';
@@ -94,12 +103,58 @@ const isThisMonth = (d: Date) => {
   return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
 };
 
+const DAY_MS = 86400000;
+const shortDay = (d: Date) => d.toLocaleString('en-GB', { day: '2-digit', month: 'short' });
+
+/** A user's monthly bill, shaped for the Repeated tab: next due date, days to go, paid this month. */
+function toUpcoming(b: UserBill, accounts: BankAccount[], tint: string): UpcomingBill {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dueIn = (y: number, m: number) => new Date(y, m, Math.min(b.dueDay, new Date(y, m + 1, 0).getDate()));
+  const paid =
+    !!b.lastPaidOn && b.lastPaidOn.getFullYear() === today.getFullYear() && b.lastPaidOn.getMonth() === today.getMonth();
+  const next = paid ? dueIn(today.getFullYear(), today.getMonth() + 1) : dueIn(today.getFullYear(), today.getMonth());
+  return {
+    id: b.id,
+    icon: (CAT_META[b.category] ?? CAT_META.Other).icon,
+    label: b.name,
+    amount: b.amount,
+    date: shortDay(next),
+    dueIn: Math.round((next.getTime() - today.getTime()) / DAY_MS),
+    tag: accountNameOf(b.accountId, accounts),
+    tagColor: tint,
+    paid,
+    accountId: b.accountId,
+    dueDay: b.dueDay,
+    category: b.category,
+    remindDaysBefore: b.remindDaysBefore,
+  };
+}
+
+/** Ledger rows of transfers start with this id prefix. */
+const TRANSFER_ROW = 'transfer:';
+
+/** A transfer between the user's accounts, shaped for the ledger list. */
+const transferRow = (t: UserTransfer, accounts: BankAccount[]): LedgerTransaction => ({
+  id: `${TRANSFER_ROW}${t.id}`,
+  icon: 'refresh-cw',
+  label: `${accountNameOf(t.fromAccountId, accounts)} → ${accountNameOf(t.toAccountId, accounts)}`,
+  account: t.note ?? '',
+  category: 'Transfer',
+  amount: -t.amount,
+  dateGroup: dateGroupOf(t.date),
+  time: '',
+  type: 'transfer',
+  smsRef: '',
+  status: 'Settled',
+});
+
 /** A user's own transaction, shaped for the ledger list. */
-const toLedger = (t: UserTx): LedgerTransaction => ({
+const toLedger = (t: UserTx, accounts: BankAccount[]): LedgerTransaction => ({
   id: t.id,
   icon: (CAT_META[t.category] ?? CAT_META.Other).icon,
   label: t.note || t.category,
-  account: t.account ?? '',
+  account: accountNameOf(t.accountId, accounts),
   category: t.category,
   amount: t.type === 'income' ? t.amount : -t.amount,
   dateGroup: dateGroupOf(t.date),
@@ -107,6 +162,7 @@ const toLedger = (t: UserTx): LedgerTransaction => ({
   type: t.type,
   smsRef: '',
   status: 'Settled',
+  excluded: !!t.excludeFromBudget,
 });
 
 /**
@@ -116,7 +172,6 @@ const toLedger = (t: UserTx): LedgerTransaction => ({
 export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }) => {
   const isUser = mode === 'user';
   const userMode = useUserMode();
-  const network = useNetwork();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { showToast } = useToast();
@@ -124,7 +179,23 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
   // Primary State
   const [tab, setTab] = useState<LedgerTab>('transactions');
   // Loads once per visit; the three tabs share it.
+  // A signed-in user's ledger waits for their transactions from the server (the default loader).
   const ledgerLoad = useLoadState('expenses');
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await userMode.reloadTxs();
+    } catch {
+      showToast("Couldn't refresh. Check your connection and try again.", 'error');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  const txActions = useTransactionActions();
+  const failed = (e: unknown) => showToast(e instanceof ApiError ? e.message : SAVE_ERROR, 'error');
+  const savedToast = (result: SaveResult, text: string) =>
+    showToast(result === 'queued' ? `${text}. It'll sync when you're back online.` : text, result === 'queued' ? 'info' : 'success');
   const ledgerReady = ledgerLoad.status === 'ready';
   // Slide tab content in from the side of the tab being moved toward
   const prevTab = useRef(tab);
@@ -148,18 +219,51 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
     () => [...userMode.txs].sort((a, b) => b.date.getTime() - a.date.getTime()),
     [userMode.txs],
   );
-  const userLedger = useMemo(() => userTxs.map(toLedger), [userTxs]);
+  // The user's transactions and transfers, newest first.
+  const userLedger = useMemo(() => {
+    const rows = [
+      ...userTxs.map(t => ({ at: t.date.getTime(), row: toLedger(t, userMode.bankAccounts) })),
+      ...userMode.transfers.map(t => ({ at: t.date.getTime(), row: transferRow(t, userMode.bankAccounts) })),
+    ];
+    return rows.sort((a, b) => b.at - a.at).map(r => r.row);
+  }, [userTxs, userMode.transfers, userMode.bankAccounts]);
+  const ledger = useLedgerActions();
+  const userBank = useBankAccounts();
+  const profile = useAppSelector(state => state.user.profile);
   const transactions = isUser ? userLedger : sampleTxs;
-  const upcomingBills = isUser ? userMode.bills : sampleBills;
-  const setUpcomingBills = isUser ? userMode.setBills : setSampleBills;
+  const upcomingBills = useMemo(
+    () => (isUser ? userMode.bills.map(b => toUpcoming(b, userMode.bankAccounts, theme.ACTIVE)) : sampleBills),
+    [isUser, userMode.bills, userMode.bankAccounts, sampleBills, theme.ACTIVE],
+  );
   const debts = isUser ? userMode.debts : sampleDebts;
-  const setDebts = isUser ? userMode.setDebts : setSampleDebts;
   const dateLabelOf = (group: string) => {
     if (!isUser) return DATE_LABELS[group] ?? group;
-    const tx = userTxs.find(t => dateGroupOf(t.date) === group);
-    return tx ? numericDate(tx.date) : group;
+    const date =
+      userTxs.find(t => dateGroupOf(t.date) === group)?.date ??
+      userMode.transfers.find(t => dateGroupOf(t.date) === group)?.date;
+    return date ? numericDate(date) : group;
+  };
+  const accountChoices = userMode.bankAccounts.map(a => ({ id: a.id, label: accountLabel(a) }));
+  /** Bills and transfers need a linked account; send the user to link one first. */
+  const needAccount = (count = 1) => {
+    if (userMode.bankAccounts.length >= count) return false;
+    showToast(
+      count > 1 ? 'Link a second bank account to move money between accounts.' : 'Link a bank account first.',
+      'info',
+    );
+    navigateTo('AddAccount');
+    return true;
   };
   const userTxOf = (tx: LedgerTransaction) => userMode.txs.find(t => t.id === tx.id);
+  const toggleExclude = (tx: LedgerTransaction) => {
+    const own = userTxOf(tx);
+    if (!own) return;
+    const exclude = !own.excludeFromBudget;
+    txActions
+      .update(own.id, { excludeFromBudget: exclude })
+      .then(r => savedToast(r, exclude ? 'Left out of your budget' : 'Counted in your budget again'))
+      .catch(failed);
+  };
   const onAdd = () => (isUser ? userMode.setFirstActionOpen(true) : setGatewayOpen(true));
 
   // Modals & Sheets Visibility
@@ -204,7 +308,7 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
 
   // Metrics
   const todaySpent = transactions
-    .filter(t => t.dateGroup === 'TODAY' && t.amount < 0)
+    .filter(t => t.dateGroup === 'TODAY' && t.amount < 0 && t.type !== 'transfer')
     .reduce((s, t) => s + Math.abs(t.amount), 0);
 
   const incomeTotal = isUser
@@ -224,14 +328,14 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
   const totalRecurring = recurringRows.reduce((s, r) => s + r.amount, 0);
   const totalDebt = debts.reduce((s, d) => s + d.remaining, 0);
   const totalEMI = debts.reduce((s, d) => s + d.emi, 0);
-  // Sample data assumes a 150,000 salary; a user's ratio uses this month's logged income.
-  const dtiIncome = isUser ? incomeTotal : 150000;
+  // Sample data assumes a 150,000 salary; a user's ratio uses their profile income (or more, if logged).
+  const dtiIncome = isUser ? Math.max(incomeTotal, monthlyIncomeOf(profile?.monthlyIncome) ?? 0) : 150000;
   const dtiPct = dtiIncome > 0 ? ((totalEMI / dtiIncome) * 100).toFixed(1) : null;
   const dtiHealthy = dtiPct !== null && parseFloat(dtiPct) < 36;
   const todayOfMonth = isUser ? new Date().getDate() : 8;
 
-  // 30-day snapshot: sample figures, or the user's logged balance minus unpaid bills.
-  const userBalance = userTxs.reduce((s, t) => s + (t.type === 'income' ? t.amount : -t.amount), 0);
+  // 30-day snapshot: sample figures, or the user's account balances minus unpaid bills.
+  const userBalance = userBank.accounts.reduce((s, a) => s + a.balance, 0);
   const unpaidBills = upcomingBills.filter(b => !b.paid).reduce((s, b) => s + b.amount, 0);
   const liquidity = isUser
     ? {
@@ -267,7 +371,14 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
   };
 
   const handleSaveDebt = (d: DebtEntry) => {
-    setDebts(prev => {
+    if (isUser) {
+      ledger
+        .saveLoan(d)
+        .then(() => showToast('Loan saved', 'success'))
+        .catch(failed);
+      return;
+    }
+    setSampleDebts(prev => {
       const idx = prev.findIndex(x => x.id === d.id);
       if (idx >= 0) {
         return prev.map(x => (x.id === d.id ? d : x));
@@ -277,15 +388,24 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
     showToast('Debt saved successfully', 'success');
   };
 
-  const handleDeleteDebt = (id: number) => {
-    setDebts(prev => prev.filter(d => d.id !== id));
+  const handleDeleteDebt = (id: number | string) => {
+    if (isUser) {
+      ledger
+        .deleteLoan(String(id))
+        .then(() => showToast('Loan removed', 'info'))
+        .catch(failed);
+      return;
+    }
+    setSampleDebts(prev => prev.filter(d => d.id !== id));
     showToast('Debt removed', 'info');
   };
 
   const handleSaveEditedTx = (updated: LedgerTransaction) => {
     if (isUser) {
-      userMode.updateTx(updated.id, { category: updated.category });
-      showToast('Transaction updated', 'success');
+      txActions
+        .update(String(updated.id), { category: updated.category })
+        .then(r => savedToast(r, 'Transaction updated'))
+        .catch(failed);
       return;
     }
     setTransactions(prev => prev.map(t => (t.id === updated.id ? updated : t)));
@@ -293,18 +413,33 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
   };
 
   const handleDeleteTx = (tx: LedgerTransaction) => {
+    if (isUser && String(tx.id).startsWith(TRANSFER_ROW)) {
+      ledger
+        .deleteTransfer(String(tx.id).slice(TRANSFER_ROW.length))
+        .then(removed =>
+          showToast('Transfer deleted', 'info', undefined, 5000, {
+            label: 'Undo',
+            onPress: () => {
+              ledger.restoreTransfer(removed).catch(failed);
+            },
+          }),
+        )
+        .catch(failed);
+      return;
+    }
     const own = isUser ? userTxOf(tx) : undefined;
     if (own) {
-      const index = userMode.txs.findIndex(t => t.id === own.id);
-      userMode.deleteTx(own.id);
-      const opId = network.record({ entity: 'tx', entityId: own.id, action: 'delete', label: `Delete · ${own.note ?? own.category}` });
-      showToast('Transaction deleted', 'info', undefined, 5000, {
-        label: 'Undo',
-        onPress: () => {
-          userMode.restoreTx(own, index);
-          if (opId) network.remove(opId);
-        },
-      });
+      txActions
+        .remove(own.id)
+        .then(({ tx: removed, index }) =>
+          showToast('Transaction deleted', 'info', undefined, 5000, {
+            label: 'Undo',
+            onPress: () => {
+              txActions.restore(removed, index).catch(failed);
+            },
+          }),
+        )
+        .catch(failed);
       return;
     }
     setTransactions(prev => prev.filter(t => t.id !== tx.id));
@@ -320,20 +455,15 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
     if (!splitTx) return;
     const own = isUser ? userTxOf(splitTx) : undefined;
     if (own) {
-      userMode.deleteTx(own.id);
-      [
-        { amount: part1, category: cat1 },
-        { amount: part2, category: cat2 },
-      ].forEach((part, i) =>
-        userMode.addTx({
-          type: own.type,
-          account: own.account,
-          date: own.date,
-          note: `${splitTx.label} (Split ${i + 1})`,
-          ...part,
-        }),
-      );
-      showToast('Transaction split in two', 'success');
+      // Notes are capped at 60 characters, so leave room for " (Split n)".
+      const base = (own.note ?? own.category).slice(0, 48);
+      txActions
+        .split(own.id, [
+          { amount: part1, category: cat1, note: `${base} (Split 1)` },
+          { amount: part2, category: cat2, note: `${base} (Split 2)` },
+        ])
+        .then(r => savedToast(r, 'Transaction split in two'))
+        .catch(failed);
       return;
     }
     const isNegative = splitTx.amount < 0;
@@ -356,18 +486,52 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
   };
 
   const handleSaveRecurringBill = (bill: UpcomingBill) => {
-    setUpcomingBills(prev => [...prev, bill]);
+    if (isUser) {
+      if (!bill.accountId || !bill.dueDay) return;
+      ledger
+        .addBill({
+          accountId: bill.accountId,
+          name: bill.label,
+          amount: bill.amount,
+          category: bill.category ?? 'Bills',
+          dueDay: bill.dueDay,
+          remindDaysBefore: bill.remindDaysBefore ?? 3,
+        })
+        .then(() => showToast('Repeated bill added', 'success'))
+        .catch(failed);
+      return;
+    }
+    setSampleBills(prev => [...prev, bill]);
     showToast('Recurring bill added', 'success');
   };
 
   const handleDeleteBill = (bill: UpcomingBill) => {
-    setUpcomingBills(prev => prev.filter(b => b.id !== bill.id));
+    if (isUser) {
+      ledger
+        .deleteBill(String(bill.id))
+        .then(() => showToast('Bill removed from schedule', 'info'))
+        .catch(failed);
+      return;
+    }
+    setSampleBills(prev => prev.filter(b => b.id !== bill.id));
     showToast('Bill removed from schedule', 'info');
   };
 
   const handleConfirmPaid = (method: string) => {
     if (!markPaidBill) return;
-    setUpcomingBills(prev =>
+    if (isUser) {
+      if (method.startsWith('Snooze')) {
+        showToast("We'll remind you again in 3 days", 'info');
+        return;
+      }
+      const bill = markPaidBill;
+      ledger
+        .payBill(String(bill.id))
+        .then(() => showToast(`${bill.label} paid · PKR ${bill.amount.toLocaleString()} logged in ${bill.tag}`, 'success'))
+        .catch(failed);
+      return;
+    }
+    setSampleBills(prev =>
       prev.map(b => (b.id === markPaidBill.id ? { ...b, paid: true } : b)),
     );
     showToast(`Marked as paid (${method})`, 'success');
@@ -382,6 +546,9 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
 
       <ScrollView
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          isUser ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.MUTED} /> : undefined
+        }
         contentContainerStyle={[
           styles.scrollContent,
           {
@@ -607,7 +774,10 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
                         <TouchableOpacity
                           key={tx.id}
                           activeOpacity={0.7}
-                          onPress={() => setAuditTx(tx)}
+                          onPress={() =>
+                            // A transfer has no category or split: tapping it offers to delete it.
+                            isUser && tx.type === 'transfer' ? setDeleteTx(tx) : setAuditTx(tx)
+                          }
                           style={[
                             styles.txRow,
                             i < group.items.length - 1 && {
@@ -657,7 +827,7 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
                                     { color: theme.MUTED },
                                   ]}
                                 >
-                                  {tx.category}
+                                  {tx.excluded ? `${tx.category} · not in budget` : tx.category}
                                 </Text>
                               </View>
                             </View>
@@ -745,7 +915,7 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
                     title="No repeated payments yet"
                     line="Add bills you pay every month, like rent or internet, and we'll remind you before they're due."
                     action="Add a repeated bill"
-                    onAction={() => setAddBillOpen(true)}
+                    onAction={() => !needAccount() && setAddBillOpen(true)}
                   />
                 ) : (
                 <View
@@ -903,7 +1073,7 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
                 {/* Add Bill Button */}
                 <TouchableOpacity
                   activeOpacity={0.85}
-                  onPress={() => setAddBillOpen(true)}
+                  onPress={() => !(isUser && needAccount()) && setAddBillOpen(true)}
                   style={[
                     styles.dashedBtn,
                     {
@@ -965,7 +1135,13 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
                         </Text>
                         <View style={styles.txMetaRow}>
                           <Text style={[styles.txAccount, { color: theme.MUTED }]}>
-                            In {b.dueIn} days · {b.date}
+                            {b.paid
+                              ? `Paid · next ${b.date}`
+                              : b.dueIn < 0
+                              ? `Overdue · ${b.date}`
+                              : b.dueIn === 0
+                              ? `Due today · ${b.date}`
+                              : `In ${b.dueIn} days · ${b.date}`}
                           </Text>
                           <View
                             style={[
@@ -1279,6 +1455,7 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
         visible={auditTx !== null}
         tx={auditTx}
         onClose={() => setAuditTx(null)}
+        onToggleExclude={isUser ? toggleExclude : undefined}
         onDetail={tx => {
           setAuditTx(null);
           setDetailTx(tx);
@@ -1299,7 +1476,7 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
                 category: own.category,
                 amount: own.amount,
                 note: own.note,
-                account: own.account,
+                accountId: own.accountId,
                 date: own.date,
               }),
             280,
@@ -1341,6 +1518,7 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
         tx={splitTx}
         onClose={() => setSplitTx(null)}
         onConfirm={handleConfirmSplit}
+        categories={isUser ? CATS.filter(c => c !== 'Salary') : undefined}
       />
 
       {/* Delete Transaction Confirm Modal */}
@@ -1353,6 +1531,8 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
 
       {/* Recurring Sheets */}
       <AddRecurringBillSheet
+        accounts={isUser ? accountChoices : undefined}
+        categories={isUser ? CATS.filter(c => c !== 'Salary') : undefined}
         visible={addBillOpen}
         onClose={() => setAddBillOpen(false)}
         onSave={handleSaveRecurringBill}
@@ -1370,6 +1550,7 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
       />
 
       <MarkAsPaidSheet
+        accountName={isUser ? markPaidBill?.tag : undefined}
         visible={markPaidBill !== null}
         bill={markPaidBill}
         onClose={() => setMarkPaidBill(null)}

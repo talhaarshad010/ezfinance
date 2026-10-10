@@ -19,7 +19,8 @@ import { MSG, SAVE_ERROR, isFuture, parseAmount, simulateSave, useFormErrors } f
 import { abbr, fullAmt } from '../../../utils/format';
 import { GOAL_ICONS } from '../../../constants/savingsGoals';
 import { useUserMode } from '../../../context/UserModeContext';
-import { useNetwork } from '../../../context/NetworkContext';
+import { usePlanningActions } from '../../../hooks/usePlanningActions';
+import { ApiError } from '../../../api/client';
 
 type CreateStep = 1 | 2 | 3;
 
@@ -38,8 +39,8 @@ export const CreateGoalScreen = () => {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { showToast } = useToast();
-  const { isNewUser, addGoal } = useUserMode();
-  const network = useNetwork();
+  const { isNewUser } = useUserMode();
+  const planning = usePlanningActions();
 
   const [step, setStep] = useState<CreateStep>(1);
   const prevStep = useRef(step);
@@ -97,12 +98,12 @@ export const CreateGoalScreen = () => {
     }
     setSaving(true);
     try {
-      await simulateSave();
       const amount = parseAmount(targetAmt)!;
-      // A signed-in user's goal is saved to their goals (the Explore demo only shows the toast).
+      // A signed-in user's goal is saved on the server (the Explore demo only shows the toast).
       if (isNewUser) {
-        const g = { name: name.trim(), target: amount, deadline: targetDate, icon: GOAL_ICONS[iconIdx]?.icon };
-        network.record({ entity: 'goal', entityId: addGoal(g), action: 'create', label: `Goal · ${g.name}`, payload: g });
+        await planning.createGoal({ name: name.trim(), target: amount, deadline: targetDate, icon: GOAL_ICONS[iconIdx]?.icon });
+      } else {
+        await simulateSave();
       }
       showToast(
         `${name.trim()} created — PKR ${abbr(amount)} by ${formatTargetDate(targetDate)}.`,
@@ -110,9 +111,9 @@ export const CreateGoalScreen = () => {
         'Goal Created',
       );
       navigation.goBack();
-    } catch {
+    } catch (error) {
       // The form stays open with everything the user typed.
-      showToast(SAVE_ERROR, 'error');
+      showToast(error instanceof ApiError ? error.message : SAVE_ERROR, 'error');
     } finally {
       setSaving(false);
     }

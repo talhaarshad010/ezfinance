@@ -1,3 +1,4 @@
+import { navigationRef } from './navigation/navigationRef';
 import React from 'react';
 import {
   NavigationContainer,
@@ -34,7 +35,7 @@ function NavigationWrapper() {
   };
 
   return (
-    <NavigationContainer theme={customNavTheme} onReady={hideNativeSplash}>
+    <NavigationContainer ref={navigationRef} theme={customNavTheme} onReady={hideNativeSplash}>
       <AppNavigator />
     </NavigationContainer>
   );

@@ -13,7 +13,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import { goalColor } from '../../../constants/savingsGoals';
-import { useNetwork } from '../../../context/NetworkContext';
+import { usePlanningActions } from '../../../hooks/usePlanningActions';
+import { ApiError } from '../../../api/client';
+import { SAVE_ERROR } from '../../../utils/validation';
 import { useSavingsGoals } from './goals/useSavingsGoals';
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '000', '0', '⌫'];
@@ -26,10 +28,11 @@ export const LogContributionScreen = () => {
   const { theme } = useTheme();
   const { showToast } = useToast();
 
-  const { goals, userGoalOf, userMode } = useSavingsGoals();
-  const network = useNetwork();
+  const { goals, userGoalOf } = useSavingsGoals();
+  const planning = usePlanningActions();
+  const [saving, setSaving] = useState(false);
   const initialGoalId = route.params?.goalId ?? goals[0]?.id;
-  const [goalId, setGoalId] = useState<number>(initialGoalId);
+  const [goalId, setGoalId] = useState<number | string>(initialGoalId);
   const [amount, setAmount] = useState('');
   const [source, setSource] = useState<'unallocated' | 'external'>(
     'unallocated',
@@ -62,6 +65,7 @@ export const LogContributionScreen = () => {
   const numeric = parseInt(amount || '0', 10);
 
   const submit = () => {
+    if (saving) return;
     if (!numeric) {
       showToast(
         'Enter a contribution amount first.',
@@ -70,11 +74,19 @@ export const LogContributionScreen = () => {
       );
       return;
     }
-    // A user's contribution is added to their goal.
+    // A user's contribution is saved on the server; the goal's total comes back with it.
     const own = userGoalOf(goal.id);
     if (own) {
-      userMode.updateGoal(own.id, { saved: own.saved + numeric });
-      network.record({ entity: 'goal', entityId: own.id, action: 'update', label: `Contribution · ${own.name}` });
+      setSaving(true);
+      planning
+        .contribute(own.id, numeric)
+        .then(() => {
+          setDone(true);
+          timer.current = setTimeout(() => navigation.goBack(), 1800);
+        })
+        .catch(error => showToast(error instanceof ApiError ? error.message : SAVE_ERROR, 'error'))
+        .finally(() => setSaving(false));
+      return;
     }
     setDone(true);
     timer.current = setTimeout(() => navigation.goBack(), 1800);

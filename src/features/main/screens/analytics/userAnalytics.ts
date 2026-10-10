@@ -34,7 +34,8 @@ function periodLabel(filter: FilterType, start: Date) {
  */
 export function computeUserAnalytics(txs: UserTx[], filter: FilterType, customDate: Date | null) {
   const { start, end, prevStart, days } = periodOf(filter, customDate);
-  const expenses = txs.filter(t => t.type === 'expense');
+  // Transactions left out of the budget are left out of spending analytics too.
+  const expenses = txs.filter(t => t.type === 'expense' && !t.excludeFromBudget);
   const inPeriod = expenses.filter(t => t.date >= start && t.date < end);
   const inPrev = expenses.filter(t => t.date >= prevStart && t.date < start);
 

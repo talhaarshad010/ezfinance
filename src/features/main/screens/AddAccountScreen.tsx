@@ -15,6 +15,8 @@ import BankSelectionModal from '../../../components/BankSelectionModal';
 import { PakistaniBank } from '../../../constants/pakistaniBanks';
 import { useToast } from '../../../context/ToastContext';
 import { ScreenBackHeader } from '../../../components/ScreenBackHeader';
+import { ApiError } from '../../../api/client';
+import { SAVE_ERROR } from '../../../utils/validation';
 import { useBankAccounts } from './bankAccounts/useBankAccounts';
 
 const AddAccountScreen = () => {
@@ -39,8 +41,8 @@ const AddAccountScreen = () => {
       showToast('Please enter account title', 'error', 'Missing Info');
       return false;
     }
-    if (!accountNumber.trim()) {
-      showToast('Please enter account number', 'error', 'Missing Info');
+    if (accountNumber.replace(/\D/g, '').length < 4) {
+      showToast('Enter the account number (at least its last 4 digits)', 'error', 'Missing Info');
       return false;
     }
     if (!balance.trim() || isNaN(parseFloat(balance))) {
@@ -50,26 +52,26 @@ const AddAccountScreen = () => {
     return true;
   };
 
-  const handleSave = () => {
-    if (!validate()) return;
+  const handleSave = async () => {
+    if (saving || !validate()) return;
 
     setSaving(true);
-    setTimeout(() => {
-      bank.add({
-          id: 'acc_' + Date.now(),
-          bankId: selectedBank!.id,
-          bankName: selectedBank!.shortName,
-          bankColor: selectedBank!.color,
-          bankAbbreviation: selectedBank!.abbreviation,
-          accountTitle: accountTitle.trim(),
-          accountNumber: accountNumber.trim(),
-          balance: parseFloat(balance),
-          createdAt: Date.now(),
-        });
-      setSaving(false);
+    try {
+      await bank.add({
+        bankId: selectedBank!.id,
+        bankName: selectedBank!.shortName,
+        accountTitle: accountTitle.trim(),
+        accountNumber: accountNumber.trim(),
+        balance: parseFloat(balance),
+      });
       showToast('Account added successfully!', 'success', 'Success');
       navigation.goBack();
-    }, 200);
+    } catch (error) {
+      // The form stays filled in so the user can try again.
+      showToast(error instanceof ApiError ? error.message : SAVE_ERROR, 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
