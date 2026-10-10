@@ -1,0 +1,53 @@
+name: Mobile CI
+
+on:
+  push:
+    branches: [main, master, CWH_programming]
+    paths:
+      - 'src/**'
+      - '__tests__/**'
+      - 'package.json'
+      - 'yarn.lock'
+      - 'tsconfig.json'
+      - '.eslintrc.js'
+      - '.prettierrc.js'
+      - '.github/workflows/mobile-ci.yml'
+  pull_request:
+    branches: [main, master, CWH_programming]
+    paths:
+      - 'src/**'
+      - '__tests__/**'
+      - 'package.json'
+      - 'yarn.lock'
+      - 'tsconfig.json'
+      - '.eslintrc.js'
+      - '.prettierrc.js'
+      - '.github/workflows/mobile-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Lint, Typecheck & Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'yarn'
+
+      - name: Install Dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Run ESLint
+        run: yarn lint
+
+      - name: Run TypeScript Check
+        run: npx tsc --noEmit
+
+      - name: Run Unit Tests
+        run: yarn test --ci --passWithNoTests

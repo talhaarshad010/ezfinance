@@ -93,3 +93,7 @@ ios/ezfinance/GoogleService-Info.plist
 !.yarn/sdks
 !.yarn/versions
 config.bat
+
+# Local environment & tool cache
+.local/
+.env

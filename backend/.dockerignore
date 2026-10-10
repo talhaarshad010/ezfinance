@@ -1,0 +1,9 @@
+**/.git
+**/.vs
+**/.vscode
+**/bin/
+**/obj/
+**/.local/
+*.user
+*.suo
+.DS_Store

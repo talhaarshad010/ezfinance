@@ -1,0 +1,16 @@
+services:
+  backend-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ezfinance-api:latest
+    container_name: ezfinance_backend
+    ports:
+      - "5080:5080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5080
+      - Supabase__Url=${SUPABASE_URL:-https://jlbvnztpzztoazeujaxa.supabase.co}
+      - Supabase__PublishableKey=${SUPABASE_KEY:-sb_publishable_0eY91NSuQrf82gMdNZi5pw_5KDEj4vx}
+      - ConnectionStrings__DefaultConnection=${DATABASE_CONNECTION_STRING}
+    restart: unless-stopped
