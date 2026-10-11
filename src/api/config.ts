@@ -1,22 +1,32 @@
 import { Platform } from 'react-native';
+import DeviceInfo from 'react-native-device-info';
 
 /**
  * Where the ezfinance backend (backend/src/EzFinance.Api) is reachable.
  *
- * Development: run `dotnet run --launch-profile http` in backend/src/EzFinance.Api on this Mac.
- * The iOS simulator reaches the Mac at localhost, the Android emulator at 10.0.2.2.
- * On a physical phone, set DEV_HOST to the Mac's Wi-Fi IP (e.g. '192.168.1.20'); the phone
- * and the Mac must be on the same network.
+ * Development:
+ * - Android Emulator: reaches host at 10.0.2.2
+ * - Physical Android phone: reaches host at localhost via `adb reverse tcp:5080 tcp:5080`
+ * - iOS Simulator / Mac: reaches host at localhost
  */
 const DEV_HOST: string | null = null;
 const DEV_PORT = 5080;
 
-/** Set once the backend is deployed. Release builds can't talk to a laptop. */
-const PRODUCTION_API_URL: string | null = null;
+/** Azure App Service Production URL (Korea Central - Gemini API supported region) */
+const AZURE_API_URL = 'https://ezfinance-backend.azurewebsites.net';
 
-const devHost = DEV_HOST ?? (Platform.OS === 'android' ? '10.0.2.2' : 'localhost');
+/**
+ * Toggle this to true if you want to test against a local backend running on your machine.
+ * When false (default), the app connects directly to the Azure-hosted backend.
+ */
+const USE_LOCAL_BACKEND = false;
 
-export const API_BASE_URL = __DEV__ ? `http://${devHost}:${DEV_PORT}` : PRODUCTION_API_URL;
+const isEmulator = DeviceInfo.isEmulatorSync();
+const devHost = DEV_HOST ?? (Platform.OS === 'android' ? (isEmulator ? '10.0.2.2' : 'localhost') : 'localhost');
+
+export const API_BASE_URL = USE_LOCAL_BACKEND
+  ? `http://${devHost}:${DEV_PORT}`
+  : AZURE_API_URL;
 
 export const REQUEST_TIMEOUT_MS = 15000;
 

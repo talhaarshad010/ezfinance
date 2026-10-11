@@ -13,4 +13,6 @@ services:
       - Supabase__Url=${SUPABASE_URL:-https://jlbvnztpzztoazeujaxa.supabase.co}
       - Supabase__PublishableKey=${SUPABASE_KEY:-sb_publishable_0eY91NSuQrf82gMdNZi5pw_5KDEj4vx}
       - ConnectionStrings__DefaultConnection=${DATABASE_CONNECTION_STRING}
+      - Gemini__ApiKey=${GEMINI_API_KEY}
+      - Gemini__Model=${Gemini__Model:-gemini-flash-lite-latest}
     restart: unless-stopped

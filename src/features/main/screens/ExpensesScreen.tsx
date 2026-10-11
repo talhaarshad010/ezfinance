@@ -44,6 +44,7 @@ import {
   MarkAsPaidSheet,
 } from './expenses/RecurringSheets';
 import StatementImportModal from './expenses/StatementImportModal';
+import ScanReceiptFlow from './expenses/ScanReceiptFlow';
 import { UserBill, UserTransfer, UserTx, useUserMode } from '../../../context/UserModeContext';
 import { useLedgerActions } from '../../../hooks/useLedgerActions';
 import { useAppSelector } from '../../../store/hooks';
@@ -270,6 +271,7 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
   const [gatewayOpen, setGatewayOpen] = useState(false);
   const [manualEntryOpen, setManualEntryOpen] = useState(false);
   const [statementImportOpen, setStatementImportOpen] = useState(false);
+  const [scanReceiptOpen, setScanReceiptOpen] = useState(false);
 
   // Quick Audit and Detail Overlays
   const [auditTx, setAuditTx] = useState<LedgerTransaction | null>(null);
@@ -1434,6 +1436,13 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
         onClose={() => setGatewayOpen(false)}
         onManual={() => setManualEntryOpen(true)}
         onStatement={() => setStatementImportOpen(true)}
+        onReceipt={() => setScanReceiptOpen(true)}
+      />
+
+      {/* Scan Receipt Flow */}
+      <ScanReceiptFlow
+        visible={scanReceiptOpen}
+        onClose={() => setScanReceiptOpen(false)}
       />
 
       {/* Manual Entry Sheet */}

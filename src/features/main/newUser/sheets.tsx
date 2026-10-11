@@ -14,6 +14,8 @@ import { ApiError } from '../../../api/client';
 import { useTransactionActions } from '../../../hooks/useTransactionActions';
 import { useLedgerActions } from '../../../hooks/useLedgerActions';
 import { usePlanningActions } from '../../../hooks/usePlanningActions';
+import ReceiptCameraScreen from '../screens/expenses/ReceiptCameraScreen';
+import { scanReceipt } from '../../../api/receiptApi';
 import {
   AmountInput,
   CAT_META,
@@ -280,16 +282,17 @@ export function FirstActionSheetHost() {
   const { theme } = useTheme();
   const { firstActionOpen, setFirstActionOpen, openTxSheet } = useUserMode();
   const { online } = useNetwork();
+  const { showToast } = useToast();
   const [phase, setPhase] = useState<'pick' | 'scanning' | 'needsNet'>('pick');
   const [netFor, setNetFor] = useState<'scan' | 'import'>('scan');
-  const close = () => setFirstActionOpen(false);
-  const scanTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const close = () => {
+    setCaptureOpen(false);
+    setFirstActionOpen(false);
+  };
 
   useEffect(() => {
     if (firstActionOpen) setPhase('pick');
-    return () => {
-      if (scanTimer.current) clearTimeout(scanTimer.current);
-    };
   }, [firstActionOpen]);
 
   // The chooser closes first, then the transaction sheet opens (one sheet at a time).
@@ -298,18 +301,44 @@ export function FirstActionSheetHost() {
     setTimeout(() => openTxSheet(preset), 280);
   };
 
-  function scan() {
+  function startScan() {
     if (!online) {
       setNetFor('scan');
       setPhase('needsNet');
       return;
     }
-    setPhase('scanning');
-    scanTimer.current = setTimeout(
-      () => handOff({ source: 'scan', type: 'expense', category: 'Groceries', amount: 3450, note: 'Imtiaz Supermarket' }),
-      900,
-    );
+    setCaptureOpen(true);
   }
+
+  async function handleImageCaptured(imageUri: string) {
+    setCaptureOpen(false);
+    setPhase('scanning');
+    try {
+      const result = await scanReceipt(imageUri);
+      if (result.total != null && result.total > 0) {
+        handOff({
+          source: 'scan',
+          type: 'expense',
+          category: result.category ?? 'Groceries',
+          amount: result.total,
+          note: result.merchant ?? undefined,
+          date: result.date ? new Date(result.date) : new Date(),
+        });
+      } else {
+        handOff({
+          source: 'scanFailed',
+          type: 'expense',
+          category: result.category ?? 'Other',
+          amount: undefined,
+          note: result.merchant ?? undefined,
+        });
+      }
+    } catch (err: any) {
+      showToast(err?.message ?? 'Could not read receipt. Try entering manually.', 'error', 'Scan Failed');
+      setPhase('pick');
+    }
+  }
+
   function importBank() {
     if (!online) {
       setNetFor('import');
@@ -335,44 +364,52 @@ export function FirstActionSheetHost() {
 
   const opts = [
     { icon: 'edit-3', label: 'Add manually', sub: 'Type in an amount and category', go: () => handOff({ source: 'manual' }), net: false },
-    { icon: 'camera', label: phase === 'scanning' ? 'Reading receipt…' : 'Scan a receipt', sub: 'Snap a photo, we read the total', go: scan, net: true },
-    { icon: 'download', label: 'Import from bank', sub: 'Pull in transactions from bank SMS', go: importBank, net: true },
+    { icon: 'camera', label: phase === 'scanning' ? 'Reading receipt…' : 'Scan a receipt', sub: 'Snap a photo, we read the total', go: startScan, net: true },
+    { icon: 'download', label: 'Import from bank', sub: 'Pull in transactions from bank statement', go: importBank, net: true },
   ];
 
   return (
-    <Sheet
-      visible={firstActionOpen}
-      onClose={close}
-      title="Log your first transaction"
-      sub="It takes 10 seconds and unlocks your dashboard"
-    >
-      <View style={st.optList}>
-        {opts.map(o => {
-          const offlineBlocked = o.net && !online;
-          return (
-            <TouchableOpacity
-              key={o.label}
-              activeOpacity={0.8}
-              onPress={o.go}
-              disabled={phase === 'scanning'}
-              style={[st.opt, { backgroundColor: theme.BG, opacity: offlineBlocked ? 0.5 : 1 }]}
-            >
-              <View style={[st.optIcon, { backgroundColor: `${TEAL}1c` }]}>
-                <Feather name={o.icon} size={18} color={TEAL} />
-              </View>
-              <View style={st.flex}>
-                <Text style={[st.optTitle, { color: theme.TEXT }]}>{o.label}</Text>
-                <View style={st.optSubRow}>
-                  {offlineBlocked && <Feather name="wifi-off" size={11} color={theme.MUTED} />}
-                  <Text style={[st.optSub, { color: theme.MUTED }]}>{offlineBlocked ? 'Needs internet' : o.sub}</Text>
+    <>
+      <Sheet
+        visible={firstActionOpen}
+        onClose={close}
+        title="Log your first transaction"
+        sub="It takes 10 seconds and unlocks your dashboard"
+      >
+        <View style={st.optList}>
+          {opts.map(o => {
+            const offlineBlocked = o.net && !online;
+            return (
+              <TouchableOpacity
+                key={o.label}
+                activeOpacity={0.8}
+                onPress={o.go}
+                disabled={phase === 'scanning'}
+                style={[st.opt, { backgroundColor: theme.BG, opacity: offlineBlocked ? 0.5 : 1 }]}
+              >
+                <View style={[st.optIcon, { backgroundColor: `${TEAL}1c` }]}>
+                  <Feather name={o.icon} size={18} color={TEAL} />
                 </View>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-      <TextLink label="Do this later" onPress={close} />
-    </Sheet>
+                <View style={st.flex}>
+                  <Text style={[st.optTitle, { color: theme.TEXT }]}>{o.label}</Text>
+                  <View style={st.optSubRow}>
+                    {offlineBlocked && <Feather name="wifi-off" size={11} color={theme.MUTED} />}
+                    <Text style={[st.optSub, { color: theme.MUTED }]}>{offlineBlocked ? 'Needs internet' : o.sub}</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <TextLink label="Do this later" onPress={close} />
+      </Sheet>
+
+      <ReceiptCameraScreen
+        visible={captureOpen}
+        onCapture={handleImageCaptured}
+        onClose={() => setCaptureOpen(false)}
+      />
+    </>
   );
 }
 

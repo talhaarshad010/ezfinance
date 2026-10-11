@@ -3,6 +3,7 @@ using EzFinance.Api.Infrastructure.Auth;
 using EzFinance.Api.Infrastructure.Data;
 using EzFinance.Api.Infrastructure.Errors;
 using EzFinance.Api.Infrastructure.HealthChecks;
+using EzFinance.Api.Infrastructure.Ocr;
 using EzFinance.Api.Infrastructure.Supabase;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -65,6 +66,14 @@ builder.Services.AddHealthChecks()
 
 builder.Services.AddExceptionHandler<SupabaseAuthExceptionHandler>();
 builder.Services.AddProblemDetails();
+
+// Gemini OCR
+builder.Services.AddOptions<GeminiOptions>()
+    .BindConfiguration(GeminiOptions.SectionName);
+builder.Services.AddHttpClient<GeminiReceiptOcrService>();
+builder.Services.AddSingleton<IReceiptOcrService>(sp =>
+    sp.GetRequiredService<GeminiReceiptOcrService>());
+
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 

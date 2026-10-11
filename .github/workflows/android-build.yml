@@ -1,15 +1,36 @@
 name: Build Android APK
 
 on:
-  workflow_dispatch: # Allows manual one-click trigger from GitHub Actions tab
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build Type (release = standalone offline app, debug = dev testing)'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - debug
+      target_architecture:
+        description: 'Target Architecture'
+        required: true
+        default: 'arm64-v8a (Physical phones - Fast ~5m)'
+        type: choice
+        options:
+          - 'arm64-v8a (Physical phones - Fast ~5m)'
+          - 'universal (all architectures - Slow ~30m)'
   push:
     tags:
       - 'v*.*.*'
 
 jobs:
   build-apk:
-    name: Build Android Debug APK
+    name: Build Android APK
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8"
 
     steps:
       - name: Checkout Repository
@@ -30,18 +51,50 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
+      - name: Accept Android SDK Licenses & Setup NDK
+        run: |
+          yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.1.12297006"
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: false
 
-      - name: Build Android Debug APK
+      - name: Configure Target Architecture & Build Task
+        id: config
+        run: |
+          BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
+          ARCH_INPUT="${{ github.event.inputs.target_architecture || 'arm64-v8a' }}"
+
+          if [[ "$ARCH_INPUT" == *"universal"* ]]; then
+            ARCH_FLAGS=""
+          else
+            ARCH_FLAGS="-PreactNativeArchitectures=arm64-v8a"
+          fi
+
+          if [ "$BUILD_TYPE" = "debug" ]; then
+            GRADLE_TASK="assembleDebug"
+            OUTPUT_FOLDER="debug"
+          else
+            GRADLE_TASK="assembleRelease"
+            OUTPUT_FOLDER="release"
+          fi
+
+          echo "gradle_task=$GRADLE_TASK" >> $GITHUB_OUTPUT
+          echo "arch_flags=$ARCH_FLAGS" >> $GITHUB_OUTPUT
+          echo "output_folder=$OUTPUT_FOLDER" >> $GITHUB_OUTPUT
+          echo "build_type=$BUILD_TYPE" >> $GITHUB_OUTPUT
+
+      - name: Build Android APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew ${{ steps.config.outputs.gradle_task }} ${{ steps.config.outputs.arch_flags }} --no-daemon
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ezfinance-debug-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+          name: ezfinance-${{ steps.config.outputs.build_type }}-apk
+          path: android/app/build/outputs/apk/${{ steps.config.outputs.output_folder }}/*.apk
           retention-days: 14
