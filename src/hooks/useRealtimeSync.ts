@@ -28,9 +28,9 @@ export function useRealtimeSync(reloadTxs: () => Promise<void>, enabled: boolean
     const userId = auth?.session?.user?.id;
     const token = auth?.session?.accessToken;
 
-    if (!userId) return;
+    if (!userId || !supabase) return;
 
-    if (token) {
+    if (token && supabase.realtime) {
       supabase.realtime.setAuth(token);
     }
 
