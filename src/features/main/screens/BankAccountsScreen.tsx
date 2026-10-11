@@ -21,6 +21,7 @@ import { ApiError } from '../../../api/client';
 import { SAVE_ERROR } from '../../../utils/validation';
 import { getBankById } from '../../../constants/pakistaniBanks';
 import { AnimatedModal } from '../../../components/AnimatedModal';
+import { DrawerMenuButton } from '../../../components';
 
 function maskAccountNumber(accNo: string): string {
   if (!accNo) return '•••• 0000';
@@ -112,20 +113,16 @@ export const BankAccountsScreen = () => {
       >
         {/* Top Header */}
         <View style={styles.headerRow}>
-          <View>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => navigation.goBack()}
-              style={styles.backBtn}
-            >
-              <Feather name="chevron-left" size={16} color={theme.MUTED} />
-              <Text style={[styles.backText, { color: theme.MUTED }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <DrawerMenuButton />
+            <View>
+              <Text style={[styles.backText, { color: theme.MUTED, marginBottom: 2 }]}>
                 Assets & Vaults
               </Text>
-            </TouchableOpacity>
-            <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
-              Bank Accounts
-            </Text>
+              <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+                Bank Accounts
+              </Text>
+            </View>
           </View>
 
           <TouchableOpacity

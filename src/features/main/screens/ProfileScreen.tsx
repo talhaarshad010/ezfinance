@@ -17,6 +17,7 @@ import { useUserMode } from '../../../context/UserModeContext';
 import { fullAmt } from '../../../utils/format';
 import { useToast } from '../../../context/ToastContext';
 import { signOut } from '../../../services/authService';
+import { DrawerMenuButton } from '../../../components';
 
 /** Sign-up income options, by stored value. */
 const INCOME_LABELS: Record<string, string> = {
@@ -77,20 +78,16 @@ export const ProfileScreen = () => {
       >
         {/* Top Header */}
         <View style={styles.headerRow}>
-          <View>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => navigation.goBack()}
-              style={styles.backBtn}
-            >
-              <Feather name="chevron-left" size={16} color={theme.MUTED} />
-              <Text style={[styles.backText, { color: theme.MUTED }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <DrawerMenuButton />
+            <View>
+              <Text style={[styles.backText, { color: theme.MUTED, marginBottom: 2 }]}>
                 Account & Preferences
               </Text>
-            </TouchableOpacity>
-            <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
-              My Profile
-            </Text>
+              <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+                My Profile
+              </Text>
+            </View>
           </View>
 
           <TouchableOpacity

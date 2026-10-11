@@ -17,7 +17,7 @@ import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import { useAppSelector } from '../../../store/hooks';
 import { Transaction } from '../../../store/slices/bankAccountsSlice';
-import { CalendarPicker } from '../../../components';
+import { CalendarPicker, DrawerMenuButton } from '../../../components';
 import { UNLOCK_AT, useUserMode } from '../../../context/UserModeContext';
 import { CAT_META, EmptyState } from '../newUser/shared';
 import { computeUserAnalytics, FilterType } from './analytics/userAnalytics';
@@ -238,19 +238,17 @@ export const AnalyticsScreen = () => {
       >
         {/* Top Header */}
         <View style={styles.headerBox}>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => navigation.goBack()}
-            style={styles.backBtn}
-          >
-            <Feather name="chevron-left" size={16} color={theme.MUTED} />
-            <Text style={[styles.backText, { color: theme.MUTED }]}>
-              Financial Audit
-            </Text>
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
-            Analytics
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <DrawerMenuButton />
+            <View>
+              <Text style={[styles.backText, { color: theme.MUTED, marginBottom: 2 }]}>
+                Financial Audit
+              </Text>
+              <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+                Analytics
+              </Text>
+            </View>
+          </View>
         </View>
 
         {locked && (

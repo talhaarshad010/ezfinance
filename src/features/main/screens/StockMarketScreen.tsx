@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import { AnimatedModal } from '../../../components/AnimatedModal';
+import { DrawerMenuButton } from '../../../components';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -172,20 +173,16 @@ export const StockMarketScreen = () => {
       >
         {/* Top Header */}
         <View style={styles.headerRow}>
-          <View>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => navigation.goBack()}
-              style={styles.backBtn}
-            >
-              <Feather name="chevron-left" size={16} color={theme.MUTED} />
-              <Text style={[styles.backText, { color: theme.MUTED }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <DrawerMenuButton />
+            <View>
+              <Text style={[styles.backText, { color: theme.MUTED, marginBottom: 2 }]}>
                 PSX Live Feed & Equities
               </Text>
-            </TouchableOpacity>
-            <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
-              Stock Market
-            </Text>
+              <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+                Stock Market
+              </Text>
+            </View>
           </View>
 
           {/* Market Status Pill */}

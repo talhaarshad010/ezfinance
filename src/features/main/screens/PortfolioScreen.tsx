@@ -3,7 +3,8 @@ import {View, StyleSheet, ScrollView, TouchableOpacity, Dimensions} from 'react-
 import Feather from 'react-native-vector-icons/Feather';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, withDelay } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
-import {Typography, Card} from '../../../components';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Typography, Card, DrawerMenuButton } from '../../../components';
 
 const PortfolioScreen = () => {
   const [activeTab, setActiveTab] = useState(0);
@@ -17,6 +18,8 @@ const PortfolioScreen = () => {
     useSharedValue(0),
   ];
 
+  const insets = useSafeAreaInsets();
+
   useEffect(() => {
     const targetHeights = [40, 60, 50, 90, 120, 160];
     barAnimHeights.forEach((anim, i) => {
@@ -24,8 +27,18 @@ const PortfolioScreen = () => {
     });
   }, []);
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 100 },
+      ]}
+    >
       <View style={styles.header}>
+        <View style={{ marginBottom: 12 }}>
+          <DrawerMenuButton />
+        </View>
         <Typography variant="caption" weight="700" color="#666">Total Portfolio Value</Typography>
         <Typography variant="h1" weight="700" style={{fontSize: 40, marginTop: 4}}>$124,892.45</Typography>
         <View style={{flexDirection: 'row', alignItems: 'center', marginTop: 12}}>

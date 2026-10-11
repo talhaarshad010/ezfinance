@@ -19,6 +19,7 @@ import { useNetwork } from '../../../context/NetworkContext';
 import { AIOfflineNote } from '../newUser/NewUserScreens';
 import { useToast } from '../../../context/ToastContext';
 import { AnimatedModal } from '../../../components/AnimatedModal';
+import { DrawerMenuButton } from '../../../components';
 
 interface Msg {
   id: number;
@@ -295,13 +296,16 @@ export const AIAdvisorScreen = () => {
         {/* Top Header */}
         <View style={[styles.headerBox, { paddingTop: insets.top + 12 }]}>
           <View style={styles.headerTopRow}>
-            <View>
-              <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
-                Personal CA
-              </Text>
-              <Text style={[styles.headerSub, { color: theme.MUTED }]}>
-                AI Chartered Accountant · Pakistan
-              </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <DrawerMenuButton />
+              <View>
+                <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+                  Personal CA
+                </Text>
+                <Text style={[styles.headerSub, { color: theme.MUTED }]}>
+                  AI Chartered Accountant · Pakistan
+                </Text>
+              </View>
             </View>
 
             <TouchableOpacity
