@@ -16,6 +16,7 @@ import { billsApi, loansApi, transfersApi } from '../api/ledgerApi';
 import { budgetApi, goalsApi } from '../api/planningApi';
 import type { BudgetCategory } from '../store/slices/budgetSlice';
 import type { BankAccount } from '../store/slices/bankAccountsSlice';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 /**
  * Two experiences of the main app:
@@ -304,6 +305,8 @@ export function UserModeProvider({ children }: { children: ReactNode }) {
       closeTxSheet: () => setTxSheet(s => ({ ...s, open: false })),
     };
   }, [isNewUser, txs, txStatus, goals, holdings, budget, bills, debts, transfers, envelopes, bankAccounts, checklistHidden, tourOpen, firstActionOpen, txSheet]);
+
+  useRealtimeSync(value.reloadTxs, txStatus === 'ready');
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

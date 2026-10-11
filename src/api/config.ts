@@ -38,3 +38,7 @@ export const REQUEST_TIMEOUT_MS = 15000;
  */
 export const GOOGLE_WEB_CLIENT_ID = '220615390473-jqro5o9jk389g3dljlns28epdk83l1j1.apps.googleusercontent.com';
 export const GOOGLE_IOS_CLIENT_ID = '220615390473-nmlqe223rui19qmsg6uoei8icqvhji1j.apps.googleusercontent.com';
+
+/** Supabase project settings for client-side Realtime WebSockets */
+export const SUPABASE_URL = 'https://jlbvnztpzztoazeujaxa.supabase.co';
+export const SUPABASE_ANON_KEY = 'sb_publishable_0eY91NSuQrf82gMdNZi5pw_5KDEj4vx';
