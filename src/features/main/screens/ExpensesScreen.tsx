@@ -13,7 +13,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
-import { FadeInView } from '../../../components';
+import { FadeInView, DrawerMenuButton } from '../../../components';
 import { useLoadState } from '../../../context/LoadingContext';
 import { ErrorState } from '../../../components/Feedback';
 import { ExpLoansSkeleton, ExpRecurringSkeleton, ExpTransactionsSkeleton } from '../../../components/Skeletons';
@@ -561,9 +561,12 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
       >
         {/* Top Header */}
         <View style={styles.headerRow}>
-          <Text style={[styles.screenTitle, { color: theme.TEXT }]}>
-            Expenses
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <DrawerMenuButton />
+            <Text style={[styles.screenTitle, { color: theme.TEXT }]}>
+              Expenses
+            </Text>
+          </View>
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={onAdd}

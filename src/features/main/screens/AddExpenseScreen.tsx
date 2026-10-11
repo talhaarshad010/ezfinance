@@ -18,7 +18,7 @@ import { useToast } from '../../../context/ToastContext';
 import { useAppSelector, useAppDispatch } from '../../../store/hooks';
 import { getBankById } from '../../../constants/pakistaniBanks';
 import { addTransaction as addTransactionAction, updateAccountBalance } from '../../../store/slices/bankAccountsSlice';
-import { CalendarPicker } from '../../../components';
+import { CalendarPicker, DrawerMenuButton } from '../../../components';
 
 const CATEGORIES = [
   { name: 'Groceries', icon: 'shopping-cart' },
@@ -132,19 +132,36 @@ export const AddExpenseScreen = () => {
       >
         {/* Top Header */}
         <View style={styles.headerBox}>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => navigation.goBack()}
-            style={styles.backBtn}
-          >
-            <Feather name="chevron-left" size={16} color={theme.MUTED} />
-            <Text style={[styles.backText, { color: theme.MUTED }]}>
-              Ledger Entry
-            </Text>
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
-            Record Transaction
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <DrawerMenuButton />
+              <View>
+                <Text style={[styles.backText, { color: theme.MUTED, marginBottom: 2 }]}>
+                  Ledger Entry
+                </Text>
+                <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+                  Record Transaction
+                </Text>
+              </View>
+            </View>
+
+            {navigation.canGoBack() && (
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => navigation.goBack()}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Feather name="x" size={20} color={theme.MUTED} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* Transaction Type Segment Controller */}

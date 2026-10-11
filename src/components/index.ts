@@ -13,3 +13,4 @@ export * from './CalendarPicker';
 export * from './LoadingOverlay';
 export {default as AnimatedModal} from './AnimatedModal';
 export {default as FadeInView} from './FadeInView';
+export { DrawerMenuButton } from './DrawerMenuButton';

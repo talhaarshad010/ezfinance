@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import { isRouteEnabled } from '../../../constants/features';
+import { DrawerMenuButton } from '../../../components';
 
 type FilterType = 'all' | 'unread' | 'transactions' | 'markets' | 'ai';
 
@@ -130,20 +131,16 @@ export const NotificationsScreen = () => {
       >
         {/* Top Header */}
         <View style={styles.headerRow}>
-          <View>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => navigation.goBack()}
-              style={styles.backBtn}
-            >
-              <Feather name="chevron-left" size={16} color={theme.MUTED} />
-              <Text style={[styles.backText, { color: theme.MUTED }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <DrawerMenuButton />
+            <View>
+              <Text style={[styles.backText, { color: theme.MUTED, marginBottom: 2 }]}>
                 Live Feed & Activity
               </Text>
-            </TouchableOpacity>
-            <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
-              Notifications
-            </Text>
+              <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+                Notifications
+              </Text>
+            </View>
           </View>
 
           <TouchableOpacity

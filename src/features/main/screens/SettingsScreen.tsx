@@ -17,6 +17,7 @@ import { useUserMode } from '../../../context/UserModeContext';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
 import { setProfile, UserProfile } from '../../../store/slices/userSlice';
 import { ApiError, updateProfileDetails } from '../../../services/authService';
+import { DrawerMenuButton } from '../../../components';
 
 const BRACKETS = [
   { label: 'Up to 600K', range: '≤ PKR 6,00,000', rate: 'Exempt' },
@@ -187,19 +188,17 @@ export const SettingsScreen = () => {
       >
         {/* Header */}
         <View style={styles.headerBox}>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('MainTabs'))}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}
-          >
-            <Feather name="chevron-left" size={16} color={theme.MUTED} />
-            <Text style={[styles.subheadText, { color: theme.MUTED, marginBottom: 0 }]}>
-              Preferences
-            </Text>
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
-            Settings
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <DrawerMenuButton />
+            <View>
+              <Text style={[styles.subheadText, { color: theme.MUTED, marginBottom: 2 }]}>
+                Preferences
+              </Text>
+              <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+                Settings
+              </Text>
+            </View>
+          </View>
         </View>
 
         {/* ── Display Mode State Controller ── */}

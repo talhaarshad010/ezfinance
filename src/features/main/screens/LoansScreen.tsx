@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import { AnimatedModal } from '../../../components/AnimatedModal';
+import { DrawerMenuButton } from '../../../components';
 
 interface LoanItem {
   id: number;
@@ -297,13 +298,16 @@ export const LoansScreen = () => {
       >
         {/* Top Header */}
         <View style={styles.headerRow}>
-          <View>
-            <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
-              Liabilities
-            </Text>
-            <Text style={[styles.headerSub, { color: theme.MUTED }]}>
-              Active loans & credit facilities
-            </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <DrawerMenuButton />
+            <View>
+              <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+                Liabilities
+              </Text>
+              <Text style={[styles.headerSub, { color: theme.MUTED }]}>
+                Active loans & credit facilities
+              </Text>
+            </View>
           </View>
         </View>
 

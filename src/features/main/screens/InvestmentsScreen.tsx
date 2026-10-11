@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
+import { DrawerMenuButton } from '../../../components';
 import {
   WealthView,
   WealthOverlay,
@@ -324,9 +325,16 @@ const InvestmentHub = () => {
           )}
 
           <View style={styles.headerRow}>
-            <Text style={[styles.headerTitle, { color: theme.TEXT, flex: 1 }]}>
-              {VIEW_TITLES[view] ?? 'Wealth Engine'}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              {view === 'dashboard' && (
+                <View style={{ marginRight: 12 }}>
+                  <DrawerMenuButton />
+                </View>
+              )}
+              <Text style={[styles.headerTitle, { color: theme.TEXT, flex: 1 }]}>
+                {VIEW_TITLES[view] ?? 'Wealth Engine'}
+              </Text>
+            </View>
 
             {/* Quick Root Icons */}
             {isRoot && (
