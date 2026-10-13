@@ -96,4 +96,3 @@ config.bat
 
 # Local environment & tool cache
 .local/
-.env
