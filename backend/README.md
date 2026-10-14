@@ -42,6 +42,14 @@ backend/
 
    Use the session pooler, not the direct connection: the direct host is IPv6-only on the free plan.
 
+   Receipt scanning also needs a Gemini API key (from Google AI Studio), kept the same way:
+
+   ```bash
+   dotnet user-secrets set "Gemini:ApiKey" "<your Gemini API key>"
+   ```
+
+   Never put keys in `appsettings.json`: it is committed.
+
 3. Run:
 
    ```bash
@@ -108,6 +116,7 @@ The API listens on `http://0.0.0.0:5080`, so it is reachable from:
 | DELETE | `/api/transactions/{id}`    | ✓    | Soft delete (204, also when already deleted)                  |
 | POST   | `/api/transactions/{id}/restore` | ✓ | Undo a delete                                                |
 | POST   | `/api/transactions/{id}/split` | ✓  | Replace with 2–10 parts that add up to the original           |
+| GET    | `/api/sync` (WebSocket)     | ✓    | Live sync: `{"type":"changed","tables":[...]}` after any save to the user's data, from any device; closes when the token expires |
 | GET    | `/health`                   |      | Liveness: the API process is up                               |
 | GET    | `/health/ready`             |      | Readiness: Supabase Auth and the database are reachable       |
 | GET    | `/scalar`                   |      | API docs and test UI (Development only)                       |

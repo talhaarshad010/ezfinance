@@ -104,6 +104,11 @@ function toApiError(status: number, body: any): ApiError {
   return new ApiError(status, body?.code ?? null, body?.detail ?? body?.title ?? 'Something went wrong. Please try again.');
 }
 
+/** A current access token (refreshed first if about to expire), e.g. for the /api/sync socket. */
+export async function getAccessToken(): Promise<string> {
+  return (await getValidSession()).accessToken;
+}
+
 // ── Session refresh ────────────────────────────────────────────────────────
 
 const REFRESH_MARGIN_SECONDS = 60;

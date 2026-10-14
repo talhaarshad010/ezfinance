@@ -1,4 +1,15 @@
-name: Backend CI/CD (Docker)
+name: Backend CI/CD
+
+# Push backend code to CWH_programming or main → it goes live on Azure (like Netlify/Vercel):
+#   1. build-and-test   compile the API (every push and PR)
+#   2. docker-image     build the Docker image; on deploy branches push it to Azure Container Registry
+#   3. deploy-azure     point the App Service (Container publishing model) at the new image, check /health
+#
+# Repo secrets (Settings → Secrets and variables → Actions):
+#   ACR_USERNAME, ACR_PASSWORD          acrezfinance → Access keys → Admin user
+#   AZURE_WEBAPP_PUBLISH_PROFILE        ezfinance-backend → Download publish profile
+# Runtime settings (connection string, Gemini__ApiKey) live in the App Service's environment
+# variables, never in this repo.
 
 on:
   push:
@@ -17,11 +28,14 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/ezfinance-backend
+  ACR_LOGIN_SERVER: acrezfinance.azurecr.io
+  IMAGE_NAME: ezfinance-api
+  AZURE_WEBAPP_NAME: ezfinance-backend
+  AZURE_WEBAPP_URL: https://ezfinance-backend.azurewebsites.net
+  # Pushes to these branches deploy; anything else (PRs, other branches) only builds.
+  DEPLOY: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/CWH_programming' || github.ref == 'refs/heads/main') }}
 
 jobs:
   # ============================================================
@@ -39,7 +53,6 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-          dotnet-quality: 'preview'
 
       - name: Restore Dependencies
         run: dotnet restore backend/src/EzFinance.Api/EzFinance.Api.csproj
@@ -48,12 +61,14 @@ jobs:
         run: dotnet build backend/src/EzFinance.Api/EzFinance.Api.csproj --configuration Release --no-restore
 
   # ============================================================
-  # Continuous Deployment (CD): Build and Push Docker Image
+  # Docker image → Azure Container Registry
   # ============================================================
-  docker-build-push:
+  docker-image:
     name: Build & Push Docker Image
     needs: build-and-test
     runs-on: ubuntu-latest
+    outputs:
+      image: ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
     steps:
       - name: Checkout Repository
@@ -62,31 +77,61 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry (GHCR)
-        if: github.event_name != 'pull_request'
+      - name: Log in to Azure Container Registry
+        if: env.DEPLOY == 'true'
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ${{ env.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
 
-      - name: Extract Docker metadata (tags, labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || github.ref == 'refs/heads/main' }}
-            type=ref,event=branch
-            type=sha,format=short
-
+      # Tagged with the commit (what gets deployed, and lets you roll back) and latest.
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v6
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64
+          push: ${{ env.DEPLOY == 'true' }}
+          tags: |
+            ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # ============================================================
+  # Continuous Deployment (CD): Azure App Service runs the new image
+  # ============================================================
+  deploy-azure:
+    name: Deploy to Azure App Service
+    needs: docker-image
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/CWH_programming' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    # One deploy at a time; a newer push waits for the running one instead of racing it.
+    concurrency:
+      group: azure-production
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: ${{ env.AZURE_WEBAPP_URL }}
+
+    steps:
+      - name: Deploy image to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          images: ${{ needs.docker-image.outputs.image }}
+
+      - name: Smoke test (live /health)
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS --max-time 10 "$AZURE_WEBAPP_URL/health" > /dev/null; then
+              echo "Live and healthy"
+              exit 0
+            fi
+            echo "Waiting for the new container to start... ($i/20)"
+            sleep 15
+          done
+          echo "The deployed app did not answer /health within 5 minutes"
+          exit 1
