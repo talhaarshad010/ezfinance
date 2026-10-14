@@ -1,71 +1,99 @@
 import { useEffect, useRef } from 'react';
-import { supabase } from '../api/supabaseClient';
-import { getStoredAuth } from '../api/sessionStore';
+import { AppState } from 'react-native';
+import { API_BASE_URL } from '../api/config';
+import { getAccessToken } from '../api/client';
+
+const MAX_RETRY_MS = 30000;
 
 /**
- * Subscribes to Supabase Realtime WebSocket changes for the logged-in user.
- * Whenever a row in transactions, bank_accounts, transfers, recurring_bills,
- * loans, or goals changes on any device or backend, this hook automatically
- * calls reloadTxs to seamlessly synchronize the screen in real time.
+ * Live sync across devices through the backend (never Supabase directly): keeps a WebSocket open
+ * to `/api/sync`, and the API sends `{ type: 'changed', tables }` after any save to this user's
+ * data, from any device. Each notice (and each reconnect, which may have missed some) reloads.
+ * The server closes the socket when the access token expires; reconnecting fetches a fresh one.
  */
 export function useRealtimeSync(reloadTxs: () => Promise<void>, enabled: boolean = true) {
   const reloadRef = useRef(reloadTxs);
   reloadRef.current = reloadTxs;
 
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const triggerReload = () => {
-    if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(() => {
-      reloadRef.current().catch(() => {});
-    }, 250);
-  };
-
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !API_BASE_URL) return;
 
-    const auth = getStoredAuth();
-    const userId = auth?.session?.user?.id;
-    const token = auth?.session?.accessToken;
+    let socket: WebSocket | null = null;
+    let stopped = false;
+    let attempt = 0;
+    let everOpened = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
-    if (!userId || !supabase) return;
+    const reload = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        reloadRef.current().catch(() => {});
+      }, 250);
+    };
 
-    if (token && supabase.realtime) {
-      supabase.realtime.setAuth(token);
+    const scheduleReconnect = () => {
+      if (stopped) return;
+      const delay = Math.min(MAX_RETRY_MS, 1000 * 2 ** attempt);
+      attempt++;
+      retryTimer = setTimeout(connect, delay);
+    };
+
+    async function connect() {
+      if (stopped || socket) return;
+      let token: string;
+      try {
+        token = await getAccessToken();
+      } catch {
+        scheduleReconnect(); // offline, or signed out
+        return;
+      }
+      if (stopped || socket) return;
+
+      const ws = new WebSocket(`${API_BASE_URL.replace(/^http/, 'ws')}/api/sync`, undefined, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      socket = ws;
+      ws.onopen = () => {
+        attempt = 0;
+        if (everOpened) reload(); // catch up on anything missed while disconnected
+        everOpened = true;
+      };
+      ws.onmessage = event => {
+        try {
+          const msg = JSON.parse(String(event.data));
+          if (msg?.type === 'changed') {
+            if (__DEV__) console.log('[Sync] changed:', msg.tables);
+            reload();
+          }
+        } catch {
+          // ignore anything that isn't a sync notice
+        }
+      };
+      ws.onclose = () => {
+        if (socket === ws) socket = null;
+        scheduleReconnect();
+      };
     }
 
-    const channelName = `realtime-user-${userId}`;
-    const channel = supabase.channel(channelName);
-
-    const tables = ['transactions', 'bank_accounts', 'transfers', 'recurring_bills', 'loans', 'goals'];
-
-    tables.forEach(tableName => {
-      channel.on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: tableName,
-          filter: `user_id=eq.${userId}`,
-        },
-        payload => {
-          if (__DEV__) {
-            console.log(`[Realtime] Received ${payload.eventType} on ${tableName}:`, payload);
-          }
-          triggerReload();
-        },
-      );
-    });
-
-    channel.subscribe(status => {
-      if (__DEV__) {
-        console.log(`[Realtime] Channel status for user ${userId}:`, status);
+    // Phones drop sockets in the background: reconnect straight away when the app is back.
+    const appState = AppState.addEventListener('change', state => {
+      if (state === 'active' && !socket) {
+        if (retryTimer) clearTimeout(retryTimer);
+        attempt = 0;
+        connect();
       }
     });
 
+    connect();
+
     return () => {
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
-      supabase.removeChannel(channel);
+      stopped = true;
+      appState.remove();
+      if (retryTimer) clearTimeout(retryTimer);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      socket?.close();
+      socket = null;
     };
   }, [enabled]);
 }

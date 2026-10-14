@@ -5,6 +5,7 @@ using EzFinance.Api.Infrastructure.Errors;
 using EzFinance.Api.Infrastructure.HealthChecks;
 using EzFinance.Api.Infrastructure.Ocr;
 using EzFinance.Api.Infrastructure.Supabase;
+using EzFinance.Api.Infrastructure.Sync;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
@@ -27,9 +28,13 @@ if (string.IsNullOrWhiteSpace(connectionString))
         "ConnectionStrings:DefaultConnection is not set. Run: " +
         "dotnet user-secrets set \"ConnectionStrings:DefaultConnection\" \"<session pooler connection string>\"");
 }
-builder.Services.AddDbContext<AppDbContext>(options => options
+// Live sync: every save tells the user's other devices what changed (see /api/sync).
+builder.Services.AddSingleton<ChangeFeed>();
+builder.Services.AddScoped<ChangeFeedInterceptor>();
+builder.Services.AddDbContext<AppDbContext>((services, options) => options
     .UseNpgsql(connectionString)
-    .UseSnakeCaseNamingConvention());
+    .UseSnakeCaseNamingConvention()
+    .AddInterceptors(services.GetRequiredService<ChangeFeedInterceptor>()));
 
 // Supabase Auth
 builder.Services.AddHttpClient<SupabaseAuthClient>();
@@ -93,6 +98,7 @@ else
     app.UseHttpsRedirection();
 }
 
+app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(30) });
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
@@ -106,5 +112,6 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 });
 
 app.MapControllers();
+app.MapSyncSocket();
 
 app.Run();

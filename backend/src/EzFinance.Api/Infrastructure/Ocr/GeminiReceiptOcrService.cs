@@ -28,7 +28,7 @@ public sealed class GeminiReceiptOcrService(
     {
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
         {
-            throw new InvalidOperationException("Gemini API key is not configured. Please set 'Gemini:ApiKey' in appsettings.json, user secrets, or environment variables.");
+            throw new InvalidOperationException("Gemini API key is not configured. Run: dotnet user-secrets set \"Gemini:ApiKey\" \"<key>\" (or set the Gemini__ApiKey environment variable).");
         }
 
         var url = $"https://generativelanguage.googleapis.com/v1beta/models/{_options.Model}:generateContent?key={_options.ApiKey}";
