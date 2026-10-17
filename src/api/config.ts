@@ -19,7 +19,7 @@ export const AZURE_API_URL = 'https://ezfinance-backend.azurewebsites.net';
  * true: the backend running on this Mac (`dotnet run` or `docker compose up`, port 5080).
  * false (default): the live Azure-hosted backend.
  */
-const USE_LOCAL_BACKEND = true;
+const USE_LOCAL_BACKEND = false;
 
 const isEmulator = DeviceInfo.isEmulatorSync();
 const devHost = DEV_HOST ?? (Platform.OS === 'android' ? (isEmulator ? '10.0.2.2' : 'localhost') : 'localhost');
