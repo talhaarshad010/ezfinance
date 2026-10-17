@@ -19,15 +19,31 @@ namespace EzFinance.Api.Controllers;
 public sealed class AuthController(SupabaseAuthClient auth, AppDbContext db, PasswordResetStore resets) : ControllerBase
 {
     /// <summary>
-    /// Sign-up step 1: emails a 6-digit code, creating the account if the email is new. The response
-    /// is the same either way, so it doesn't reveal whether the email is registered. After the code
-    /// is verified, the app checks the profile's hasPassword to tell a new account from an existing one.
+    /// Sign-up step 1: emails a 6-digit code, creating the account if the email is new. An email that
+    /// already has an account gets 409 instead and no code: "email_taken" (log in with a password)
+    /// or "email_uses_google" (continue with Google). A sign-up that was started but never finished
+    /// gets a code so it can carry on. Brute-force checking of emails is slowed by the auth rate limit.
     /// </summary>
     [HttpPost("email-code")]
     public async Task<IActionResult> EmailCode(EmailCodeRequest request, CancellationToken ct)
     {
+        var email = Normalize(request.Email);
+        switch (await db.GetSignUpEmailStatusAsync(email, ct))
+        {
+            case SignUpEmailStatus.HasAccount:
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    detail: "An account with this email already exists. Log in instead.",
+                    extensions: new Dictionary<string, object?> { ["code"] = "email_taken" });
+            case SignUpEmailStatus.GoogleOnly:
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    detail: "This email is linked to Google. Continue with Google instead.",
+                    extensions: new Dictionary<string, object?> { ["code"] = "email_uses_google" });
+        }
+
         var metadata = new Dictionary<string, string?> { ["full_name"] = request.FullName?.Trim() };
-        await auth.SendEmailCodeAsync(Normalize(request.Email), metadata, ct);
+        await auth.SendEmailCodeAsync(email, metadata, ct);
         return NoContent();
     }
 

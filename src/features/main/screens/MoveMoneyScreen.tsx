@@ -37,7 +37,7 @@ export const MoveMoneyScreen = () => {
     showToast(
       `PKR ${amount.toLocaleString()} moved from ${source.label} to ${dest.label}.`,
       'success',
-      'Envelopes Rebalanced',
+      'Categories Rebalanced',
     );
     navigation.goBack();
   };
@@ -66,7 +66,7 @@ export const MoveMoneyScreen = () => {
           </TouchableOpacity>
           <View>
             <Text style={[styles.eyebrow, { color: theme.MUTED }]}>
-              ENVELOPE REBALANCING
+              CATEGORY REBALANCING
             </Text>
             <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
               Move Money
@@ -78,7 +78,7 @@ export const MoveMoneyScreen = () => {
           {/* From */}
           <View style={[styles.card, { backgroundColor: theme.CARD }]}>
             <Text style={[styles.cardLabel, { color: theme.MUTED }]}>
-              FROM ENVELOPE
+              FROM CATEGORY
             </Text>
             {ENVELOPE_BALANCES.map((e, i) => {
               const selected = sourceIdx === i;
@@ -150,7 +150,7 @@ export const MoveMoneyScreen = () => {
           {/* To */}
           <View style={[styles.card, { backgroundColor: theme.CARD }]}>
             <Text style={[styles.cardLabel, { color: theme.MUTED }]}>
-              TO ENVELOPE
+              TO CATEGORY
             </Text>
             {ENVELOPE_BALANCES.map((e, i) => {
               const selected = destIdx === i;

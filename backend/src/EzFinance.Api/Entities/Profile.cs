@@ -16,6 +16,8 @@ public sealed class Profile
     public bool HasPassword { get; set; }
     /// <summary>The user finished or skipped the first-visit app tour.</summary>
     public bool TourCompleted { get; set; }
+    /// <summary>Profile photo's path in the private "avatars" Storage bucket, or null.</summary>
+    public string? AvatarPath { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

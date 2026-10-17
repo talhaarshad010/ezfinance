@@ -10,6 +10,8 @@ import {
   Image,
   ActivityIndicator,
   Pressable,
+  PermissionsAndroid,
+  Platform,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,10 +20,17 @@ import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
 import {
+  setProfile,
   updateName,
   updatePhone,
   updatePhoto,
 } from '../../../store/slices/userSlice';
+import {
+  ApiError,
+  hasSession,
+  removeProfilePhoto,
+  uploadProfilePhoto,
+} from '../../../services/authService';
 import { AnimatedModal } from '../../../components/AnimatedModal';
 
 export const EditProfileScreen = ({ navigation }: any) => {
@@ -41,6 +50,8 @@ export const EditProfileScreen = ({ navigation }: any) => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPhotoSheet, setShowPhotoSheet] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  // A signed photo link can expire while cached on the device; fall back to initials until refreshed.
+  const [imageFailed, setImageFailed] = useState(false);
 
   const handleSave = () => {
     if (!name.trim()) {
@@ -57,73 +68,82 @@ export const EditProfileScreen = ({ navigation }: any) => {
     }, 200);
   };
 
-  const handleUploadPhoto = () => {
+  // Photos are resized on the device (~512px JPEG, usually under 150 KB) and uploaded straight
+  // away to the backend, which keeps them in private cloud storage. Explore mode has no account,
+  // so there the photo is only shown on this device.
+  const pickPhoto = (source: 'camera' | 'library') => {
     setShowPhotoSheet(false);
     setTimeout(async () => {
       try {
-        const result = await launchImageLibrary({
-          mediaType: 'photo',
-          quality: 0.6,
-          maxWidth: 500,
-          maxHeight: 500,
-          includeBase64: true,
-        });
-
-        if (result.didCancel) return;
-        const asset = result.assets?.[0];
-        if (asset?.base64) {
-          setIsUploading(true);
-          const dataUri = `data:${asset.type || 'image/jpeg'};base64,${
-            asset.base64
-          }`;
-          setPhotoURL(dataUri);
-          dispatch(updatePhoto(dataUri));
-          showToast('Profile picture updated!', 'success');
-          setIsUploading(false);
+        const options = {
+          mediaType: 'photo' as const,
+          quality: 0.8 as const,
+          maxWidth: 512,
+          maxHeight: 512,
+        };
+        if (source === 'camera' && Platform.OS === 'android') {
+          // The manifest declares CAMERA, so Android needs it granted before the camera opens.
+          const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
+          if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+            showToast('Allow camera access in Settings to take a photo.', 'error');
+            return;
+          }
         }
+        const result = source === 'camera' ? await launchCamera(options) : await launchImageLibrary(options);
+        if (result.didCancel) return;
+        if (result.errorCode) {
+          showToast(
+            result.errorCode === 'camera_unavailable'
+              ? 'No camera is available on this device.'
+              : result.errorCode === 'permission'
+              ? 'Allow photo access in Settings to choose a picture.'
+              : "Couldn't open your photos. Try again.",
+            'error',
+          );
+          return;
+        }
+        const asset = result.assets?.[0];
+        if (!asset?.uri) return;
+
+        if (!hasSession()) {
+          setPhotoURL(asset.uri);
+          dispatch(updatePhoto(asset.uri));
+          showToast('Create an account to save your photo.', 'info');
+          return;
+        }
+
+        setIsUploading(true);
+        const updated = await uploadProfilePhoto({ uri: asset.uri, type: asset.type, fileName: asset.fileName });
+        setPhotoURL(updated.photoURL);
+        setImageFailed(false);
+        dispatch(setProfile(updated));
+        showToast('Profile picture updated!', 'success');
       } catch (error) {
+        showToast(error instanceof ApiError ? error.message : "Couldn't upload the photo. Try again.", 'error');
+      } finally {
         setIsUploading(false);
-        showToast('Failed to upload picture', 'error');
       }
     }, 400);
   };
 
-  const handleTakePhoto = () => {
+  const handleDeletePhoto = async () => {
     setShowPhotoSheet(false);
-    setTimeout(async () => {
-      try {
-        const result = await launchCamera({
-          mediaType: 'photo',
-          quality: 0.6,
-          maxWidth: 500,
-          maxHeight: 500,
-          includeBase64: true,
-        });
-
-        if (result.didCancel) return;
-        const asset = result.assets?.[0];
-        if (asset?.base64) {
-          setIsUploading(true);
-          const dataUri = `data:${asset.type || 'image/jpeg'};base64,${
-            asset.base64
-          }`;
-          setPhotoURL(dataUri);
-          dispatch(updatePhoto(dataUri));
-          showToast('Photo captured & updated!', 'success');
-          setIsUploading(false);
-        }
-      } catch (error) {
-        setIsUploading(false);
-        showToast('Failed to capture photo', 'error');
-      }
-    }, 400);
-  };
-
-  const handleDeletePhoto = () => {
-    setShowPhotoSheet(false);
-    setPhotoURL(null);
-    dispatch(updatePhoto(null));
-    showToast('Profile photo removed', 'info');
+    if (!hasSession()) {
+      setPhotoURL(null);
+      dispatch(updatePhoto(null));
+      return;
+    }
+    setIsUploading(true);
+    try {
+      const updated = await removeProfilePhoto();
+      setPhotoURL(null);
+      dispatch(setProfile(updated));
+      showToast('Profile photo removed', 'info');
+    } catch (error) {
+      showToast(error instanceof ApiError ? error.message : "Couldn't remove the photo. Try again.", 'error');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const getInitials = () => {
@@ -196,6 +216,7 @@ export const EditProfileScreen = ({ navigation }: any) => {
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={() => setShowPhotoSheet(true)}
+              disabled={isUploading}
               style={styles.avatarTouchArea}
             >
               <View
@@ -204,8 +225,12 @@ export const EditProfileScreen = ({ navigation }: any) => {
                   { borderColor: theme.ACTIVE, backgroundColor: theme.MODAL },
                 ]}
               >
-                {photoURL ? (
-                  <Image source={{ uri: photoURL }} style={styles.avatarImage} />
+                {photoURL && !imageFailed ? (
+                  <Image
+                    source={{ uri: photoURL }}
+                    style={styles.avatarImage}
+                    onError={() => setImageFailed(true)}
+                  />
                 ) : (
                   <View style={styles.initialsAvatar}>
                     <Text style={[styles.initialsText, { color: theme.TEXT }]}>
@@ -387,7 +412,7 @@ export const EditProfileScreen = ({ navigation }: any) => {
 
             <TouchableOpacity
               activeOpacity={0.8}
-              onPress={handleTakePhoto}
+              onPress={() => pickPhoto('camera')}
               style={[styles.sheetOption, { backgroundColor: theme.MODAL }]}
             >
               <Feather name="camera" size={20} color={theme.TEXT} />
@@ -398,7 +423,7 @@ export const EditProfileScreen = ({ navigation }: any) => {
 
             <TouchableOpacity
               activeOpacity={0.8}
-              onPress={handleUploadPhoto}
+              onPress={() => pickPhoto('library')}
               style={[styles.sheetOption, { backgroundColor: theme.MODAL }]}
             >
               <Feather name="image" size={20} color={theme.TEXT} />

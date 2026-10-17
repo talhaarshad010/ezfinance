@@ -40,6 +40,8 @@ export interface ApiProfile {
   hasPassword: boolean;
   /** True once the first-visit app tour was finished or skipped. */
   tourCompleted: boolean;
+  /** Signed, time-limited URL of the profile photo; null when there is none. */
+  avatarUrl: string | null;
 }
 
 export interface UpdateProfileRequest {

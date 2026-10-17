@@ -22,8 +22,10 @@ import { useBudgetPlan } from './budget/useBudgetPlan';
 import { ApiError } from '../../../api/client';
 import { SAVE_ERROR } from '../../../utils/validation';
 
-// A user's envelope counts spending whose category has the same name, so suggest those names.
+// A budget category counts spending whose transaction category has the same name, so offer those
+// names. "Other" lets the user type their own name instead.
 const SPENDING_CATS = CATS.filter(c => c !== 'Salary');
+const PRESET_CATS = SPENDING_CATS.filter(c => c !== 'Other');
 
 const ICONS = [
   'coffee',
@@ -66,7 +68,13 @@ export const AddCategoryScreen = () => {
 
   const { categories, totalMonthlyBudget } = plan;
 
-  const [name, setName] = useState(editingCategory?.name || '');
+  const editingPreset = PRESET_CATS.find(c => c.toLowerCase() === editingCategory?.name.trim().toLowerCase());
+  // The chosen chip (a preset name or 'Other'); null until the user picks one.
+  const [choice, setChoice] = useState<string | null>(
+    editingCategory ? editingPreset ?? 'Other' : null,
+  );
+  const [customName, setCustomName] = useState(editingCategory && !editingPreset ? editingCategory.name : '');
+  const name = choice === 'Other' ? customName : choice ?? '';
   const [limit, setLimit] = useState(
     editingCategory?.limit?.toString() || '',
   );
@@ -83,8 +91,12 @@ export const AddCategoryScreen = () => {
   const unallocatedBudget = Math.max(0, totalMonthlyBudget - otherCategoriesTotal);
 
   const handleSave = async () => {
+    if (!choice) {
+      showToast('Choose a category.', 'error', 'Missing Category');
+      return;
+    }
     if (!name.trim()) {
-      showToast('Please enter a category name.', 'error', 'Missing Name');
+      showToast('Type a name for your category.', 'error', 'Missing Name');
       return;
     }
     const numLimit = parseFloat(limit);
@@ -114,7 +126,7 @@ export const AddCategoryScreen = () => {
         color,
         isMain: editingCategory?.isMain || false,
       };
-      // A user's envelope is saved on the server (it gets its own id there).
+      // A user's category is saved on the server (it gets its own id there).
       if (editingCategory) {
         await plan.update(categoryData);
         showToast('Category updated successfully.', 'success', 'Success');
@@ -186,35 +198,54 @@ export const AddCategoryScreen = () => {
                 >
                   <Feather name={icon} size={18} color={color} />
                 </View>
-                <TextInput
-                  style={[styles.textInput, { color: theme.TEXT }]}
-                  placeholder="e.g. Travel, Healthcare, Shopping"
-                  placeholderTextColor={theme.MUTED}
-                  value={name}
-                  onChangeText={setName}
-                />
+                <Text
+                  style={[styles.textInput, { color: name.trim() ? theme.TEXT : theme.MUTED }]}
+                  numberOfLines={1}
+                >
+                  {name.trim() || (choice === 'Other' ? 'Type a name below' : 'Choose a category below')}
+                </Text>
               </View>
-              {plan.isUser && (
-                <View style={styles.suggestRow}>
-                  {SPENDING_CATS.filter(
-                    c => !categories.some(x => x.id !== editingCategory?.id && x.name.toLowerCase() === c.toLowerCase()),
-                  ).map(c => {
-                    const selected = name.trim().toLowerCase() === c.toLowerCase();
-                    return (
-                      <TouchableOpacity
-                        key={c}
-                        activeOpacity={0.8}
-                        onPress={() => {
-                          setName(c);
-                          setIcon(CAT_META[c]?.icon ?? icon);
-                          setColor(CAT_META[c]?.color ?? color);
-                        }}
-                        style={[styles.suggestChip, { backgroundColor: selected ? theme.TEXT : theme.MODAL }]}
-                      >
-                        <Text style={[styles.suggestText, { color: selected ? theme.BG : theme.TEXT }]}>{c}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+              <View style={styles.suggestRow}>
+                {SPENDING_CATS.filter(
+                  // A category already in the plan can't be added twice; Other is always available.
+                  c =>
+                    c === 'Other' ||
+                    !categories.some(x => x.id !== editingCategory?.id && x.name.toLowerCase() === c.toLowerCase()),
+                ).map(c => {
+                  const selected = choice === c;
+                  return (
+                    <TouchableOpacity
+                      key={c}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        setChoice(c);
+                        setIcon(CAT_META[c]?.icon ?? icon);
+                        setColor(CAT_META[c]?.color ?? color);
+                      }}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      style={[styles.suggestChip, { backgroundColor: selected ? theme.TEXT : theme.MODAL }]}
+                    >
+                      <Text style={[styles.suggestText, { color: selected ? theme.BG : theme.TEXT }]}>{c}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {choice === 'Other' && (
+                <View style={styles.customNameBlock}>
+                  <Text style={[styles.fieldLabel, { color: theme.MUTED }]}>YOUR CATEGORY NAME</Text>
+                  <TextInput
+                    style={[styles.customNameInput, { color: theme.TEXT, backgroundColor: theme.MODAL }]}
+                    placeholder="e.g. Travel, Healthcare, Shopping"
+                    placeholderTextColor={theme.MUTED}
+                    value={customName}
+                    onChangeText={setCustomName}
+                    autoFocus={!editingCategory}
+                    autoCapitalize="words"
+                    maxLength={40}
+                    returnKeyType="done"
+                    accessibilityLabel="Your category name"
+                  />
                 </View>
               )}
             </View>
@@ -411,6 +442,15 @@ const styles = StyleSheet.create({
   suggestRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   suggestChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 14 },
   suggestText: { fontSize: 12, fontWeight: '600' },
+  customNameBlock: { marginTop: 16 },
+  customNameInput: {
+    height: 48,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    fontSize: 15,
+    fontWeight: '600',
+    marginTop: 8,
+  },
   container: {
     flex: 1,
   },

@@ -13,11 +13,11 @@ const DEV_HOST: string | null = null;
 const DEV_PORT = 5080;
 
 /** Azure App Service Production URL (Korea Central - Gemini API supported region) */
-const AZURE_API_URL = 'https://ezfinance-backend.azurewebsites.net';
+export const AZURE_API_URL = 'https://ezfinance-backend.azurewebsites.net';
 
 /**
- * true (default for development): the backend running on this Mac (`dotnet run` or
- * `docker compose up`, port 5080). false: the Azure-hosted backend.
+ * true: the backend running on this Mac (`dotnet run` or `docker compose up`, port 5080).
+ * false (default): the live Azure-hosted backend.
  */
 const USE_LOCAL_BACKEND = true;
 
@@ -28,7 +28,7 @@ export const API_BASE_URL = USE_LOCAL_BACKEND
   ? `http://${devHost}:${DEV_PORT}`
   : AZURE_API_URL;
 
-export const REQUEST_TIMEOUT_MS = 15000;
+export const REQUEST_TIMEOUT_MS = 30000;
 
 /**
  * Google OAuth client IDs (Google Cloud project "My Project 70", alpine-flare-397219). These are

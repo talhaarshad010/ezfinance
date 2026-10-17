@@ -78,11 +78,11 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     tagColor: '#FF3B30',
     icon: 'bell',
     time: '1d ago',
-    title: 'Groceries Budget Envelope 92% Utilized',
+    title: 'Groceries Category 92% Utilized',
     description:
       'You have spent PKR 15,560 of your PKR 17,000 grocery allocation for May 2026. Only PKR 1,440 remaining.',
     unread: false,
-    actionText: 'Adjust Envelope Cap',
+    actionText: 'Adjust Category Cap',
     screenTarget: 'BudgetPlanner',
   },
 ];

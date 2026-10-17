@@ -13,7 +13,9 @@ public sealed record ProfileResponse(
     string FilerStatus,
     DateTimeOffset CreatedAt,
     bool HasPassword,
-    bool TourCompleted)
+    bool TourCompleted,
+    /// <summary>Signed, time-limited URL of the profile photo (null when there is none).</summary>
+    string? AvatarUrl = null)
 {
     public static ProfileResponse From(Profile profile, string email) => new(
         profile.Id, email, profile.FullName, profile.MonthlyIncome, profile.City,

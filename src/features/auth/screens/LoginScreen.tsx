@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useToast } from '../../../context/ToastContext';
 import { useAppDispatch } from '../../../store/hooks';
 import { setProfile } from '../../../store/slices/userSlice';
@@ -33,7 +33,13 @@ export const LoginScreen = () => {
 
   const guard = useAuthGuard();
 
-  const [email, setEmail] = useState('');
+  const route = useRoute<any>();
+  // Pre-filled when coming from sign-up's "Log in instead" (an account already exists).
+  const prefilledEmail: string | undefined = route.params?.email;
+  const [email, setEmail] = useState(prefilledEmail ?? '');
+  useEffect(() => {
+    if (prefilledEmail) setEmail(prefilledEmail);
+  }, [prefilledEmail]);
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   // Same message whether or not the account exists, so it can't be used to probe for accounts.

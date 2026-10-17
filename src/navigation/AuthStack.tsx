@@ -21,7 +21,7 @@ export type AuthStackParamList = {
   Splash: undefined;
   Onboarding: undefined;
   Welcome: undefined;
-  Login: undefined;
+  Login: { email?: string } | undefined;
   Register: undefined;
   ForgotPassword: undefined;
   VerifyEmail: { email: string };

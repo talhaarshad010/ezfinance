@@ -29,6 +29,10 @@ export function onSessionExpired(listener: Listener) {
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   body?: unknown;
+  /** Multipart upload (e.g. a photo). Sent instead of a JSON body. */
+  form?: FormData;
+  /** Longer than the default for slow calls (e.g. reading a PDF statement). */
+  timeoutMs?: number;
   /** Send the stored access token, refreshing it first if it is about to expire. */
   auth?: boolean;
 }
@@ -57,17 +61,18 @@ async function send<T>(path: string, options: RequestOptions, accessToken: strin
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? REQUEST_TIMEOUT_MS);
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       method: options.method ?? 'GET',
       headers: {
         Accept: 'application/json',
-        ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        // FormData sets its own multipart Content-Type (with the boundary).
+        ...(options.body !== undefined && !options.form ? { 'Content-Type': 'application/json' } : {}),
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
-      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      body: options.form ?? (options.body !== undefined ? JSON.stringify(options.body) : undefined),
       signal: controller.signal,
     });
   } catch {

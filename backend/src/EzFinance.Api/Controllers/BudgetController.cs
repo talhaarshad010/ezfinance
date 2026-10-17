@@ -31,7 +31,7 @@ public sealed class BudgetController(AppDbContext db) : UserDataController(db)
         if (limit < allocated)
         {
             return Fail(StatusCodes.Status400BadRequest, "below_allocated",
-                $"Your envelopes already hold PKR {allocated:N0}. Lower them first, or set at least that much.");
+                $"Your categories already hold PKR {allocated:N0}. Lower them first, or set at least that much.");
         }
 
         var userId = UserId;
@@ -58,7 +58,7 @@ public sealed class BudgetController(AppDbContext db) : UserDataController(db)
         {
             return existing.UserId == UserId
                 ? Ok(EnvelopeResponse.From(existing))
-                : Fail(StatusCodes.Status409Conflict, "id_conflict", "Use a different envelope id.");
+                : Fail(StatusCodes.Status409Conflict, "id_conflict", "Use a different category id.");
         }
         if (await ProblemAsync(request, exceptId: null, ct) is { } problem) return problem;
 
@@ -117,7 +117,7 @@ public sealed class BudgetController(AppDbContext db) : UserDataController(db)
         var name = f.Name.Trim().ToLower();
         if (await Envelopes().AnyAsync(e => e.Id != exceptId && e.Name.ToLower() == name, ct))
         {
-            return Fail(StatusCodes.Status409Conflict, "duplicate_envelope", "You already have an envelope with this name.");
+            return Fail(StatusCodes.Status409Conflict, "duplicate_envelope", "You already have a category with this name.");
         }
         var others = await Envelopes().Where(e => e.Id != exceptId).SumAsync(e => e.MonthlyLimit, ct);
         if (others + f.MonthlyLimit > budget.MonthlyLimit)
@@ -138,5 +138,5 @@ public sealed class BudgetController(AppDbContext db) : UserDataController(db)
     }
 
     private ObjectResult NotFoundProblem() =>
-        Fail(StatusCodes.Status404NotFound, "envelope_not_found", "Envelope not found.");
+        Fail(StatusCodes.Status404NotFound, "envelope_not_found", "Category not found.");
 }

@@ -6,6 +6,8 @@
 export const MONTHLY_INCOME_POOL = 150000;
 
 export interface EnvelopeCategory {
+  /** Server id of a signed-in user's envelope (absent for the Explore sample). */
+  id?: string;
   label: string;
   amount: number;
   /** Fixed commitments cannot be re-allocated during the planning ritual. */

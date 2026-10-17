@@ -17,6 +17,15 @@ public sealed class SupabaseOptions
     [Required]
     public string PublishableKey { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Secret (sb_secret_...) key for server-only APIs (Storage: profile photos). Kept in user
+    /// secrets / environment variables, never in appsettings.json. Empty: photo uploads are off.
+    /// </summary>
+    public string SecretKey { get; init; } = string.Empty;
+
     /// <summary>Base URL of Supabase Auth (GoTrue). Also the issuer of user access tokens.</summary>
     public string AuthUrl => $"{Url.TrimEnd('/')}/auth/v1";
+
+    /// <summary>Base URL of Supabase Storage.</summary>
+    public string StorageUrl => $"{Url.TrimEnd('/')}/storage/v1";
 }

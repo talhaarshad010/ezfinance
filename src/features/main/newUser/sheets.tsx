@@ -345,7 +345,9 @@ export function FirstActionSheetHost() {
       setPhase('needsNet');
       return;
     }
-    handOff({ source: 'import', type: 'expense', category: 'Fuel', amount: 5200, note: 'PSO · HBL Debit' });
+    // Statement import has its own screen: choose a CSV / Excel / PDF, review, import.
+    close();
+    setTimeout(() => navigateTo('ImportStatement'), 280);
   }
 
   if (phase === 'needsNet') {

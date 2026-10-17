@@ -48,6 +48,13 @@ backend/
    dotnet user-secrets set "Gemini:ApiKey" "<your Gemini API key>"
    ```
 
+   Profile photos need the project's **secret** key (Supabase → Project Settings → API Keys →
+   Secret keys). Without it the API runs, but photo upload returns 503 `avatars_unavailable`:
+
+   ```bash
+   dotnet user-secrets set "Supabase:SecretKey" "sb_secret_..."
+   ```
+
    Never put keys in `appsettings.json`: it is committed.
 
 3. Run:
@@ -68,7 +75,7 @@ The API listens on `http://0.0.0.0:5080`, so it is reachable from:
 
 | Method | Path                        | Auth | Description                                                   |
 | ------ | --------------------------- | ---- | ------------------------------------------------------------- |
-| POST   | `/api/auth/email-code`      |      | Sign-up step 1: email a 6-digit code (creates the account if new) |
+| POST   | `/api/auth/email-code`      |      | Sign-up step 1: email a 6-digit code (creates the account if new). 409 `email_taken` / `email_uses_google` if the email already has an account (an unfinished sign-up still gets a code) |
 | POST   | `/api/auth/verify-email`    |      | Verify an emailed sign-up or sign-in code; returns a session  |
 | POST   | `/api/auth/resend-code`     |      | Send a new sign-up code                                       |
 | POST   | `/api/auth/login`           |      | Email + password; returns a session                           |
@@ -82,6 +89,8 @@ The API listens on `http://0.0.0.0:5080`, so it is reachable from:
 | POST   | `/api/auth/set-password`    | ✓    | Add a password to a Google-only account (409 if one exists)   |
 | GET    | `/api/profile`              | ✓    | The signed-in user's profile (recreated if missing), with `hasPassword` |
 | PUT    | `/api/profile`              | ✓    | Update name, income, city, province, filer status             |
+| POST   | `/api/profile/avatar`       | ✓    | Set the profile photo (multipart `file`: JPEG/PNG/WebP, ≤ 2 MB) in the private `avatars` bucket; profile responses carry a 7-day signed `avatarUrl` |
+| DELETE | `/api/profile/avatar`       | ✓    | Remove the profile photo                                      |
 | GET    | `/api/accounts`             | ✓    | The user's linked bank accounts with live `balance` (opening balance + their transactions) |
 | POST   | `/api/accounts`             | ✓    | Link an account (app-generated UUID `id`; only `accountLast4` is stored) |
 | PUT    | `/api/accounts/{id}/balance` | ✓   | Set what the account holds now (its transactions stay as they are) |
@@ -116,6 +125,8 @@ The API listens on `http://0.0.0.0:5080`, so it is reachable from:
 | DELETE | `/api/transactions/{id}`    | ✓    | Soft delete (204, also when already deleted)                  |
 | POST   | `/api/transactions/{id}/restore` | ✓ | Undo a delete                                                |
 | POST   | `/api/transactions/{id}/split` | ✓  | Replace with 2–10 parts that add up to the original           |
+| POST   | `/api/imports/statement`    | ✓    | Read and check a bank statement (multipart `file`: CSV / XLS / XLSX / PDF, optional `password`). Saves nothing; returns rows with `check` (`verified` / `mismatch` / `unchecked`), suggested category, `alreadyImported`, `preselected`. 422 `password_required` / `wrong_password` |
+| POST   | `/api/imports/transactions` | ✓    | Save the reviewed rows into one account in one go; already-imported rows are skipped, deleted ones restored |
 | GET    | `/api/sync` (WebSocket)     | ✓    | Live sync: `{"type":"changed","tables":[...]}` after any save to the user's data, from any device; closes when the token expires |
 | GET    | `/health`                   |      | Liveness: the API process is up                               |
 | GET    | `/health/ready`             |      | Readiness: Supabase Auth and the database are reachable       |
@@ -126,7 +137,7 @@ minute per IP.
 
 Errors are [ProblemDetails](https://www.rfc-editor.org/rfc/rfc9457) JSON. Auth errors carry a
 `code` the app can branch on, e.g. `invalid_credentials` (401), `email_not_confirmed` (403),
-`otp_expired` (403), `weak_password` (422), `invalid_current_password` (400),
+`otp_expired` (403), `email_taken` / `email_uses_google` (409), `weak_password` (422), `invalid_current_password` (400),
 `refresh_token_not_found` (401), `over_email_send_rate_limit` (429).
 
 Profile values: `monthlyIncome` is one of `under_25k`, `25k_50k`, `50k_100k`, `100k_150k`,
@@ -169,3 +180,16 @@ backend (connected as `postgres`) can.
   "Skip nonce check" on (the free Google Sign-In SDK on iOS adds a nonce the app can't read).
 - The built-in email sender is for testing only: a few emails per hour, delivered only to members
   of the Supabase organization. Set up custom SMTP before real users sign up.
+
+## Bank statement import
+
+- **CSV / Excel** are read with fixed rules (no AI): the header row is found and columns are matched by
+  their usual names (Narration, Particulars, Withdrawal / Debit, Deposit / Credit, Balance, Dr/Cr…).
+- **Digital PDF**: text is extracted with PdfPig, account numbers / IBANs / CNICs / card numbers are
+  masked, then Gemini structures the rows. **Scanned PDF**: Gemini reads the file itself.
+- **Every row is checked**: previous balance ± amount must equal the balance printed on the row, and
+  opening + in − out must equal the closing balance. Rows that don't add up are never pre-ticked.
+- **No duplicates**: each row's id is a hash of the user, date, amount, direction and description,
+  so importing the same statement again is recognised.
+- Tests: `dotnet test backend/tests/EzFinance.Api.Tests`. Sample statements are in
+  `tests/EzFinance.Api.Tests/Samples/`.

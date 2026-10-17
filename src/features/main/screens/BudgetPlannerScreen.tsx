@@ -130,12 +130,12 @@ export const BudgetPlannerScreen = () => {
       const daysLeft =
         new Date(currentYear, currentMonth + 1, 0).getDate() - now.getDate();
       return tight.spent >= tight.limit
-        ? `Your ${tight.name} envelope is over its cap by PKR ${(tight.spent - tight.limit).toLocaleString()}. Raise the cap or move money from another envelope.`
-        : `Your ${tight.name} envelope is ${Math.round((tight.spent / tight.limit) * 100)}% used with ${daysLeft} days left this month. Slow down here or raise its cap.`;
+        ? `Your ${tight.name} category is over its cap by PKR ${(tight.spent - tight.limit).toLocaleString()}. Raise the cap or move money from another category.`
+        : `Your ${tight.name} category is ${Math.round((tight.spent / tight.limit) * 100)}% used with ${daysLeft} days left this month. Slow down here or raise its cap.`;
     }
     const unallocated = totalMonthlyBudget - totalAllocatedAll;
     if (categoriesWithSpent.length > 0 && unallocated > 0) {
-      return `PKR ${unallocated.toLocaleString()} of your budget isn't in an envelope yet. Give it a job so every rupee is planned.`;
+      return `PKR ${unallocated.toLocaleString()} of your budget isn't in a category yet. Give it a job so every rupee is planned.`;
     }
     return '';
   })();
@@ -153,7 +153,7 @@ export const BudgetPlannerScreen = () => {
     setMenuVisible(false);
     plan
       .remove(id)
-      .then(() => showToast('Category envelope deleted successfully.', 'success', 'Deleted'))
+      .then(() => showToast('Category deleted successfully.', 'success', 'Deleted'))
       .catch(error => showToast(error instanceof ApiError ? error.message : SAVE_ERROR, 'error'));
   };
 
@@ -205,7 +205,7 @@ export const BudgetPlannerScreen = () => {
             <DrawerMenuButton />
             <View>
               <Text style={[styles.backText, { color: theme.MUTED, marginBottom: 2 }]}>
-                Envelopes & Caps
+                Categories & Caps
               </Text>
               <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
                 Budget Planner
@@ -227,7 +227,7 @@ export const BudgetPlannerScreen = () => {
             <EmptyState
               icon="pie-chart"
               title="No budget yet"
-              line="Set one monthly spending limit, then split it into envelopes. We'll track what you spend against each one."
+              line="Set one monthly spending limit, then split it into categories. We'll track what you spend against each one."
               primary={{ label: 'Set a monthly budget', onPress: () => setEditBudgetVisible(true) }}
             />
           </View>
@@ -282,11 +282,11 @@ export const BudgetPlannerScreen = () => {
           </View>
         </View>
 
-        {/* Category Envelopes List */}
+        {/* Budget Categories List */}
         <View style={styles.sectionMargin}>
           <View style={styles.listHeaderRow}>
             <Text style={[styles.sectionTitle, { color: theme.MUTED }]}>
-              Category Envelopes
+              Budget Categories
             </Text>
             <Text style={[styles.subText, { color: theme.MUTED }]}>
               {categoriesWithSpent.length} Categories
@@ -303,11 +303,11 @@ export const BudgetPlannerScreen = () => {
                 <View style={[styles.envIconSquare, { backgroundColor: theme.MODAL }]}>
                   <Feather name="plus" size={16} color={theme.ACTIVE} />
                 </View>
-                <Text style={[styles.envTitle, { color: theme.TEXT }]}>No envelopes yet</Text>
+                <Text style={[styles.envTitle, { color: theme.TEXT }]}>No categories yet</Text>
                 <Text style={[styles.noEnvelopesLine, { color: theme.MUTED }]}>
-                  Split your budget into envelopes like Groceries or Fuel. Spending in that category counts against its cap.
+                  Split your budget into categories like Groceries or Fuel. Spending in each category counts against its cap.
                 </Text>
-                <Text style={[styles.noEnvelopesAction, { color: theme.ACTIVE }]}>Add an envelope</Text>
+                <Text style={[styles.noEnvelopesAction, { color: theme.ACTIVE }]}>Add a category</Text>
               </TouchableOpacity>
             )}
             {categoriesWithSpent.map(cat => {
@@ -340,7 +340,7 @@ export const BudgetPlannerScreen = () => {
                         {cat.name}
                       </Text>
                       <Text style={[styles.envSubText, { color: theme.MUTED }]}>
-                        {cat.isMain ? 'Primary Envelope' : 'Flexible Cap'}
+                        {cat.isMain ? 'Primary Category' : 'Flexible Cap'}
                       </Text>
                     </View>
 
@@ -414,7 +414,7 @@ export const BudgetPlannerScreen = () => {
             <Text style={styles.caText}>
               Allocating{' '}
               <Text style={{ fontWeight: '800' }}>PKR 15,000 more</Text> into your
-              groceries envelope will prevent unexpected mid-month deficit and align
+              groceries category will prevent unexpected mid-month deficit and align
               with FBR Section 62 savings benchmarks.
             </Text>
             )}
@@ -529,7 +529,7 @@ export const BudgetPlannerScreen = () => {
             style={[styles.menuContent, { backgroundColor: theme.CARD }]}
           >
             <Text style={[styles.menuTitle, { color: theme.TEXT }]}>
-              {selectedCategory?.name} Envelope
+              {selectedCategory?.name} Category
             </Text>
 
             <TouchableOpacity
@@ -541,7 +541,7 @@ export const BudgetPlannerScreen = () => {
             >
               <Feather name="edit-2" size={15} color={theme.TEXT} />
               <Text style={[styles.menuItemText, { color: theme.TEXT }]}>
-                Edit Envelope
+                Edit Category
               </Text>
             </TouchableOpacity>
 
@@ -554,7 +554,7 @@ export const BudgetPlannerScreen = () => {
             >
               <Feather name="trash-2" size={15} color={theme.RED} />
               <Text style={[styles.menuItemText, { color: theme.RED }]}>
-                Delete Envelope
+                Delete Category
               </Text>
             </TouchableOpacity>
           </View>

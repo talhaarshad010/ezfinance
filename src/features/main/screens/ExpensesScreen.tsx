@@ -484,7 +484,7 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
       amount: isNegative ? -part2 : part2,
     };
     setTransactions(prev => [tx1, tx2, ...prev.filter(t => t.id !== splitTx.id)]);
-    showToast('Transaction split into 2 envelopes', 'success');
+    showToast('Transaction split into 2 categories', 'success');
   };
 
   const handleSaveRecurringBill = (bill: UpcomingBill) => {

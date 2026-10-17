@@ -4,6 +4,7 @@ using EzFinance.Api.Infrastructure.Data;
 using EzFinance.Api.Infrastructure.Errors;
 using EzFinance.Api.Infrastructure.HealthChecks;
 using EzFinance.Api.Infrastructure.Ocr;
+using EzFinance.Api.Infrastructure.Statements;
 using EzFinance.Api.Infrastructure.Supabase;
 using EzFinance.Api.Infrastructure.Sync;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -38,6 +39,7 @@ builder.Services.AddDbContext<AppDbContext>((services, options) => options
 
 // Supabase Auth
 builder.Services.AddHttpClient<SupabaseAuthClient>();
+builder.Services.AddHttpClient<SupabaseStorageClient>();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<PasswordResetStore>();
 
@@ -76,6 +78,8 @@ builder.Services.AddProblemDetails();
 builder.Services.AddOptions<GeminiOptions>()
     .BindConfiguration(GeminiOptions.SectionName);
 builder.Services.AddHttpClient<GeminiReceiptOcrService>();
+// Bank statement import: PDF statements are structured by Gemini (a few pages per request).
+builder.Services.AddHttpClient<GeminiStatementExtractor>(c => c.Timeout = TimeSpan.FromSeconds(120));
 builder.Services.AddSingleton<IReceiptOcrService>(sp =>
     sp.GetRequiredService<GeminiReceiptOcrService>());
 

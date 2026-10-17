@@ -281,7 +281,7 @@ export const ProfileScreen = () => {
               },
               {
                 icon: 'pie-chart',
-                label: 'Budget Envelopes & Limits',
+                label: 'Budget Categories & Limits',
                 sub: 'Category caps, monthly targets',
                 screen: 'BudgetPlanner',
               },

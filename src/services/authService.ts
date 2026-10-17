@@ -237,6 +237,30 @@ export async function markTourCompleted(): Promise<UserProfile> {
   return toUserProfile(profile);
 }
 
+/** Uploads a new profile photo (already resized by the picker) to the server. */
+export async function uploadProfilePhoto(photo: { uri: string; type?: string; fileName?: string }): Promise<UserProfile> {
+  const type = photo.type ?? 'image/jpeg';
+  const profile = await profileApi.uploadAvatar({
+    uri: photo.uri,
+    type,
+    name: photo.fileName ?? `avatar.${type.split('/')[1] ?? 'jpg'}`,
+  });
+  const stored = getStoredAuth();
+  if (stored) {
+    await saveStoredAuth({ session: stored.session, profile });
+  }
+  return toUserProfile(profile);
+}
+
+/** Removes the profile photo on the server. */
+export async function removeProfilePhoto(): Promise<UserProfile> {
+  await profileApi.deleteAvatar();
+  return refreshProfile();
+}
+
+/** Whether a real account is signed in (false in Explore mode, which has no session). */
+export const hasSession = () => getStoredAuth() !== null;
+
 /** Loads the latest profile from the server and caches it with the session. */
 export async function refreshProfile(): Promise<UserProfile> {
   const profile = await profileApi.get();
@@ -288,7 +312,7 @@ function toUserProfile(profile: ApiProfile): UserProfile {
     uid: profile.id,
     name: profile.fullName,
     email: profile.email,
-    photoURL: null,
+    photoURL: profile.avatarUrl ?? null,
     phone: null,
     monthlyIncome: profile.monthlyIncome ? CODE_TO_INCOME[profile.monthlyIncome] : null,
     city: profile.city,

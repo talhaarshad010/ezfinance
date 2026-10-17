@@ -2,11 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useToast } from '../../../context/ToastContext';
 import { useAppDispatch } from '../../../store/hooks';
 import { setProfile } from '../../../store/slices/userSlice';
 import { useUserMode } from '../../../context/UserModeContext';
-import { ApiError, signInWithGoogle } from '../../../services/authService';
 import { getLastSignInMethod, SignInMethod } from '../../../api/lastSignIn';
 import { AuthPalette, useAuthStyles } from '../components/authTheme';
 import { AuthLogo } from '../components/AuthLogo';
@@ -14,8 +12,8 @@ import { Glow } from '../components/Glow';
 import { GlassButton, GoogleIcon, PrimaryButton, TextButton } from '../components/AuthButtons';
 import { FadeUp } from '../components/Entrance';
 import { AuthBanners, NoticeData } from '../components/AuthFeedback';
-import { authErrorMessage, useAuthGuard } from '../components/AuthGuard';
-import { MSG } from '../components/authMessages';
+import { useAuthGuard } from '../components/AuthGuard';
+import { useGoogleSignIn } from '../components/useGoogleSignIn';
 
 /** Auth choice: create account, log in, continue with Google, or explore as a guest. */
 export const WelcomeScreen = () => {
@@ -23,9 +21,8 @@ export const WelcomeScreen = () => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const dispatch = useAppDispatch();
-  const { beginNewUser, beginReturningUser } = useUserMode();
+  const { beginReturningUser } = useUserMode();
   const guard = useAuthGuard();
-  const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<NoticeData | null>(null);
   const [lastUsed, setLastUsed] = useState<SignInMethod | null>(null);
 
@@ -38,27 +35,8 @@ export const WelcomeScreen = () => {
       <Text style={styles.badgeText}>Last used</Text>
     </View>
   );
-  const { showToast } = useToast();
 
-  const handleGoogleSignIn = async () => {
-    if (busy || guard.blocked) return;
-    setNotice(null);
-    setBusy(true);
-    try {
-      const result = await signInWithGoogle();
-      if (!result) return; // closing the Google sheet is not an error, so nothing is shown
-      // Real accounts never see sample data; the tour shows until it's been completed once.
-      beginNewUser({ tour: !result.profile.tourCompleted });
-      dispatch(setProfile(result.profile));
-      showToast(result.isNewUser ? 'Welcome to EZFinance!' : 'Signed in with Google!', 'success');
-    } catch (e) {
-      const err = e as ApiError;
-      const msg = err.code === 'google_failed' ? MSG.googleFail : authErrorMessage(err, guard);
-      if (msg) setNotice({ tone: 'error', text: msg });
-    } finally {
-      setBusy(false);
-    }
-  };
+  const { signIn: handleGoogleSignIn, busy } = useGoogleSignIn(msg => setNotice(msg ? { tone: 'error', text: msg } : null));
 
   // Explore = a demo of the full app with sample data, so visitors see how it looks once filled in.
   // No account, so nothing is saved and there is no tour.

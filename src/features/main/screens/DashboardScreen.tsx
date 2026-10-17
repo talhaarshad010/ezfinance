@@ -35,6 +35,7 @@ import {
 } from '../../../constants/savingsGoals';
 import {
   ENVELOPE_CATS,
+  EnvelopeCategory,
   MONTHLY_INCOME_POOL,
   UNASSIGNED_CASH,
 } from '../../../constants/envelopes';
@@ -443,7 +444,7 @@ export const DashboardScreen = () => {
     prevSubTab.current = subTab;
   }, [subTab]);
   const [overlay, setOverlay] = useState<DashOverlay>(null);
-  const [envelopes, setEnvelopes] = useState(ENVELOPE_CATS);
+  const [envelopes, setEnvelopes] = useState<EnvelopeCategory[]>(ENVELOPE_CATS);
   const [quickDepositGoalId, setQuickDepositGoalId] = useState(
     SAVINGS_GOALS[0].id,
   );
@@ -511,8 +512,20 @@ export const DashboardScreen = () => {
   const planMonthLabel = `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
   const planMonthName = MONTH_NAMES[now.getMonth()];
 
+  // Planning sheet: Explore plans the sample PKR 150,000; a signed-in user plans their own monthly
+  // budget and envelopes (copied into the sheet when it opens, saved on Confirm).
+  const [editingPool, setEditingPool] = useState(false);
+  const [poolDraft, setPoolDraft] = useState('');
+  const [savingPlan, setSavingPlan] = useState(false);
+  const draftPool = parseInt(poolDraft.replace(/,/g, ''), 10);
+  const planPool = !isUser
+    ? MONTHLY_INCOME_POOL
+    : editingPool
+    ? isNaN(draftPool) ? 0 : draftPool
+    : userMode.budget ?? 0;
+
   const allocated = envelopes.reduce((sum, e) => sum + e.amount, 0);
-  const unallocated = MONTHLY_INCOME_POOL - allocated;
+  const unallocated = planPool - allocated;
   const overAllocated = unallocated < 0;
 
   const adjustEnvelope = (idx: number, delta: number) =>
@@ -560,6 +573,50 @@ export const DashboardScreen = () => {
       }),
     );
     setEditAllEnvelopes(false);
+  };
+
+  const openPlanning = () => {
+    setEditingEnvIdx(null);
+    setEditAllEnvelopes(false);
+    if (isUser) {
+      setEnvelopes(userMode.envelopes.map(e => ({ id: e.id, label: e.name, amount: e.limit, locked: false })));
+      setPoolDraft(userMode.budget === null ? '' : String(userMode.budget));
+      setEditingPool(userMode.budget === null);
+    }
+    setOverlay('envelopeBudget');
+  };
+
+  /** Saves a signed-in user's plan. The server keeps envelopes inside the budget at every step, so:
+   *  raise the budget first, shrink envelopes before growing others, lower the budget last. */
+  const savePlan = async () => {
+    if (editingPool && (isNaN(draftPool) || draftPool <= 0)) {
+      showToast('Enter your monthly budget first.', 'error');
+      return;
+    }
+    if (overAllocated) {
+      showToast(`Lower your limits by PKR ${fmt(-unallocated)} to fit your budget.`, 'error');
+      return;
+    }
+    const before = new Map(userMode.envelopes.map(e => [e.id, e]));
+    const changed = envelopes.filter(r => r.id && before.has(r.id) && before.get(r.id)!.limit !== r.amount);
+    const saveRow = (r: EnvelopeCategory) => planning.updateEnvelope({ ...before.get(r.id!)!, limit: r.amount });
+    const oldBudget = userMode.budget;
+    const budgetChanged = oldBudget !== planPool;
+
+    setSavingPlan(true);
+    try {
+      if (budgetChanged && (oldBudget === null || planPool > oldBudget)) await planning.setMonthlyBudget(planPool);
+      for (const r of changed.filter(c => c.amount < before.get(c.id!)!.limit)) await saveRow(r);
+      for (const r of changed.filter(c => c.amount > before.get(c.id!)!.limit)) await saveRow(r);
+      if (budgetChanged && oldBudget !== null && planPool < oldBudget) await planning.setMonthlyBudget(planPool);
+      setEditingPool(false);
+      showToast(`${planMonthLabel} budget saved.`, 'success', 'Budget Saved');
+      setOverlay(unallocated > 0 && envelopes.length > 0 ? 'unassignedWarning' : null);
+    } catch (error) {
+      showToast(error instanceof ApiError ? error.message : SAVE_ERROR, 'error');
+    } finally {
+      setSavingPlan(false);
+    }
   };
 
   const quickDepositAmounts = [5000, 10000, 25000];
@@ -770,7 +827,7 @@ export const DashboardScreen = () => {
             {/* Monthly Planning Ritual Banner */}
             <TouchableOpacity
               activeOpacity={0.9}
-              onPress={() => (isUser ? navigation.navigate('BudgetPlanner') : setOverlay('envelopeBudget'))}
+              onPress={openPlanning}
               style={styles.sectionMargin}
             >
               <View
@@ -1441,7 +1498,7 @@ export const DashboardScreen = () => {
                 <TouchableOpacity activeOpacity={0.8} onPress={() => navigation.navigate('BudgetPlanner')}>
                   <Text style={[styles.subText, { color: theme.MUTED }]}>
                     No spending caps yet.{' '}
-                    <Text style={{ color: theme.ACTIVE, fontWeight: '700' }}>Add envelopes in the Budget Planner →</Text>
+                    <Text style={{ color: theme.ACTIVE, fontWeight: '700' }}>Add categories in the Budget Planner →</Text>
                   </Text>
                 </TouchableOpacity>
               )}
@@ -2210,7 +2267,7 @@ export const DashboardScreen = () => {
         </View>
       </AnimatedModal>
 
-      {/* 5. Monthly Planning Ritual — Envelope Allocation */}
+      {/* 5. Monthly Planning Ritual — Category Allocation */}
       <AnimatedModal
         visible={overlay === 'envelopeBudget'}
         transparent
@@ -2238,7 +2295,7 @@ export const DashboardScreen = () => {
               </Text>
             </View>
             <View style={styles.envelopeHeaderActions}>
-              {!editAllEnvelopes ? (
+              {envelopes.length === 0 ? null : !editAllEnvelopes ? (
                 <TouchableOpacity
                   activeOpacity={0.8}
                   onPress={startEditAllEnvelopes}
@@ -2292,10 +2349,58 @@ export const DashboardScreen = () => {
                 {overAllocated ? 'OVER' : 'left'}
               </Text>
             </View>
-            <Text style={[styles.poolOf, { color: theme.MUTED }]}>
-              of PKR {MONTHLY_INCOME_POOL.toLocaleString('en-PK')}
-            </Text>
+            {isUser && editingPool ? (
+              <TextInput
+                value={poolDraft}
+                onChangeText={setPoolDraft}
+                keyboardType="number-pad"
+                placeholder="Monthly budget"
+                placeholderTextColor={theme.MUTED}
+                autoFocus={userMode.budget === null}
+                accessibilityLabel="Monthly budget"
+                style={[
+                  styles.envelopeAmountInput,
+                  styles.poolInput,
+                  { color: theme.ACTIVE, backgroundColor: `${theme.ACTIVE}10`, borderColor: `${theme.ACTIVE}50` },
+                ]}
+              />
+            ) : isUser ? (
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => {
+                  setPoolDraft(String(userMode.budget ?? ''));
+                  setEditingPool(true);
+                }}
+                accessibilityLabel="Change monthly budget"
+                style={styles.poolEditBtn}
+              >
+                <Text style={[styles.poolOf, { color: theme.MUTED }]}>of PKR {fmt(planPool)}</Text>
+                <Feather name="edit-2" size={11} color={theme.MUTED} />
+              </TouchableOpacity>
+            ) : (
+              <Text style={[styles.poolOf, { color: theme.MUTED }]}>
+                of PKR {MONTHLY_INCOME_POOL.toLocaleString('en-PK')}
+              </Text>
+            )}
           </View>
+
+          {isUser && envelopes.length === 0 && (
+            <View style={styles.planEmpty}>
+              <Text style={[styles.planEmptyText, { color: theme.MUTED }]}>
+                No spending limits yet. Split your budget into categories like groceries, fuel and bills.
+              </Text>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  setOverlay(null);
+                  navigation.navigate('BudgetPlanner');
+                }}
+                style={[styles.editAllBtn, { borderColor: theme.BORDER, borderWidth: 1, alignSelf: 'flex-start' }]}
+              >
+                <Text style={[styles.editAllText, { color: theme.TEXT }]}>Add spending categories</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           <ScrollView
             showsVerticalScrollIndicator={false}
@@ -2385,14 +2490,19 @@ export const DashboardScreen = () => {
               <Feather name="info" size={12} color={theme.RED} />
               <Text style={[styles.overAllocText, { color: theme.RED }]}>
                 Over-allocated by PKR{' '}
-                {Math.abs(unallocated).toLocaleString()}. Rebalance envelopes.
+                {Math.abs(unallocated).toLocaleString()}. Rebalance categories.
               </Text>
             </View>
           )}
 
           <TouchableOpacity
             activeOpacity={0.9}
+            disabled={savingPlan}
             onPress={() => {
+              if (isUser) {
+                savePlan();
+                return;
+              }
               if (overAllocated) {
                 setOverlay('rebalanceSheet');
                 return;
@@ -2419,11 +2529,27 @@ export const DashboardScreen = () => {
                 { color: overAllocated ? '#FFFFFF' : theme.BG },
               ]}
             >
-              {overAllocated
+              {savingPlan
+                ? 'Saving…'
+                : overAllocated
                 ? 'Rebalance First'
                 : `Confirm ${planMonthName} Budget`}
             </Text>
           </TouchableOpacity>
+          {isUser && envelopes.length > 0 && (
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => {
+                setOverlay(null);
+                navigation.navigate('BudgetPlanner');
+              }}
+              style={styles.planManageLink}
+            >
+              <Text style={[styles.planManageText, { color: theme.MUTED }]}>
+                Add or remove categories in Budget Planner →
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </AnimatedModal>
 
@@ -2678,7 +2804,7 @@ export const DashboardScreen = () => {
                 showToast(
                   `${opt.label} — PKR 5,000 moved to Groceries.`,
                   'success',
-                  'Envelope Covered',
+                  'Category Covered',
                 );
               }}
               style={[
@@ -2736,7 +2862,7 @@ export const DashboardScreen = () => {
               OVER-BUDGET ALERT
             </Text>
             <Text style={[styles.alertTitle, { color: theme.TEXT }]}>
-              Envelope Exceeded
+              Category Exceeded
             </Text>
             <Text style={[styles.confirmBody, { color: theme.MUTED }]}>
               <Text style={{ color: theme.RED, fontWeight: '700' }}>
@@ -2825,7 +2951,7 @@ export const DashboardScreen = () => {
 
             <Text style={[styles.confirmBody, { color: theme.MUTED }]}>
               In zero-based budgeting, every rupee has a job before the month
-              begins. Assign remaining funds to an envelope or savings goal.
+              begins. Assign remaining funds to a category or savings goal.
             </Text>
 
             <TouchableOpacity
@@ -3109,6 +3235,12 @@ const styles = StyleSheet.create({
   poolLabel: { fontSize: 10, marginBottom: 2 },
   poolValue: { fontSize: 22, fontWeight: '800', letterSpacing: -1 },
   poolOf: { fontSize: 11 },
+  poolEditBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4 },
+  poolInput: { minWidth: 110, maxWidth: 130 },
+  planEmpty: { paddingVertical: 16, gap: 12 },
+  planEmptyText: { fontSize: 13, lineHeight: 19 },
+  planManageLink: { alignSelf: 'center', paddingVertical: 4 },
+  planManageText: { fontSize: 12, fontWeight: '600' },
   envelopeList: { flexGrow: 0, marginBottom: 8 },
   envelopeRow: {
     flexDirection: 'row',

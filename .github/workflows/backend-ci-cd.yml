@@ -60,6 +60,10 @@ jobs:
       - name: Build API
         run: dotnet build backend/src/EzFinance.Api/EzFinance.Api.csproj --configuration Release --no-restore
 
+      # Statement import parsing and balance checks (no database or network needed).
+      - name: Run Tests
+        run: dotnet test backend/tests/EzFinance.Api.Tests --configuration Release
+
   # ============================================================
   # Docker image → Azure Container Registry
   # ============================================================

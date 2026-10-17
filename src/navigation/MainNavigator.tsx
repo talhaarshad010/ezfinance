@@ -16,10 +16,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useUserMode } from '../context/UserModeContext';
 import { LoadGate } from '../components/LoadGate';
 import { AISkeleton, GoalsSkeleton, NewUserSkeleton } from '../components/Skeletons';
-import {
-  NewAI,
-  NewInvestments,
-} from '../features/main/newUser/NewUserScreens';
+import { NewInvestments } from '../features/main/newUser/NewUserScreens';
 import { TourOverlay } from '../features/main/newUser/TourOverlay';
 import { InvestmentComingSoon } from '../features/main/screens/investments/InvestmentComingSoon';
 
@@ -64,10 +61,10 @@ const ExpensesTab = () => {
 };
 
 const AITab = () => {
-  const { isNewUser } = useUserMode();
   return (
-    <LoadGate id="ai" skeleton={isNewUser ? <NewUserSkeleton /> : <AISkeleton />}>
-      {isNewUser ? <NewAI /> : <AIAdvisorScreen />}
+    <LoadGate id="ai" skeleton={<AISkeleton />}>
+      {/* Same Personal CA for everyone; it uses a signed-in user's own data. */}
+      <AIAdvisorScreen />
     </LoadGate>
   );
 };

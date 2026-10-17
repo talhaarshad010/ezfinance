@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Animated, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AuthPalette, useAuthStyles } from './authTheme';
 
 export const OTP_LENGTH = 6;
 
 /**
- * Six digit boxes backed by one hidden TextInput, so typing, deleting, pasting and the
- * iOS/Android "from Messages/Mail" code suggestion all work like a normal field.
+ * Six digit boxes backed by one invisible TextInput laid over them, so typing, deleting, pasting
+ * and the iOS/Android "from Messages/Mail" code suggestion all work like a normal field. Taps land
+ * on the real input, so the keyboard always opens — even when the field kept focus after the
+ * keyboard was dismissed (calling focus() on an already focused input does nothing).
  */
 export function OtpInput({
   value,
@@ -48,7 +50,7 @@ export function OtpInput({
   };
 
   return (
-    <Pressable onPress={() => inputRef.current?.focus()} accessibilityLabel="Verification code" disabled={disabled}>
+    <View>
       <Animated.View style={[styles.row, { transform: [{ translateX: shake }] }, disabled && styles.disabled]}>
         {Array.from({ length: OTP_LENGTH }, (_, i) => {
           const active = focused && (i === value.length || (i === OTP_LENGTH - 1 && value.length === OTP_LENGTH));
@@ -82,9 +84,12 @@ export function OtpInput({
         autoComplete="one-time-code"
         maxLength={OTP_LENGTH}
         caretHidden
-        style={styles.hiddenInput}
+        selectionColor="transparent"
+        underlineColorAndroid="transparent"
+        accessibilityLabel="Verification code"
+        style={styles.overlayInput}
       />
-    </Pressable>
+    </View>
   );
 }
 
@@ -110,11 +115,13 @@ const createStyles = (A: AuthPalette) =>
       fontWeight: '700',
       color: A.TEXT,
     },
-    // Kept on screen (not display:none) so it can hold focus and receive autofill.
-    hiddenInput: {
-      position: 'absolute',
-      width: 1,
-      height: 1,
-      opacity: 0,
+    // Covers the boxes and takes the taps. Text is transparent (the boxes show the digits);
+    // opacity stays above 0.01 because iOS ignores touches on views below that.
+    overlayInput: {
+      ...StyleSheet.absoluteFillObject,
+      color: 'transparent',
+      opacity: 0.02,
+      fontSize: 1,
+      padding: 0,
     },
   });

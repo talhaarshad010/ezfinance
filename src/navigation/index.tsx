@@ -28,6 +28,7 @@ import LogContributionScreen from '../features/main/screens/LogContributionScree
 import PauseGoalScreen from '../features/main/screens/PauseGoalScreen';
 import AgeOfMoneyScreen from '../features/main/screens/AgeOfMoneyScreen';
 import MoveMoneyScreen from '../features/main/screens/MoveMoneyScreen';
+import ImportStatementScreen from '../features/main/screens/ImportStatementScreen';
 import {
   TouchableOpacity,
   View,
@@ -214,6 +215,7 @@ export const AppNavigator = () => {
             <Stack.Screen name="PauseGoal" component={PauseGoalScreen} options={{ headerShown: false }} />
             <Stack.Screen name="AgeOfMoney" component={AgeOfMoneyScreen} options={{ headerShown: false }} />
             <Stack.Screen name="MoveMoney" component={MoveMoneyScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="ImportStatement" component={ImportStatementScreen} options={{ headerShown: false }} />
           </Stack.Navigator>
           {/* Global sheets for the new-user flow (add / edit transaction, first transaction chooser) */}
           <TransactionSheetHost />

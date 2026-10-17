@@ -35,6 +35,7 @@ import { AuthBanners, FieldError, NoticeData } from '../components/AuthFeedback'
 import { authErrorMessage, useAuthGuard } from '../components/AuthGuard';
 import { MSG, validateEmail, validatePassword } from '../components/authMessages';
 import { OtpVerification } from '../components/OtpVerification';
+import { useGoogleSignIn } from '../components/useGoogleSignIn';
 
 type Step = 'name' | 'email' | 'code' | 'password' | 'income' | 'city' | 'filer' | 'done';
 type Filer = 'yes' | 'no' | 'unsure';
@@ -199,6 +200,21 @@ export const RegisterScreen = () => {
     else goTo(stepIdx - 1, 'left');
   };
 
+  // System back (Android back button / gesture) steps back through the wizard like the header
+  // arrow, instead of leaving sign-up. Only "go back" is caught: links like "Log in" still work.
+  const goPrevRef = useRef(goPrev);
+  goPrevRef.current = goPrev;
+  useEffect(
+    () =>
+      navigation.addListener('beforeRemove', (e: any) => {
+        const type = e.data?.action?.type;
+        if (stepIdx === 0 || isDone || (type !== 'GO_BACK' && type !== 'POP')) return;
+        e.preventDefault();
+        goPrevRef.current();
+      }),
+    [navigation, stepIdx, isDone],
+  );
+
   const leaveToLogin = () => {
     attempt.current++;
     if (pendingSession.current) {
@@ -267,6 +283,41 @@ export const RegisterScreen = () => {
     if (msg) setNotice({ tone: 'error', text: msg });
   };
 
+  const google = useGoogleSignIn(msg => setNotice(msg ? { tone: 'error', text: msg } : null));
+
+  // The email already belongs to an account: no code was sent; point to the right way in.
+  const showEmailTaken = (code: string | null) => {
+    if (code === 'email_uses_google') {
+      setNotice({
+        tone: 'error',
+        text: (
+          <>
+            This email is linked to Google.{' '}
+            <Text style={styles.noticeLink} onPress={google.signIn} accessibilityRole="link">
+              Continue with Google
+            </Text>
+          </>
+        ),
+      });
+      return;
+    }
+    setNotice({
+      tone: 'error',
+      text: (
+        <>
+          An account with this email already exists.{' '}
+          <Text
+            style={styles.noticeLink}
+            onPress={() => navigation.navigate('Login', { email: normalizedEmail })}
+            accessibilityRole="link"
+          >
+            Log in instead
+          </Text>
+        </>
+      ),
+    });
+  };
+
   const onContinue = async (skip = false) => {
     if (loading || isDone || isCode) return;
     if (!skip) {
@@ -281,9 +332,9 @@ export const RegisterScreen = () => {
         goTo(PASSWORD_IDX, 'right');
         return;
       }
-      // Same response whether or not the email already has an account.
       const r = await request(() => sendSignUpCode(email, name));
       if (r?.ok) goTo(stepIdx + 1, 'right');
+      else if (r && (r.error as ApiError).status === 409) showEmailTaken((r.error as ApiError).code);
       else if (r) showError(r.error);
       return;
     }
@@ -733,4 +784,5 @@ const createStyles = (A: AuthPalette) =>
   loginRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   loginText: { fontSize: 13, color: A.FAINT },
   loginLink: { fontSize: 13, color: A.LINK, fontWeight: '600' },
+  noticeLink: { color: A.LINK, fontWeight: '600', textDecorationLine: 'underline' },
 });
