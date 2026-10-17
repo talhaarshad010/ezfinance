@@ -96,3 +96,9 @@ config.bat
 
 # Local environment & tool cache
 .local/
+
+# Local secrets (backend settings for docker compose). Commit .env.example instead.
+.env
+
+# macOS tool data accidentally created inside the project
+Library/
