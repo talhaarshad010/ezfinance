@@ -34,8 +34,8 @@ const fadeScale: StackNavigationOptions = {
   gestureEnabled: false,
   cardStyleInterpolator: CardStyleInterpolators.forFadeFromCenter,
   transitionSpec: {
-    open: { animation: 'timing', config: { duration: 320 } },
-    close: { animation: 'timing', config: { duration: 260 } },
+    open: { animation: 'timing', config: { duration: 220 } },
+    close: { animation: 'timing', config: { duration: 180 } },
   },
 };
 

@@ -4,7 +4,7 @@ import Svg, { Circle, Defs, Mask, Rect } from 'react-native-svg';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
-import { useUserMode } from '../../../context/UserModeContext';
+import { useUserUi } from '../../../context/UserModeContext';
 import { TEAL } from './shared';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -30,7 +30,7 @@ export function TourOverlay() {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { width: W, height: H } = useWindowDimensions();
-  const { endTour, setFirstActionOpen } = useUserMode();
+  const { endTour, setFirstActionOpen } = useUserUi();
   const [step, setStep] = useState(0);
   const s = TOUR[step];
   const last = step === TOUR.length - 1;

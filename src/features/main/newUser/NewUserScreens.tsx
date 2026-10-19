@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
 import { PendingBadge, useNetwork } from '../../../context/NetworkContext';
-import { UNLOCK_AT, UserGoal, useUserMode } from '../../../context/UserModeContext';
+import { UNLOCK_AT, UserGoal, useUserMode, useUserUi } from '../../../context/UserModeContext';
 import { ConfirmDialog } from '../../../components/Feedback';
 import { abbr, fullAmt } from '../../../utils/format';
 import { MSG, SAVE_ERROR, parseAmount, useFormErrors } from '../../../utils/validation';
@@ -45,7 +45,8 @@ const fmt = (n: number) => n.toLocaleString('en-IN');
 export function NewDashboard() {
   const { theme } = useTheme();
   const navigation = useNavigation<any>();
-  const { txs, goals, holdings, budget, setFirstActionOpen } = useUserMode();
+  const { txs, goals, holdings, budget } = useUserMode();
+  const { setFirstActionOpen } = useUserUi();
   const unlocked = txs.length >= UNLOCK_AT;
   const spent = txs.filter(t => t.type === 'expense').reduce((a, t) => a + t.amount, 0);
   const income = txs.filter(t => t.type === 'income').reduce((a, t) => a + t.amount, 0);
@@ -174,7 +175,8 @@ export function NewDashboard() {
 /** First-run checklist (log a transaction, set a goal, set a budget); hides when done or dismissed. */
 export function GettingStartedCard({ style }: { style?: object }) {
   const { theme } = useTheme();
-  const { txs, goals, budget, setFirstActionOpen, checklistHidden, setChecklistHidden } = useUserMode();
+  const { txs, goals, budget } = useUserMode();
+  const { setFirstActionOpen, checklistHidden, setChecklistHidden } = useUserUi();
   const [sheet, setSheet] = useState<null | 'budget' | 'goal'>(null);
   const steps = [
     { label: 'Log a transaction', done: txs.length > 0, go: () => setFirstActionOpen(true) },
@@ -229,7 +231,8 @@ export function GettingStartedCard({ style }: { style?: object }) {
 
 export function NewExpenses() {
   const { theme } = useTheme();
-  const { txs, openTxSheet, setFirstActionOpen } = useUserMode();
+  const { txs } = useUserMode();
+  const { openTxSheet, setFirstActionOpen } = useUserUi();
   const samples: Sample[] = [
     { label: 'Add Groceries', icon: CAT_META.Groceries.icon, color: CAT_META.Groceries.color, onPress: () => openTxSheet({ type: 'expense', category: 'Groceries', source: 'manual' }) },
     { label: 'Add Fuel', icon: CAT_META.Fuel.icon, color: CAT_META.Fuel.color, onPress: () => openTxSheet({ type: 'expense', category: 'Fuel', source: 'manual' }) },

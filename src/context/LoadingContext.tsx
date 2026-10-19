@@ -11,15 +11,13 @@ import { useUserMode } from './UserModeContext';
  * Signed-in users: the default loader is the real load of their transactions from the
  * server (shared by every section), so each skeleton stays until the data is there, and a
  * failed load shows the error state. Once the transactions are in, sections open straight
- * to their content. The Explore demo keeps a short mock delay. Pass `loader` to load
- * something else.
+ * to their content. The Explore demo's sample data is already in the app, so it opens straight
+ * away (no skeleton). Pass `loader` to load something else.
  */
 
 export type LoadStatus = 'loading' | 'error' | 'ready';
 
-/** How long the mock loader shows skeletons on first visit. */
-export const MOCK_LOAD_MS = 800;
-const mockLoad = () => new Promise<void>(r => setTimeout(r, MOCK_LOAD_MS));
+const noLoad = () => Promise.resolve();
 
 interface LoadingCtx {
   status: (key: string) => LoadStatus | undefined;
@@ -68,12 +66,13 @@ export function useLoadState(key: string, loader?: () => Promise<unknown>) {
   const { isNewUser, loadTxs, txStatus } = useUserMode();
   const fullKey = `${isNewUser ? 'new' : 'returning'}:${key}`;
   const settled = ctx.status(fullKey);
-  // A signed-in user's data already loaded: no skeleton, not even for a frame.
-  const dataReady = !loader && isNewUser && txStatus === 'ready';
+  // Data already there (a signed-in user's, once loaded, or Explore's sample): no skeleton,
+  // not even for a frame.
+  const dataReady = !loader && (!isNewUser || txStatus === 'ready');
   const status: LoadStatus = settled ?? (dataReady ? 'ready' : 'loading');
 
-  const loaderRef = useRef(loader ?? (isNewUser ? loadTxs : mockLoad));
-  loaderRef.current = loader ?? (isNewUser ? loadTxs : mockLoad);
+  const loaderRef = useRef(loader ?? (isNewUser ? loadTxs : noLoad));
+  loaderRef.current = loader ?? (isNewUser ? loadTxs : noLoad);
   const { settle, forget } = ctx;
 
   useEffect(() => {

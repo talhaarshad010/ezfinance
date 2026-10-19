@@ -35,9 +35,20 @@ import {
 
 const Drawer = createDrawerNavigator();
 
-const SceneWrapper = React.memo(({ children }: { children: React.ReactNode }) => {
+// A side-menu screen is first built just after the drawer has closed: building it right away
+// held the drawer open (frozen) for up to half a second on slower phones. It fades in over this
+// time anyway, so nothing visible is lost.
+const FIRST_BUILD_DELAY_MS = 220;
+
+const SceneWrapper = React.memo(({ children, immediate }: { children: React.ReactNode; immediate?: boolean }) => {
   const progress = useDrawerProgress();
   const { theme } = useTheme();
+  const [built, setBuilt] = React.useState(!!immediate);
+  React.useEffect(() => {
+    if (built) return;
+    const timer = setTimeout(() => setBuilt(true), FIRST_BUILD_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [built]);
 
   // Drawer screens swap instantly by default; fade + rise the newly active one.
   // Only the drawer's own active route is tracked, so pushing a root-stack
@@ -52,7 +63,7 @@ const SceneWrapper = React.memo(({ children }: { children: React.ReactNode }) =>
     if (isActive) {
       enter.value = 0;
       enter.value = withTiming(1, {
-        duration: 340,
+        duration: 200,
         easing: Easing.bezier(0.22, 1, 0.36, 1),
       });
     }
@@ -76,7 +87,7 @@ const SceneWrapper = React.memo(({ children }: { children: React.ReactNode }) =>
     return {
       opacity: interpolate(enter.value, [0, 1], [0, 1]),
       transform: [
-        { translateY: interpolate(enter.value, [0, 1], [18, 0]) },
+        { translateY: interpolate(enter.value, [0, 1], [10, 0]) },
         { scale },
       ],
       borderRadius,
@@ -93,7 +104,7 @@ const SceneWrapper = React.memo(({ children }: { children: React.ReactNode }) =>
         },
       ]}
     >
-      {children}
+      {built ? children : null}
     </Animated.View>
   );
 });
@@ -102,7 +113,8 @@ const SceneWrapper = React.memo(({ children }: { children: React.ReactNode }) =>
 // Screens with sample data show a new-user version (real data or an empty state) for signed-in
 // accounts; the sample-data version is only for Explore.
 const MainTabsWrapper = React.memo(() => (
-  <SceneWrapper>
+  // The main tabs are the first thing shown when the app opens: no delay.
+  <SceneWrapper immediate>
     <MainNavigator />
   </SceneWrapper>
 ));
@@ -190,6 +202,8 @@ export const MainDrawerNavigator = () => {
         screenOptions={{
           headerShown: false,
           drawerType: 'slide',
+          // Drawer screens you've left stop redrawing until you open them again.
+          freezeOnBlur: true,
           drawerStyle: {
             width: '76%',
             backgroundColor: drawerBg,

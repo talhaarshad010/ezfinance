@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../../context/ThemeContext';
-import { UNLOCK_AT, useUserMode } from '../../../context/UserModeContext';
+import { UNLOCK_AT, useUserMode, useUserUi } from '../../../context/UserModeContext';
 import { fullAmt } from '../../../utils/format';
 import { BudgetSheet } from './sheets';
 import { CAT_META, EmptyState, ScreenShell, TEAL } from './shared';
@@ -74,7 +74,8 @@ function CategoryBreakdown({ rows }: { rows: [string, number][] }) {
 
 export function NewAnalytics() {
   const { theme } = useTheme();
-  const { txs, setFirstActionOpen } = useUserMode();
+  const { txs } = useUserMode();
+  const { setFirstActionOpen } = useUserUi();
   const categories = useCategoryTotals(false);
   const income = txs.filter(t => t.type === 'income').reduce((a, t) => a + t.amount, 0);
   const spent = txs.filter(t => t.type === 'expense').reduce((a, t) => a + t.amount, 0);

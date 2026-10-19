@@ -142,7 +142,13 @@ interface UserModeCtx {
   restoreGoal: (g: UserGoal, index: number) => void;
   addHolding: (h: Omit<UserHolding, 'id'>) => number;
   setBudget: (n: number | null) => void;
+}
 
+/**
+ * Screen-level switches (tour, sheets, getting-started checklist). Kept apart from the data above,
+ * so opening a sheet doesn't redraw every screen that shows transactions.
+ */
+export interface UserUiCtx {
   checklistHidden: boolean;
   setChecklistHidden: (v: boolean) => void;
   tourOpen: boolean;
@@ -157,6 +163,7 @@ interface UserModeCtx {
 }
 
 const Ctx = createContext<UserModeCtx | null>(null);
+const UiCtx = createContext<UserUiCtx | null>(null);
 
 let nextId = Date.now();
 const newId = () => ++nextId;
@@ -182,7 +189,7 @@ export function UserModeProvider({ children }: { children: ReactNode }) {
   const [checklistHidden, setChecklistHidden] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
   const [firstActionOpen, setFirstActionOpen] = useState(false);
-  const [txSheet, setTxSheet] = useState<UserModeCtx['txSheet']>({ open: false });
+  const [txSheet, setTxSheet] = useState<UserUiCtx['txSheet']>({ open: false });
 
   const value = useMemo<UserModeCtx>(() => {
     const fetchTxs = (force: boolean) => {
@@ -293,6 +300,11 @@ export function UserModeProvider({ children }: { children: ReactNode }) {
         return id;
       },
       setBudget,
+    };
+  }, [isNewUser, txs, txStatus, goals, holdings, budget, bills, debts, transfers, envelopes, bankAccounts]);
+
+  const ui = useMemo<UserUiCtx>(
+    () => ({
       checklistHidden,
       setChecklistHidden,
       tourOpen,
@@ -303,12 +315,24 @@ export function UserModeProvider({ children }: { children: ReactNode }) {
       txSheet,
       openTxSheet: preset => setTxSheet({ open: true, preset }),
       closeTxSheet: () => setTxSheet(s => ({ ...s, open: false })),
-    };
-  }, [isNewUser, txs, txStatus, goals, holdings, budget, bills, debts, transfers, envelopes, bankAccounts, checklistHidden, tourOpen, firstActionOpen, txSheet]);
+    }),
+    [checklistHidden, tourOpen, firstActionOpen, txSheet],
+  );
 
   useRealtimeSync(value.reloadTxs, txStatus === 'ready');
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={value}>
+      <UiCtx.Provider value={ui}>{children}</UiCtx.Provider>
+    </Ctx.Provider>
+  );
+}
+
+/** Tour, sheets and checklist switches (see UserUiCtx). */
+export function useUserUi() {
+  const c = useContext(UiCtx);
+  if (!c) throw new Error('useUserUi must be used inside UserModeProvider');
+  return c;
 }
 
 export function useUserMode() {

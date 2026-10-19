@@ -10,7 +10,7 @@ import { accountNameOf } from '../screens/bankAccounts/useBankAccounts';
 import { SAVE_ERROR } from '../../../utils/validation';
 
 const errorText = (e: unknown) => (e instanceof ApiError ? e.message : SAVE_ERROR);
-import { UserTx, useUserMode } from '../../../context/UserModeContext';
+import { UserTx, useUserMode, useUserUi } from '../../../context/UserModeContext';
 import { abbr, dayLabel, fullAmt } from '../../../utils/format';
 import { CAT_META, PrimaryButton, Sheet } from './shared';
 
@@ -72,7 +72,8 @@ export function TxList({ limit }: { limit?: number }) {
 /** Full detail (full name + full amount), with Edit and Delete (Undo toast; queued while offline). */
 export function TxDetailSheet({ tx, visible, onClose }: { tx: UserTx | null; visible: boolean; onClose: () => void }) {
   const { theme } = useTheme();
-  const { openTxSheet, bankAccounts } = useUserMode();
+  const { bankAccounts } = useUserMode();
+  const { openTxSheet } = useUserUi();
   const txActions = useTransactionActions();
   const { showToast } = useToast();
   if (!tx) return null;

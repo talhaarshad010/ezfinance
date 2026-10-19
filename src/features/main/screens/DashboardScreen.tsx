@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -40,7 +40,7 @@ import {
   UNASSIGNED_CASH,
 } from '../../../constants/envelopes';
 import { AnimatedModal } from '../../../components/AnimatedModal';
-import { useUserMode } from '../../../context/UserModeContext';
+import { useUserMode, useUserUi } from '../../../context/UserModeContext';
 import { GettingStartedCard } from '../newUser/NewUserScreens';
 import { useSavingsGoals } from './goals/useSavingsGoals';
 import { useBankAccounts } from './bankAccounts/useBankAccounts';
@@ -410,7 +410,8 @@ const runwayFilledSegs = Math.round(
 );
 
 // Faint teal dot texture behind the light-mode metric tiles
-function DotGrid({ id }: { id: string }) {
+// Memoised: it never changes, so Home redraws don't rebuild the vector pattern.
+const DotGrid = React.memo(function DotGrid({ id }: { id: string }) {
   return (
     <Svg style={StyleSheet.absoluteFill} width="100%" height="100%" pointerEvents="none">
       <Defs>
@@ -421,96 +422,38 @@ function DotGrid({ id }: { id: string }) {
       <Rect width="100%" height="100%" fill={`url(#${id})`} />
     </Svg>
   );
-}
+});
 
-export const DashboardScreen = () => {
+/**
+ * Monthly Planning sheet (category limits for this month). It keeps its own draft, so typing an
+ * amount only redraws this sheet, not the whole Home screen.
+ */
+const PlanningSheet = React.memo(function PlanningSheet({
+  visible,
+  openKey,
+  isUser,
+  setOverlay,
+  setUnassigned,
+}: {
+  visible: boolean;
+  /** Bumped each time Home opens the sheet: loads a fresh draft. */
+  openKey: number;
+  isUser: boolean;
+  setOverlay: (o: DashOverlay) => void;
+  /** Tells Home how much is left unassigned, for its warning dialog. */
+  setUnassigned: (n: number) => void;
+}) {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { showToast } = useToast();
-
-  const [subTab, setSubTab] = useState<DashTab>('live');
-  const dashLoad = useLoadState('dashboard');
-  const dashReady = dashLoad.status === 'ready';
-  const insightLoad = useLoadState('dashboard-insight');
-  const { online } = useNetwork();
-  // Slide sub-tab content in from the side of the tab being moved toward
-  const prevSubTab = useRef(subTab);
-  const subTabDir =
-    DASH_TAB_ORDER.indexOf(subTab) >= DASH_TAB_ORDER.indexOf(prevSubTab.current)
-      ? 'forward'
-      : 'back';
-  useEffect(() => {
-    prevSubTab.current = subTab;
-  }, [subTab]);
-  const [overlay, setOverlay] = useState<DashOverlay>(null);
-  const [envelopes, setEnvelopes] = useState<EnvelopeCategory[]>(ENVELOPE_CATS);
-  const [quickDepositGoalId, setQuickDepositGoalId] = useState(
-    SAVINGS_GOALS[0].id,
-  );
-  const [quickDepositIdx, setQuickDepositIdx] = useState(0);
-  const [dateRangeModalVisible, setDateRangeModalVisible] = useState(false);
-  const [accountModalVisible, setAccountModalVisible] = useState(false);
-  const [metricBreakModalVisible, setMetricBreakModalVisible] = useState(false);
-  const [actionInsight, setActionInsight] = useState<InsightItem | null>(null);
-  // Keep the last insight around so the dialog can animate out with its content
-  const lastActionInsight = useRef<InsightItem | null>(null);
-  if (actionInsight) lastActionInsight.current = actionInsight;
-  const shownInsight = actionInsight ?? lastActionInsight.current;
-
-  const profile = useAppSelector(state => state.user.profile);
-  const userName = profile?.name?.split(' ')[0] || 'Talha';
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-
-  // A signed-in user's Home is worked out from their own data; Explore shows the sample.
   const userMode = useUserMode();
-  const isUser = userMode.isNewUser;
   const planning = usePlanningActions();
-  const userGoals = useSavingsGoals().goals;
-  const userBank = useBankAccounts();
-  const u = computeUserDashboard({
-    txs: userMode.txs,
-    goals: userMode.goals,
-    holdings: userMode.holdings,
-    budget: userMode.budget,
-    envelopes: userMode.envelopes,
-    accountBalances: isUser ? userBank.accounts.map(a => a.balance) : [],
-    profileIncome: monthlyIncomeOf(profile?.monthlyIncome),
-    debts: userMode.debts,
-  });
   const fmt = (n: number) => Math.round(n).toLocaleString('en-PK');
-  const signed = (n: number) => (n === 0 ? '0' : `${n < 0 ? '−' : '+'}${fmt(Math.abs(n))}`);
-  const goalList = isUser ? userGoals : SAVINGS_GOALS;
-  const insightList: InsightItem[] = isUser ? u.insights : INSIGHTS_DATA;
-  const goTo = (target: DashInsight['go']) =>
-    target === 'BudgetPlanner'
-      ? navigation.navigate('BudgetPlanner')
-      : navigation.navigate('Drawer', { screen: 'MainTabs', params: { screen: target } });
-  const runwaySegs = isUser
-    ? Math.round((Math.min(u.runwayMonths ?? 0, RUNWAY_MAX_MONTHS) / RUNWAY_MAX_MONTHS) * RUNWAY_SEGMENTS)
-    : runwayFilledSegs;
-  const spendPct = isUser ? Math.min(u.budgetPct ?? 0, 100) : 53;
-
-  const { accounts } = useAppSelector(state => state.bankAccounts);
-  const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
-
-  // Privacy toggle for the Net Worth card amounts
-  const [amountsHidden, setAmountsHidden] = useState(false);
-  const mask = (value: string) => (amountsHidden ? '••••••' : value);
-
-  const displayBalance =
-    totalBalance > 0
-      ? totalBalance.toLocaleString('en-PK')
-      : '3,82,000';
-
   const now = new Date();
-  const MONTH_NAMES = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
-  ];
-  const planMonthLabel = `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
-  const planMonthName = MONTH_NAMES[now.getMonth()];
+  const planMonthName = MONTH_NAMES_FULL[now.getMonth()];
+  const planMonthLabel = `${planMonthName} ${now.getFullYear()}`;
+  const [envelopes, setEnvelopes] = useState<EnvelopeCategory[]>(ENVELOPE_CATS);
 
   // Planning sheet: Explore plans the sample PKR 150,000; a signed-in user plans their own monthly
   // budget and envelopes (copied into the sheet when it opens, saved on Confirm).
@@ -575,7 +518,9 @@ export const DashboardScreen = () => {
     setEditAllEnvelopes(false);
   };
 
-  const openPlanning = () => {
+  // Each time the sheet is opened from Home: a fresh draft (a signed-in user's own plan).
+  useEffect(() => {
+    if (openKey === 0) return;
     setEditingEnvIdx(null);
     setEditAllEnvelopes(false);
     if (isUser) {
@@ -583,8 +528,9 @@ export const DashboardScreen = () => {
       setPoolDraft(userMode.budget === null ? '' : String(userMode.budget));
       setEditingPool(userMode.budget === null);
     }
-    setOverlay('envelopeBudget');
-  };
+    // Only when it's opened again; the user's data is read at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openKey]);
 
   /** Saves a signed-in user's plan. The server keeps envelopes inside the budget at every step, so:
    *  raise the budget first, shrink envelopes before growing others, lower the budget last. */
@@ -611,12 +557,416 @@ export const DashboardScreen = () => {
       if (budgetChanged && oldBudget !== null && planPool < oldBudget) await planning.setMonthlyBudget(planPool);
       setEditingPool(false);
       showToast(`${planMonthLabel} budget saved.`, 'success', 'Budget Saved');
+      setUnassigned(unallocated);
       setOverlay(unallocated > 0 && envelopes.length > 0 ? 'unassignedWarning' : null);
     } catch (error) {
       showToast(error instanceof ApiError ? error.message : SAVE_ERROR, 'error');
     } finally {
       setSavingPlan(false);
     }
+  };
+
+  return (
+    <>
+      <AnimatedModal
+        visible={visible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setOverlay(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdropTap}
+          activeOpacity={1}
+          onPress={() => setOverlay(null)}
+        />
+        <View
+          style={[
+            styles.tallSheet,
+            { backgroundColor: theme.CARD, paddingBottom: insets.bottom + 20 },
+          ]}
+        >
+          <View style={styles.sheetHeaderRow}>
+            <View style={styles.flexShrink}>
+              <Text style={[styles.envelopeEyebrow, { color: theme.ACTIVE }]}>
+                {planMonthLabel.toUpperCase()}
+              </Text>
+              <Text style={[styles.sheetTitle, { color: theme.TEXT }]}>
+                Monthly Planning
+              </Text>
+            </View>
+            <View style={styles.envelopeHeaderActions}>
+              {envelopes.length === 0 ? null : !editAllEnvelopes ? (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={startEditAllEnvelopes}
+                  style={[styles.editAllBtn, { borderColor: theme.BORDER, borderWidth: 1 }]}
+                >
+                  <Text style={[styles.editAllText, { color: theme.MUTED }]}>Edit all</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={commitAllEnvelopes}
+                  style={[styles.editAllBtn, { backgroundColor: theme.ACTIVE }]}
+                >
+                  <Text style={[styles.editAllText, { color: '#FFFFFF', fontWeight: '700' }]}>Done</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                onPress={() => setOverlay(null)}
+                style={[styles.sheetCloseBtn, { backgroundColor: theme.MODAL }]}
+              >
+                <Feather name="x" size={14} color={theme.MUTED} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Income pool */}
+          <View
+            style={[
+              styles.incomePool,
+              {
+                backgroundColor: overAllocated
+                  ? `${theme.RED}14`
+                  : `${theme.GREEN}12`,
+                borderColor: overAllocated
+                  ? `${theme.RED}33`
+                  : `${theme.GREEN}33`,
+              },
+            ]}
+          >
+            <View>
+              <Text style={[styles.poolLabel, { color: theme.MUTED }]}>
+                Available to Allocate
+              </Text>
+              <Text
+                style={[
+                  styles.poolValue,
+                  { color: overAllocated ? theme.RED : theme.GREEN },
+                ]}
+              >
+                PKR {Math.abs(unallocated).toLocaleString()}{' '}
+                {overAllocated ? 'OVER' : 'left'}
+              </Text>
+            </View>
+            {isUser && editingPool ? (
+              <TextInput
+                value={poolDraft}
+                onChangeText={setPoolDraft}
+                keyboardType="number-pad"
+                placeholder="Monthly budget"
+                placeholderTextColor={theme.MUTED}
+                autoFocus={userMode.budget === null}
+                accessibilityLabel="Monthly budget"
+                style={[
+                  styles.envelopeAmountInput,
+                  styles.poolInput,
+                  { color: theme.ACTIVE, backgroundColor: `${theme.ACTIVE}10`, borderColor: `${theme.ACTIVE}50` },
+                ]}
+              />
+            ) : isUser ? (
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => {
+                  setPoolDraft(String(userMode.budget ?? ''));
+                  setEditingPool(true);
+                }}
+                accessibilityLabel="Change monthly budget"
+                style={styles.poolEditBtn}
+              >
+                <Text style={[styles.poolOf, { color: theme.MUTED }]}>of PKR {fmt(planPool)}</Text>
+                <Feather name="edit-2" size={11} color={theme.MUTED} />
+              </TouchableOpacity>
+            ) : (
+              <Text style={[styles.poolOf, { color: theme.MUTED }]}>
+                of PKR {MONTHLY_INCOME_POOL.toLocaleString('en-PK')}
+              </Text>
+            )}
+          </View>
+
+          {isUser && envelopes.length === 0 && (
+            <View style={styles.planEmpty}>
+              <Text style={[styles.planEmptyText, { color: theme.MUTED }]}>
+                No spending limits yet. Split your budget into categories like groceries, fuel and bills.
+              </Text>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  setOverlay(null);
+                  navigation.navigate('BudgetPlanner');
+                }}
+                style={[styles.editAllBtn, { borderColor: theme.BORDER, borderWidth: 1, alignSelf: 'flex-start' }]}
+              >
+                <Text style={[styles.editAllText, { color: theme.TEXT }]}>Add spending categories</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={styles.envelopeList}
+          >
+            {envelopes.map((env, i) => (
+              <View
+                key={env.label}
+                style={[
+                  styles.envelopeRow,
+                  i < envelopes.length - 1 && {
+                    borderBottomWidth: 1,
+                    borderBottomColor: theme.BORDER,
+                  },
+                ]}
+              >
+                <View style={styles.flexShrink}>
+                  <Text style={[styles.envelopeName, { color: theme.TEXT }]}>
+                    {env.label}
+                  </Text>
+                  {env.locked && (
+                    <Text style={[styles.envelopeFixed, { color: theme.MUTED }]}>
+                      FIXED
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.envelopeStepper}>
+                  {!env.locked && (
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => adjustEnvelope(i, -1000)}
+                      style={[styles.stepCircle, { backgroundColor: theme.MODAL }]}
+                    >
+                      <Feather name="minus" size={12} color={theme.TEXT} />
+                    </TouchableOpacity>
+                  )}
+                  {!env.locked && (editAllEnvelopes || editingEnvIdx === i) ? (
+                    <TextInput
+                      autoFocus={editingEnvIdx === i}
+                      keyboardType="number-pad"
+                      value={editAllEnvelopes ? editEnvVals[i] ?? '' : editEnvVal}
+                      onChangeText={t =>
+                        editAllEnvelopes
+                          ? setEditEnvVals(vs => vs.map((v, j) => (j === i ? t : v)))
+                          : setEditEnvVal(t)
+                      }
+                      onBlur={editAllEnvelopes ? undefined : commitEnvelopeEdit}
+                      onSubmitEditing={editAllEnvelopes ? undefined : commitEnvelopeEdit}
+                      style={[
+                        styles.envelopeAmountInput,
+                        {
+                          color: theme.ACTIVE,
+                          backgroundColor: `${theme.ACTIVE}10`,
+                          borderColor: `${theme.ACTIVE}50`,
+                        },
+                      ]}
+                    />
+                  ) : (
+                    <TouchableOpacity
+                      activeOpacity={env.locked ? 1 : 0.7}
+                      disabled={env.locked}
+                      onPress={() => startEnvelopeEdit(i)}
+                    >
+                      <Text style={[styles.envelopeAmount, { color: theme.TEXT }]}>
+                        {env.amount.toLocaleString()}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  {!env.locked && (
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => adjustEnvelope(i, 1000)}
+                      style={[styles.stepCircle, { backgroundColor: theme.MODAL }]}
+                    >
+                      <Feather name="plus" size={12} color={theme.TEXT} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+
+          {overAllocated && (
+            <View
+              style={[styles.overAllocWarn, { backgroundColor: `${theme.RED}14` }]}
+            >
+              <Feather name="info" size={12} color={theme.RED} />
+              <Text style={[styles.overAllocText, { color: theme.RED }]}>
+                Over-allocated by PKR{' '}
+                {Math.abs(unallocated).toLocaleString()}. Rebalance categories.
+              </Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            activeOpacity={0.9}
+            disabled={savingPlan}
+            onPress={() => {
+              if (isUser) {
+                savePlan();
+                return;
+              }
+              if (overAllocated) {
+                setOverlay('rebalanceSheet');
+                return;
+              }
+              if (unallocated > 0) {
+                setUnassigned(unallocated);
+                setOverlay('unassignedWarning');
+                return;
+              }
+              setOverlay(null);
+              showToast(
+                `${planMonthLabel} budget locked. Every rupee has a job.`,
+                'success',
+                'Budget Locked',
+              );
+            }}
+            style={[
+              styles.lockBtn,
+              { backgroundColor: overAllocated ? theme.RED : theme.TEXT },
+            ]}
+          >
+            <Text
+              style={[
+                styles.lockBtnText,
+                { color: overAllocated ? '#FFFFFF' : theme.BG },
+              ]}
+            >
+              {savingPlan
+                ? 'Saving…'
+                : overAllocated
+                ? 'Rebalance First'
+                : `Confirm ${planMonthName} Budget`}
+            </Text>
+          </TouchableOpacity>
+          {isUser && envelopes.length > 0 && (
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => {
+                setOverlay(null);
+                navigation.navigate('BudgetPlanner');
+              }}
+              style={styles.planManageLink}
+            >
+              <Text style={[styles.planManageText, { color: theme.MUTED }]}>
+                Add or remove categories in Budget Planner →
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </AnimatedModal>
+
+    </>
+  );
+});
+
+const MONTH_NAMES_FULL = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+export const DashboardScreen = () => {
+  const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
+  const { showToast } = useToast();
+
+  const [subTab, setSubTab] = useState<DashTab>('live');
+  const dashLoad = useLoadState('dashboard');
+  const dashReady = dashLoad.status === 'ready';
+  const insightLoad = useLoadState('dashboard-insight');
+  const { online } = useNetwork();
+  // Slide sub-tab content in from the side of the tab being moved toward
+  const prevSubTab = useRef(subTab);
+  const subTabDir =
+    DASH_TAB_ORDER.indexOf(subTab) >= DASH_TAB_ORDER.indexOf(prevSubTab.current)
+      ? 'forward'
+      : 'back';
+  useEffect(() => {
+    prevSubTab.current = subTab;
+  }, [subTab]);
+  const [overlay, setOverlay] = useState<DashOverlay>(null);
+  const [quickDepositGoalId, setQuickDepositGoalId] = useState(
+    SAVINGS_GOALS[0].id,
+  );
+  const [quickDepositIdx, setQuickDepositIdx] = useState(0);
+  const [dateRangeModalVisible, setDateRangeModalVisible] = useState(false);
+  const [accountModalVisible, setAccountModalVisible] = useState(false);
+  const [metricBreakModalVisible, setMetricBreakModalVisible] = useState(false);
+  const [actionInsight, setActionInsight] = useState<InsightItem | null>(null);
+  // Keep the last insight around so the dialog can animate out with its content
+  const lastActionInsight = useRef<InsightItem | null>(null);
+  if (actionInsight) lastActionInsight.current = actionInsight;
+  const shownInsight = actionInsight ?? lastActionInsight.current;
+
+  const profile = useAppSelector(state => state.user.profile);
+  const userName = profile?.name?.split(' ')[0] || 'Talha';
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
+  // A signed-in user's Home is worked out from their own data; Explore shows the sample.
+  const userMode = useUserMode();
+  const userUi = useUserUi();
+  const isUser = userMode.isNewUser;
+  const planning = usePlanningActions();
+  const userGoals = useSavingsGoals().goals;
+  const userBank = useBankAccounts();
+  // Worked out over every transaction, so only again when the data behind it changes (not on
+  // every redraw of this screen, e.g. opening a dialog or switching a sub-tab).
+  const { txs, goals, holdings, budget: monthlyBudget, envelopes: userEnvelopes, debts } = userMode;
+  const bankAccountsList = userBank.accounts;
+  const monthlyIncomeText = profile?.monthlyIncome;
+  const u = useMemo(
+    () =>
+      computeUserDashboard({
+        txs,
+        goals,
+        holdings,
+        budget: monthlyBudget,
+        envelopes: userEnvelopes,
+        accountBalances: isUser ? bankAccountsList.map(a => a.balance) : [],
+        profileIncome: monthlyIncomeOf(monthlyIncomeText),
+        debts,
+      }),
+    [txs, goals, holdings, monthlyBudget, userEnvelopes, debts, isUser, bankAccountsList, monthlyIncomeText],
+  );
+  const fmt = (n: number) => Math.round(n).toLocaleString('en-PK');
+  const signed = (n: number) => (n === 0 ? '0' : `${n < 0 ? '−' : '+'}${fmt(Math.abs(n))}`);
+  const goalList = isUser ? userGoals : SAVINGS_GOALS;
+  const insightList: InsightItem[] = isUser ? u.insights : INSIGHTS_DATA;
+  const goTo = (target: DashInsight['go']) =>
+    target === 'BudgetPlanner'
+      ? navigation.navigate('BudgetPlanner')
+      : navigation.navigate('Drawer', { screen: 'MainTabs', params: { screen: target } });
+  const runwaySegs = isUser
+    ? Math.round((Math.min(u.runwayMonths ?? 0, RUNWAY_MAX_MONTHS) / RUNWAY_MAX_MONTHS) * RUNWAY_SEGMENTS)
+    : runwayFilledSegs;
+  const spendPct = isUser ? Math.min(u.budgetPct ?? 0, 100) : 53;
+
+  const { accounts } = useAppSelector(state => state.bankAccounts);
+  const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
+
+  // Privacy toggle for the Net Worth card amounts
+  const [amountsHidden, setAmountsHidden] = useState(false);
+  const mask = (value: string) => (amountsHidden ? '••••••' : value);
+
+  const displayBalance =
+    totalBalance > 0
+      ? totalBalance.toLocaleString('en-PK')
+      : '3,82,000';
+
+  const now = new Date();
+  const MONTH_NAMES = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+  const planMonthLabel = `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
+
+  // The Monthly Planning sheet keeps its own draft state (see PlanningSheet), so typing an amount
+  // there doesn't redraw this whole screen. Opening it bumps the key, which loads a fresh draft.
+  const [planOpenKey, setPlanOpenKey] = useState(0);
+  const [planUnassigned, setPlanUnassigned] = useState(0);
+  const openPlanning = () => {
+    setPlanOpenKey(k => k + 1);
+    setOverlay('envelopeBudget');
   };
 
   const quickDepositAmounts = [5000, 10000, 25000];
@@ -813,7 +1163,7 @@ export const DashboardScreen = () => {
         {/* Loads once per visit; sub-tabs share the screen's load and never replay it. */}
         {dashLoad.status === 'error' && <ErrorState onRetry={dashLoad.retry} />}
         {dashLoad.status === 'loading' && subTab === 'live' && (
-          <DashLiveSkeleton checklist={isUser && !userMode.checklistHidden} />
+          <DashLiveSkeleton checklist={isUser && !userUi.checklistHidden} />
         )}
         {dashLoad.status === 'loading' && subTab === 'monthly' && <DashMonthlySkeleton />}
         {dashLoad.status === 'loading' && subTab === 'health' && <DashHealthSkeleton />}
@@ -1187,7 +1537,7 @@ export const DashboardScreen = () => {
                 isUser
                   ? u.insights[0]
                     ? goTo(u.insights[0].go)
-                    : userMode.setFirstActionOpen(true)
+                    : userUi.setFirstActionOpen(true)
                   : showToast('Grocery audit details opened.', 'info', 'SMART INSIGHT')
               }
               style={styles.sectionMargin}
@@ -1573,7 +1923,7 @@ export const DashboardScreen = () => {
             </View>
             <TouchableOpacity
               activeOpacity={0.8}
-              onPress={() => userMode.setFirstActionOpen(true)}
+              onPress={() => userUi.setFirstActionOpen(true)}
               style={[styles.actionPillButtonFull, { backgroundColor: theme.MODAL }]}
             >
               <Feather name="plus" size={15} color={theme.ACTIVE} />
@@ -2268,290 +2618,13 @@ export const DashboardScreen = () => {
       </AnimatedModal>
 
       {/* 5. Monthly Planning Ritual — Category Allocation */}
-      <AnimatedModal
+      <PlanningSheet
         visible={overlay === 'envelopeBudget'}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setOverlay(null)}
-      >
-        <TouchableOpacity
-          style={styles.modalBackdropTap}
-          activeOpacity={1}
-          onPress={() => setOverlay(null)}
-        />
-        <View
-          style={[
-            styles.tallSheet,
-            { backgroundColor: theme.CARD, paddingBottom: insets.bottom + 20 },
-          ]}
-        >
-          <View style={styles.sheetHeaderRow}>
-            <View style={styles.flexShrink}>
-              <Text style={[styles.envelopeEyebrow, { color: theme.ACTIVE }]}>
-                {planMonthLabel.toUpperCase()}
-              </Text>
-              <Text style={[styles.sheetTitle, { color: theme.TEXT }]}>
-                Monthly Planning
-              </Text>
-            </View>
-            <View style={styles.envelopeHeaderActions}>
-              {envelopes.length === 0 ? null : !editAllEnvelopes ? (
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={startEditAllEnvelopes}
-                  style={[styles.editAllBtn, { borderColor: theme.BORDER, borderWidth: 1 }]}
-                >
-                  <Text style={[styles.editAllText, { color: theme.MUTED }]}>Edit all</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={commitAllEnvelopes}
-                  style={[styles.editAllBtn, { backgroundColor: theme.ACTIVE }]}
-                >
-                  <Text style={[styles.editAllText, { color: '#FFFFFF', fontWeight: '700' }]}>Done</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                onPress={() => setOverlay(null)}
-                style={[styles.sheetCloseBtn, { backgroundColor: theme.MODAL }]}
-              >
-                <Feather name="x" size={14} color={theme.MUTED} />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Income pool */}
-          <View
-            style={[
-              styles.incomePool,
-              {
-                backgroundColor: overAllocated
-                  ? `${theme.RED}14`
-                  : `${theme.GREEN}12`,
-                borderColor: overAllocated
-                  ? `${theme.RED}33`
-                  : `${theme.GREEN}33`,
-              },
-            ]}
-          >
-            <View>
-              <Text style={[styles.poolLabel, { color: theme.MUTED }]}>
-                Available to Allocate
-              </Text>
-              <Text
-                style={[
-                  styles.poolValue,
-                  { color: overAllocated ? theme.RED : theme.GREEN },
-                ]}
-              >
-                PKR {Math.abs(unallocated).toLocaleString()}{' '}
-                {overAllocated ? 'OVER' : 'left'}
-              </Text>
-            </View>
-            {isUser && editingPool ? (
-              <TextInput
-                value={poolDraft}
-                onChangeText={setPoolDraft}
-                keyboardType="number-pad"
-                placeholder="Monthly budget"
-                placeholderTextColor={theme.MUTED}
-                autoFocus={userMode.budget === null}
-                accessibilityLabel="Monthly budget"
-                style={[
-                  styles.envelopeAmountInput,
-                  styles.poolInput,
-                  { color: theme.ACTIVE, backgroundColor: `${theme.ACTIVE}10`, borderColor: `${theme.ACTIVE}50` },
-                ]}
-              />
-            ) : isUser ? (
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={() => {
-                  setPoolDraft(String(userMode.budget ?? ''));
-                  setEditingPool(true);
-                }}
-                accessibilityLabel="Change monthly budget"
-                style={styles.poolEditBtn}
-              >
-                <Text style={[styles.poolOf, { color: theme.MUTED }]}>of PKR {fmt(planPool)}</Text>
-                <Feather name="edit-2" size={11} color={theme.MUTED} />
-              </TouchableOpacity>
-            ) : (
-              <Text style={[styles.poolOf, { color: theme.MUTED }]}>
-                of PKR {MONTHLY_INCOME_POOL.toLocaleString('en-PK')}
-              </Text>
-            )}
-          </View>
-
-          {isUser && envelopes.length === 0 && (
-            <View style={styles.planEmpty}>
-              <Text style={[styles.planEmptyText, { color: theme.MUTED }]}>
-                No spending limits yet. Split your budget into categories like groceries, fuel and bills.
-              </Text>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => {
-                  setOverlay(null);
-                  navigation.navigate('BudgetPlanner');
-                }}
-                style={[styles.editAllBtn, { borderColor: theme.BORDER, borderWidth: 1, alignSelf: 'flex-start' }]}
-              >
-                <Text style={[styles.editAllText, { color: theme.TEXT }]}>Add spending categories</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            style={styles.envelopeList}
-          >
-            {envelopes.map((env, i) => (
-              <View
-                key={env.label}
-                style={[
-                  styles.envelopeRow,
-                  i < envelopes.length - 1 && {
-                    borderBottomWidth: 1,
-                    borderBottomColor: theme.BORDER,
-                  },
-                ]}
-              >
-                <View style={styles.flexShrink}>
-                  <Text style={[styles.envelopeName, { color: theme.TEXT }]}>
-                    {env.label}
-                  </Text>
-                  {env.locked && (
-                    <Text style={[styles.envelopeFixed, { color: theme.MUTED }]}>
-                      FIXED
-                    </Text>
-                  )}
-                </View>
-                <View style={styles.envelopeStepper}>
-                  {!env.locked && (
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      onPress={() => adjustEnvelope(i, -1000)}
-                      style={[styles.stepCircle, { backgroundColor: theme.MODAL }]}
-                    >
-                      <Feather name="minus" size={12} color={theme.TEXT} />
-                    </TouchableOpacity>
-                  )}
-                  {!env.locked && (editAllEnvelopes || editingEnvIdx === i) ? (
-                    <TextInput
-                      autoFocus={editingEnvIdx === i}
-                      keyboardType="number-pad"
-                      value={editAllEnvelopes ? editEnvVals[i] ?? '' : editEnvVal}
-                      onChangeText={t =>
-                        editAllEnvelopes
-                          ? setEditEnvVals(vs => vs.map((v, j) => (j === i ? t : v)))
-                          : setEditEnvVal(t)
-                      }
-                      onBlur={editAllEnvelopes ? undefined : commitEnvelopeEdit}
-                      onSubmitEditing={editAllEnvelopes ? undefined : commitEnvelopeEdit}
-                      style={[
-                        styles.envelopeAmountInput,
-                        {
-                          color: theme.ACTIVE,
-                          backgroundColor: `${theme.ACTIVE}10`,
-                          borderColor: `${theme.ACTIVE}50`,
-                        },
-                      ]}
-                    />
-                  ) : (
-                    <TouchableOpacity
-                      activeOpacity={env.locked ? 1 : 0.7}
-                      disabled={env.locked}
-                      onPress={() => startEnvelopeEdit(i)}
-                    >
-                      <Text style={[styles.envelopeAmount, { color: theme.TEXT }]}>
-                        {env.amount.toLocaleString()}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                  {!env.locked && (
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      onPress={() => adjustEnvelope(i, 1000)}
-                      style={[styles.stepCircle, { backgroundColor: theme.MODAL }]}
-                    >
-                      <Feather name="plus" size={12} color={theme.TEXT} />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-
-          {overAllocated && (
-            <View
-              style={[styles.overAllocWarn, { backgroundColor: `${theme.RED}14` }]}
-            >
-              <Feather name="info" size={12} color={theme.RED} />
-              <Text style={[styles.overAllocText, { color: theme.RED }]}>
-                Over-allocated by PKR{' '}
-                {Math.abs(unallocated).toLocaleString()}. Rebalance categories.
-              </Text>
-            </View>
-          )}
-
-          <TouchableOpacity
-            activeOpacity={0.9}
-            disabled={savingPlan}
-            onPress={() => {
-              if (isUser) {
-                savePlan();
-                return;
-              }
-              if (overAllocated) {
-                setOverlay('rebalanceSheet');
-                return;
-              }
-              if (unallocated > 0) {
-                setOverlay('unassignedWarning');
-                return;
-              }
-              setOverlay(null);
-              showToast(
-                `${planMonthLabel} budget locked. Every rupee has a job.`,
-                'success',
-                'Budget Locked',
-              );
-            }}
-            style={[
-              styles.lockBtn,
-              { backgroundColor: overAllocated ? theme.RED : theme.TEXT },
-            ]}
-          >
-            <Text
-              style={[
-                styles.lockBtnText,
-                { color: overAllocated ? '#FFFFFF' : theme.BG },
-              ]}
-            >
-              {savingPlan
-                ? 'Saving…'
-                : overAllocated
-                ? 'Rebalance First'
-                : `Confirm ${planMonthName} Budget`}
-            </Text>
-          </TouchableOpacity>
-          {isUser && envelopes.length > 0 && (
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => {
-                setOverlay(null);
-                navigation.navigate('BudgetPlanner');
-              }}
-              style={styles.planManageLink}
-            >
-              <Text style={[styles.planManageText, { color: theme.MUTED }]}>
-                Add or remove categories in Budget Planner →
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </AnimatedModal>
+        openKey={planOpenKey}
+        isUser={isUser}
+        setOverlay={setOverlay}
+        setUnassigned={setPlanUnassigned}
+      />
 
       {/* 6. Goal Milestone Celebration */}
       <AnimatedModal
@@ -2942,7 +3015,7 @@ export const DashboardScreen = () => {
               ]}
             >
               <Text style={[styles.unassignedValue, { color: theme.ACTIVE }]}>
-                PKR {Math.max(unallocated, 0).toLocaleString()}
+                PKR {Math.max(planUnassigned, 0).toLocaleString()}
               </Text>
               <Text style={[styles.poolLabel, { color: theme.MUTED }]}>
                 unused money left to assign
@@ -2961,7 +3034,7 @@ export const DashboardScreen = () => {
             >
               <Text style={[styles.lockBtnText, { color: '#FFFFFF' }]}>
                 Assign Remaining PKR{' '}
-                {Math.max(unallocated, 0).toLocaleString()}
+                {Math.max(planUnassigned, 0).toLocaleString()}
               </Text>
             </TouchableOpacity>
 

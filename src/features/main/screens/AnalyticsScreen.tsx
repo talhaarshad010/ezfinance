@@ -18,7 +18,7 @@ import { useToast } from '../../../context/ToastContext';
 import { useAppSelector } from '../../../store/hooks';
 import { Transaction } from '../../../store/slices/bankAccountsSlice';
 import { CalendarPicker, DrawerMenuButton } from '../../../components';
-import { UNLOCK_AT, useUserMode } from '../../../context/UserModeContext';
+import { UNLOCK_AT, useUserMode, useUserUi } from '../../../context/UserModeContext';
 import { CAT_META, EmptyState } from '../newUser/shared';
 import { computeUserAnalytics, FilterType } from './analytics/userAnalytics';
 
@@ -170,6 +170,7 @@ export const AnalyticsScreen = () => {
 
   // A signed-in user's analytics come from their own transactions; Explore shows the sample.
   const userMode = useUserMode();
+  const userUi = useUserUi();
   const isUser = userMode.isNewUser;
   const u = computeUserAnalytics(userMode.txs, activeFilter, customDate);
   const locked = isUser && userMode.txs.length < UNLOCK_AT;
@@ -257,7 +258,7 @@ export const AnalyticsScreen = () => {
               icon="bar-chart-2"
               title="Analytics unlock soon"
               line={`Log ${left} more transaction${left === 1 ? '' : 's'} and we'll show where your money goes, by category and over time.`}
-              primary={{ label: 'Log a transaction', onPress: () => userMode.setFirstActionOpen(true) }}
+              primary={{ label: 'Log a transaction', onPress: () => userUi.setFirstActionOpen(true) }}
             />
           </View>
         )}

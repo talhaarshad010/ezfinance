@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,9 @@ import {
   StyleSheet,
   StatusBar,
   RefreshControl,
+  ActivityIndicator,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -45,7 +48,7 @@ import {
 } from './expenses/RecurringSheets';
 import StatementImportModal from './expenses/StatementImportModal';
 import ScanReceiptFlow from './expenses/ScanReceiptFlow';
-import { UserBill, UserTransfer, UserTx, useUserMode } from '../../../context/UserModeContext';
+import { UserBill, UserTransfer, UserTx, useUserMode, useUserUi } from '../../../context/UserModeContext';
 import { useLedgerActions } from '../../../hooks/useLedgerActions';
 import { useAppSelector } from '../../../store/hooks';
 import { monthlyIncomeOf } from '../../../utils/income';
@@ -173,6 +176,7 @@ const toLedger = (t: UserTx, accounts: BankAccount[]): LedgerTransaction => ({
 export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }) => {
   const isUser = mode === 'user';
   const userMode = useUserMode();
+  const userUi = useUserUi();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { showToast } = useToast();
@@ -237,13 +241,19 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
     [isUser, userMode.bills, userMode.bankAccounts, sampleBills, theme.ACTIVE],
   );
   const debts = isUser ? userMode.debts : sampleDebts;
-  const dateLabelOf = (group: string) => {
-    if (!isUser) return DATE_LABELS[group] ?? group;
-    const date =
-      userTxs.find(t => dateGroupOf(t.date) === group)?.date ??
-      userMode.transfers.find(t => dateGroupOf(t.date) === group)?.date;
-    return date ? numericDate(date) : group;
-  };
+  // Each date group's label ("18.10.2026"), worked out once per list instead of per group.
+  const groupDates = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const t of [...userTxs, ...userMode.transfers]) {
+      const g = dateGroupOf(t.date);
+      if (!map.has(g)) map.set(g, numericDate(t.date));
+    }
+    return map;
+  }, [userTxs, userMode.transfers]);
+  const dateLabelOf = useCallback(
+    (group: string) => (!isUser ? DATE_LABELS[group] ?? group : groupDates.get(group) ?? group),
+    [isUser, groupDates],
+  );
   const accountChoices = userMode.bankAccounts.map(a => ({ id: a.id, label: accountLabel(a) }));
   /** Bills and transfers need a linked account; send the user to link one first. */
   const needAccount = (count = 1) => {
@@ -265,7 +275,7 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
       .then(r => savedToast(r, exclude ? 'Left out of your budget' : 'Counted in your budget again'))
       .catch(failed);
   };
-  const onAdd = () => (isUser ? userMode.setFirstActionOpen(true) : setGatewayOpen(true));
+  const onAdd = () => (isUser ? userUi.setFirstActionOpen(true) : setGatewayOpen(true));
 
   // Modals & Sheets Visibility
   const [gatewayOpen, setGatewayOpen] = useState(false);
@@ -290,23 +300,45 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
   const [debtEditTarget, setDebtEditTarget] = useState<DebtEntry | null>(null);
   const [debtRemTarget, setDebtRemTarget] = useState<DebtEntry | null>(null);
 
-  // Filtering
-  const filteredTxs = transactions.filter(tx => {
-    if (txFilter === 'in' && tx.type !== 'income') return false;
-    if (txFilter === 'out' && tx.type !== 'expense') return false;
-    if (txFilter === 'transfers' && tx.type !== 'transfer') return false;
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      return (
-        tx.label.toLowerCase().includes(q) ||
-        tx.account.toLowerCase().includes(q) ||
-        tx.category.toLowerCase().includes(q)
-      );
-    }
-    return true;
-  });
+  // Filtering (only again when the list, filter or search changes)
+  const filteredTxs = useMemo(
+    () =>
+      transactions.filter(tx => {
+        if (txFilter === 'in' && tx.type !== 'income') return false;
+        if (txFilter === 'out' && tx.type !== 'expense') return false;
+        if (txFilter === 'transfers' && tx.type !== 'transfer') return false;
+        if (search.trim()) {
+          const q = search.toLowerCase();
+          return (
+            tx.label.toLowerCase().includes(q) ||
+            tx.account.toLowerCase().includes(q) ||
+            tx.category.toLowerCase().includes(q)
+          );
+        }
+        return true;
+      }),
+    [transactions, txFilter, search],
+  );
 
-  const groupedTxs = groupByDate(filteredTxs);
+  // Long lists are drawn in batches (see TxFeed). Scrolling near the end asks the feed for more;
+  // only the feed redraws, not this whole screen.
+  const feedRef = useRef<TxFeedHandle>(null);
+  const onListScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (tab !== 'transactions') return;
+      const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+      if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 800) {
+        feedRef.current?.showMore();
+      }
+    },
+    [tab],
+  );
+  const openTx = useCallback(
+    (tx: LedgerTransaction) =>
+      // A transfer has no category or split: tapping it offers to delete it.
+      isUser && tx.type === 'transfer' ? setDeleteTx(tx) : setAuditTx(tx),
+    [isUser],
+  );
 
   // Metrics
   const todaySpent = transactions
@@ -548,6 +580,8 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
 
       <ScrollView
         showsVerticalScrollIndicator={false}
+        onScroll={onListScroll}
+        scrollEventThrottle={200}
         refreshControl={
           isUser ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.MUTED} /> : undefined
         }
@@ -629,11 +663,11 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
               title="No transactions yet"
               line="Every rupee you log here builds your budget, tax picture and AI advice."
               samples={[
-                { label: 'Add Groceries', icon: CAT_META.Groceries.icon, color: CAT_META.Groceries.color, onPress: () => userMode.openTxSheet({ type: 'expense', category: 'Groceries', source: 'manual' }) },
-                { label: 'Add Fuel', icon: CAT_META.Fuel.icon, color: CAT_META.Fuel.color, onPress: () => userMode.openTxSheet({ type: 'expense', category: 'Fuel', source: 'manual' }) },
-                { label: 'Add Salary', icon: CAT_META.Salary.icon, color: CAT_META.Salary.color, onPress: () => userMode.openTxSheet({ type: 'income', category: 'Salary', source: 'manual' }) },
+                { label: 'Add Groceries', icon: CAT_META.Groceries.icon, color: CAT_META.Groceries.color, onPress: () => userUi.openTxSheet({ type: 'expense', category: 'Groceries', source: 'manual' }) },
+                { label: 'Add Fuel', icon: CAT_META.Fuel.icon, color: CAT_META.Fuel.color, onPress: () => userUi.openTxSheet({ type: 'expense', category: 'Fuel', source: 'manual' }) },
+                { label: 'Add Salary', icon: CAT_META.Salary.icon, color: CAT_META.Salary.color, onPress: () => userUi.openTxSheet({ type: 'income', category: 'Salary', source: 'manual' }) },
               ]}
-              primary={{ label: 'Log a transaction', onPress: () => userMode.setFirstActionOpen(true) }}
+              primary={{ label: 'Log a transaction', onPress: () => userUi.setFirstActionOpen(true) }}
             />
           </View>
         )}
@@ -745,111 +779,7 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
             </View>
 
             {/* Grouped Transactions Feed */}
-            {groupedTxs.length === 0 ? (
-              <View style={styles.emptyWrap}>
-                <Text style={[styles.emptyText, { color: theme.MUTED }]}>
-                  No transactions found
-                </Text>
-              </View>
-            ) : (
-              groupedTxs.map(group => (
-                <View key={group.date} style={styles.groupWrap}>
-                  <Text style={[styles.groupDateLabel, { color: theme.MUTED }]}>
-                    {group.date} // {dateLabelOf(group.date)}
-                  </Text>
-                  <View
-                    style={[
-                      styles.groupCard,
-                      {
-                        backgroundColor: theme.isDark ? theme.CARD : '#FFFFFF',
-                        borderColor: theme.BORDER,
-                      },
-                    ]}
-                  >
-                    {group.items.map((tx, i) => {
-                      const isTransfer = tx.type === 'transfer';
-                      const amtColor = isTransfer
-                        ? theme.MUTED
-                        : tx.amount > 0
-                        ? theme.GREEN
-                        : theme.RED;
-                      const catStyle = catStyleOf(tx.category);
-
-                      return (
-                        <TouchableOpacity
-                          key={tx.id}
-                          activeOpacity={0.7}
-                          onPress={() =>
-                            // A transfer has no category or split: tapping it offers to delete it.
-                            isUser && tx.type === 'transfer' ? setDeleteTx(tx) : setAuditTx(tx)
-                          }
-                          style={[
-                            styles.txRow,
-                            i < group.items.length - 1 && {
-                              borderBottomWidth: StyleSheet.hairlineWidth,
-                              borderBottomColor: theme.BORDER,
-                            },
-                          ]}
-                        >
-                          <View
-                            style={[
-                              styles.catIconWrap,
-                              {
-                                backgroundColor: catStyle.bg,
-                                borderColor: catStyle.icon + '40',
-                              },
-                            ]}
-                          >
-                            <Feather
-                              name={tx.icon || 'credit-card'}
-                              size={15}
-                              color={catStyle.icon}
-                            />
-                          </View>
-
-                          <View style={{ flex: 1, marginRight: 12 }}>
-                            <Text
-                              numberOfLines={1}
-                              style={[styles.txLabel, { color: theme.TEXT }]}
-                            >
-                              {tx.label}
-                            </Text>
-                            <View style={styles.txMetaRow}>
-                              {!!tx.account && (
-                                <Text style={[styles.txAccount, { color: theme.MUTED }]}>
-                                  {tx.account}
-                                </Text>
-                              )}
-                              <View
-                                style={[
-                                  styles.txCatBadge,
-                                  { backgroundColor: theme.MODAL },
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    styles.txCatBadgeText,
-                                    { color: theme.MUTED },
-                                  ]}
-                                >
-                                  {tx.excluded ? `${tx.category} · not in budget` : tx.category}
-                                </Text>
-                              </View>
-                            </View>
-                          </View>
-
-                          <Text style={[styles.txAmount, { color: amtColor }]}>
-                            {!isTransfer && (tx.amount > 0 ? '+' : '−')}
-                            {isTransfer && '→ '}
-                            PKR {Math.abs(tx.amount).toLocaleString()}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-              ))
-            )}
+            <TxFeed ref={feedRef} txs={filteredTxs} dateLabelOf={dateLabelOf} onOpen={openTx} />
           </View>
         )}
 
@@ -1482,7 +1412,7 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
           // A user's transaction opens the full edit sheet (amount, note, account, date).
           setTimeout(
             () =>
-              userMode.openTxSheet({
+              userUi.openTxSheet({
                 editId: own.id,
                 type: own.type,
                 category: own.category,
@@ -1590,6 +1520,126 @@ export const ExpensesScreen = ({ mode = 'sample' }: { mode?: 'sample' | 'user' }
 };
 
 /** Empty card for a list the user hasn't added anything to yet. */
+const TX_BATCH = 20;
+
+export interface TxFeedHandle {
+  showMore: () => void;
+}
+
+/**
+ * The transaction feed, grouped by day. Draws TX_BATCH rows at first and more each time the screen
+ * asks (scrolled near the end), so long histories open quickly. Keeps its own row count, so loading
+ * more redraws only the feed. A new list (filter, search) starts again from the first batch.
+ */
+const TxFeed = React.memo(
+  React.forwardRef<
+    TxFeedHandle,
+    {
+      txs: LedgerTransaction[];
+      dateLabelOf: (group: string) => string;
+      onOpen: (tx: LedgerTransaction) => void;
+    }
+  >(function TxFeed({ txs, dateLabelOf, onOpen }, ref) {
+    const { theme } = useTheme();
+    const [visible, setVisible] = useState(TX_BATCH);
+    useEffect(() => setVisible(TX_BATCH), [txs]);
+    const hasMore = txs.length > visible;
+    const hasMoreRef = useRef(hasMore);
+    hasMoreRef.current = hasMore;
+    React.useImperativeHandle(ref, () => ({
+      showMore: () => {
+        if (hasMoreRef.current) setVisible(n => n + TX_BATCH);
+      },
+    }), []);
+    const groups = useMemo(() => groupByDate(txs.slice(0, visible)), [txs, visible]);
+
+    if (groups.length === 0) {
+      return (
+        <View style={styles.emptyWrap}>
+          <Text style={[styles.emptyText, { color: theme.MUTED }]}>No transactions found</Text>
+        </View>
+      );
+    }
+    return (
+      <>
+        {groups.map(group => (
+          <View key={group.date} style={styles.groupWrap}>
+            <Text style={[styles.groupDateLabel, { color: theme.MUTED }]}>
+              {`${group.date} // ${dateLabelOf(group.date)}`}
+            </Text>
+            <View
+              style={[
+                styles.groupCard,
+                { backgroundColor: theme.isDark ? theme.CARD : '#FFFFFF', borderColor: theme.BORDER },
+              ]}
+            >
+              {group.items.map((tx, i) => (
+                <TxRowItem key={tx.id} tx={tx} isLast={i === group.items.length - 1} onPress={onOpen} />
+              ))}
+            </View>
+          </View>
+        ))}
+        {hasMore && (
+          <View style={styles.moreRows}>
+            <ActivityIndicator color={theme.MUTED} />
+          </View>
+        )}
+      </>
+    );
+  }),
+);
+
+
+/** One transaction in the feed. Redraws only when its own transaction changes. */
+const TxRowItem = React.memo(function TxRowItem({
+  tx,
+  isLast,
+  onPress,
+}: {
+  tx: LedgerTransaction;
+  isLast: boolean;
+  onPress: (tx: LedgerTransaction) => void;
+}) {
+  const { theme } = useTheme();
+  const isTransfer = tx.type === 'transfer';
+  const amtColor = isTransfer ? theme.MUTED : tx.amount > 0 ? theme.GREEN : theme.RED;
+  const catStyle = catStyleOf(tx.category);
+  return (
+    <TouchableOpacity
+      activeOpacity={0.7}
+      onPress={() => onPress(tx)}
+      style={[
+        styles.txRow,
+        !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.BORDER },
+      ]}
+    >
+      <View style={[styles.catIconWrap, { backgroundColor: catStyle.bg, borderColor: catStyle.icon + '40' }]}>
+        <Feather name={tx.icon || 'credit-card'} size={15} color={catStyle.icon} />
+      </View>
+
+      <View style={styles.txBody}>
+        <Text numberOfLines={1} style={[styles.txLabel, { color: theme.TEXT }]}>
+          {tx.label}
+        </Text>
+        <View style={styles.txMetaRow}>
+          {!!tx.account && <Text style={[styles.txAccount, { color: theme.MUTED }]}>{tx.account}</Text>}
+          <View style={[styles.txCatBadge, { backgroundColor: theme.MODAL }]}>
+            <Text style={[styles.txCatBadgeText, { color: theme.MUTED }]}>
+              {tx.excluded ? `${tx.category} · not in budget` : tx.category}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      <Text style={[styles.txAmount, { color: amtColor }]}>
+        {!isTransfer && (tx.amount > 0 ? '+' : '−')}
+        {isTransfer && '→ '}
+        PKR {Math.abs(tx.amount).toLocaleString()}
+      </Text>
+    </TouchableOpacity>
+  );
+});
+
 function NoItems({
   icon,
   title,
@@ -1782,6 +1832,8 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     overflow: 'hidden',
   },
+  txBody: { flex: 1, marginRight: 12 },
+  moreRows: { paddingVertical: 16, alignItems: 'center' },
   txRow: {
     flexDirection: 'row',
     alignItems: 'center',

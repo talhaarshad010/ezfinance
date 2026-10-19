@@ -12,7 +12,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import Typography from '../components/Typography';
 import { useAppSelector } from '../store/hooks';
 import { useTheme } from '../context/ThemeContext';
-import { useUserMode } from '../context/UserModeContext';
+import { useUserMode, useUserUi } from '../context/UserModeContext';
 import { FEATURES } from '../constants/features';
 import { signOut } from '../services/authService';
 
@@ -104,7 +104,8 @@ export const DrawerContent = React.memo((props: DrawerContentComponentProps) => 
     ]?.name;
   const currentScreenName = activeTabRoute || currentRoute;
   const profile = useAppSelector(state => state.user.profile);
-  const { isNewUser, openTxSheet } = useUserMode();
+  const { isNewUser } = useUserMode();
+  const { openTxSheet } = useUserUi();
 
   const drawerBg = theme.isDark ? '#0A0A0D' : '#F8F9FA';
 

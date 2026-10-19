@@ -32,6 +32,7 @@ import {
   uploadProfilePhoto,
 } from '../../../services/authService';
 import { AnimatedModal } from '../../../components/AnimatedModal';
+import { Sk } from '../../../components/Skeletons';
 
 export const EditProfileScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
@@ -52,6 +53,8 @@ export const EditProfileScreen = ({ navigation }: any) => {
   const [isUploading, setIsUploading] = useState(false);
   // A signed photo link can expire while cached on the device; fall back to initials until refreshed.
   const [imageFailed, setImageFailed] = useState(false);
+  // The photo comes from storage; a placeholder pulses until it has downloaded.
+  const [imageLoaded, setImageLoaded] = useState(false);
 
   const handleSave = () => {
     if (!name.trim()) {
@@ -226,11 +229,16 @@ export const EditProfileScreen = ({ navigation }: any) => {
                 ]}
               >
                 {photoURL && !imageFailed ? (
-                  <Image
-                    source={{ uri: photoURL }}
-                    style={styles.avatarImage}
-                    onError={() => setImageFailed(true)}
-                  />
+                  <View style={styles.avatarImage}>
+                    <Image
+                      source={{ uri: photoURL }}
+                      style={styles.avatarImage}
+                      onLoadStart={() => setImageLoaded(false)}
+                      onLoad={() => setImageLoaded(true)}
+                      onError={() => setImageFailed(true)}
+                    />
+                    {!imageLoaded && <Sk w="100%" h={80} r={42} style={StyleSheet.absoluteFill} />}
+                  </View>
                 ) : (
                   <View style={styles.initialsAvatar}>
                     <Text style={[styles.initialsText, { color: theme.TEXT }]}>

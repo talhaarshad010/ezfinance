@@ -1,3 +1,4 @@
+import { useUserUi } from '../../../context/UserModeContext';
 import React, { useState } from 'react';
 import {
   View,
@@ -35,7 +36,8 @@ const AccountDetailScreen = () => {
 
   // The user's own account and the transactions logged to it, or the sample account.
   const bank = useBankAccounts();
-  const { isUser, userMode } = bank;
+  const { isUser } = bank;
+  const userUi = useUserUi();
   const txActions = useTransactionActions();
   const ledger = useLedgerActions();
   const account = bank.accounts.find(a => a.id === accountId);
@@ -44,7 +46,7 @@ const AccountDetailScreen = () => {
   // A user adds a transaction with the regular sheet, already set to this account.
   const addTransaction = () =>
     isUser && account
-      ? userMode.openTxSheet({ type: 'expense', accountId: account.id, source: 'manual' })
+      ? userUi.openTxSheet({ type: 'expense', accountId: account.id, source: 'manual' })
       : navigation.navigate('AddTransaction', { accountId });
   const [refreshing, setRefreshing] = useState(false);
 

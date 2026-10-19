@@ -3,7 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { useTheme } from '../../../context/ThemeContext';
 import { useNetwork } from '../../../context/NetworkContext';
-import { TxSheetPreset, TxType, useUserMode } from '../../../context/UserModeContext';
+import { TxSheetPreset, TxType, useUserMode, useUserUi } from '../../../context/UserModeContext';
 import { CalendarPicker } from '../../../components';
 import { accountLabel, accountNameOf } from '../screens/bankAccounts/useBankAccounts';
 import { navigateTo } from '../../../navigation/navigationRef';
@@ -41,7 +41,8 @@ const longDate = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', mo
 
 function TransactionForm({ preset }: { preset: TxSheetPreset }) {
   const { theme } = useTheme();
-  const { closeTxSheet, bankAccounts } = useUserMode();
+  const { bankAccounts } = useUserMode();
+  const { closeTxSheet } = useUserUi();
   const txActions = useTransactionActions();
   const { showToast } = useToast();
   const [type, setType] = useState<TxType>(preset.type ?? 'expense');
@@ -225,7 +226,7 @@ function TransactionForm({ preset }: { preset: TxSheetPreset }) {
 /** Every transaction belongs to a linked bank account, so logging one starts by linking an account. */
 function LinkAccountFirst() {
   const { theme } = useTheme();
-  const { closeTxSheet } = useUserMode();
+  const { closeTxSheet } = useUserUi();
   return (
     <View style={st.linkFirst}>
       <View style={[st.linkFirstIcon, { backgroundColor: `${TEAL}1c` }]}>
@@ -249,7 +250,8 @@ function LinkAccountFirst() {
 }
 
 export function TransactionSheetHost() {
-  const { txSheet, closeTxSheet, bankAccounts } = useUserMode();
+  const { bankAccounts } = useUserMode();
+  const { txSheet, closeTxSheet } = useUserUi();
   const p = txSheet.preset ?? {};
   // Fresh form state every time the sheet opens.
   const [formKey, setFormKey] = useState(0);
@@ -280,7 +282,7 @@ export function TransactionSheetHost() {
 
 export function FirstActionSheetHost() {
   const { theme } = useTheme();
-  const { firstActionOpen, setFirstActionOpen, openTxSheet } = useUserMode();
+  const { firstActionOpen, setFirstActionOpen, openTxSheet } = useUserUi();
   const { online } = useNetwork();
   const { showToast } = useToast();
   const [phase, setPhase] = useState<'pick' | 'scanning' | 'needsNet'>('pick');

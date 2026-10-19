@@ -1,15 +1,15 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
-  Animated,
   StyleSheet,
   StatusBar,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
-import { useNavigation } from '@react-navigation/native';
+import DeviceInfo from 'react-native-device-info';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../context/ThemeContext';
 import { useToast } from '../../../context/ToastContext';
@@ -18,14 +18,21 @@ import { useAppDispatch, useAppSelector } from '../../../store/hooks';
 import { setProfile, UserProfile } from '../../../store/slices/userSlice';
 import { ApiError, updateProfileDetails } from '../../../services/authService';
 import { DrawerMenuButton } from '../../../components';
+import { SelectField } from '../../../components/SelectField';
+import { fullAmt } from '../../../utils/format';
+import { monthlyIncomeOf } from '../../../utils/income';
+import { loadCustomMemory } from './ca/memoryStore';
+import { parsePkrNumber } from './ca/caActions';
+import { computeAnnualSalariedTax } from './ca/caEngine';
 
+// FBR salaried slabs (Finance Act 2024–25); `upTo` is the top of each slab's annual income.
 const BRACKETS = [
-  { label: 'Up to 600K', range: '≤ PKR 6,00,000', rate: 'Exempt' },
-  { label: '600K – 1.2M', range: 'PKR 6,00,001–12,00,000', rate: '5%' },
-  { label: '1.2M – 2.2M', range: 'PKR 12,00,001–22,00,000', rate: '15%' },
-  { label: '2.2M – 3.2M', range: 'PKR 22,00,001–32,00,000', rate: '25%' },
-  { label: '3.2M – 4.1M', range: 'PKR 32,00,001–41,00,000', rate: '30%' },
-  { label: 'Above 4.1M', range: '> PKR 41,00,000', rate: '35%' },
+  { upTo: 600_000, label: 'Up to 600K', range: '≤ PKR 6,00,000', rate: 'Exempt' },
+  { upTo: 1_200_000, label: '600K – 1.2M', range: 'PKR 6,00,001–12,00,000', rate: '5%' },
+  { upTo: 2_200_000, label: '1.2M – 2.2M', range: 'PKR 12,00,001–22,00,000', rate: '15%' },
+  { upTo: 3_200_000, label: '2.2M – 3.2M', range: 'PKR 22,00,001–32,00,000', rate: '25%' },
+  { upTo: 4_100_000, label: '3.2M – 4.1M', range: 'PKR 32,00,001–41,00,000', rate: '30%' },
+  { upTo: Infinity, label: 'Above 4.1M', range: '> PKR 41,00,000', rate: '35%' },
 ];
 
 const PROVINCES = [
@@ -96,46 +103,12 @@ function PillToggle({
   );
 }
 
-function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
-  const { theme } = useTheme();
-  const animX = useRef(new Animated.Value(on ? 20 : 2)).current;
-
-  useEffect(() => {
-    Animated.spring(animX, {
-      toValue: on ? 20 : 2,
-      useNativeDriver: false,
-      stiffness: 300,
-      damping: 22,
-    }).start();
-  }, [on, animX]);
-
-  return (
-    <TouchableOpacity
-      activeOpacity={0.8}
-      onPress={onToggle}
-      style={[
-        styles.toggleTrack,
-        {
-          backgroundColor: on ? theme.GREEN : theme.MODAL,
-        },
-      ]}
-    >
-      <Animated.View
-        style={[
-          styles.toggleThumb,
-          {
-            transform: [{ translateX: animX }],
-          },
-        ]}
-      />
-    </TouchableOpacity>
-  );
-}
+// Read from the installed app, so it always matches the build ("1.0 (1)").
+const APP_VERSION = `${DeviceInfo.getVersion()} (${DeviceInfo.getBuildNumber()})`;
 
 export const SettingsScreen = () => {
-  const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const { theme, toggle, setTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const { showToast } = useToast();
 
   // Real accounts start from (and save to) their profile; the Explore demo keeps sample values.
@@ -165,9 +138,35 @@ export const SettingsScreen = () => {
       showToast((e as ApiError).message, 'error');
     }
   };
-  const [bracket, setBracket] = useState(2);
-  const [smsEnabled, setSmsEnabled] = useState(true);
-  const [isolatedMode, setIsolatedMode] = useState(false);
+  // The bracket follows the salary the Personal CA uses: the Memory Bank salary if one is saved,
+  // else this month's logged income or the profile's (whichever is more). Explore: the sample.
+  const userMode = useUserMode();
+  const [memorySalary, setMemorySalary] = useState<number | null>(null);
+  // Read each time Settings is opened, so a salary just changed in the CA's Memory shows here.
+  useFocusEffect(
+    useCallback(() => {
+      if (!isNewUser) return;
+      let active = true;
+      loadCustomMemory(profile?.uid || 'guest').then(m => {
+        if (active) setMemorySalary(parsePkrNumber(m.facts.Salary));
+      });
+      return () => {
+        active = false;
+      };
+    }, [isNewUser, profile?.uid]),
+  );
+  const monthlySalary = useMemo(() => {
+    if (!isNewUser) return 150_000;
+    if (memorySalary) return memorySalary;
+    const now = new Date();
+    const loggedThisMonth = userMode.txs
+      .filter(t => t.type === 'income' && t.date.getMonth() === now.getMonth() && t.date.getFullYear() === now.getFullYear())
+      .reduce((sum, t) => sum + t.amount, 0);
+    return Math.max(loggedThisMonth, monthlyIncomeOf(profile?.monthlyIncome) ?? 0);
+  }, [isNewUser, memorySalary, userMode.txs, profile?.monthlyIncome]);
+  const annualSalary = monthlySalary * 12;
+  const bracket = monthlySalary > 0 ? BRACKETS.findIndex(b => annualSalary <= b.upTo) : -1;
+  const annualTax = Math.round(computeAnnualSalariedTax(annualSalary));
 
   return (
     <View style={[styles.container, { backgroundColor: theme.BG }]}>
@@ -328,55 +327,20 @@ export const SettingsScreen = () => {
               </Text>
             </View>
 
-            <View style={styles.listWrap}>
-              {PROVINCES.map(p => {
-                const isSelected = province === p.id;
-                return (
-                  <TouchableOpacity
-                    key={p.id}
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      if (p.id === province) return;
-                      const previous = province;
-                      setProvince(p.id);
-                      saveToProfile(
-                        { province: PROVINCE_TO_PROFILE[p.id] },
-                        () => setProvince(previous),
-                        `Province updated to ${p.label}`,
-                      );
-                    }}
-                    style={[
-                      styles.provRowBtn,
-                      {
-                        backgroundColor: isSelected
-                          ? `${theme.ACTIVE}18`
-                          : 'transparent',
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.provLabel,
-                        {
-                          color: isSelected ? theme.ACTIVE : theme.TEXT,
-                          fontWeight: isSelected ? '600' : '400',
-                        },
-                      ]}
-                    >
-                      {p.label}
-                    </Text>
-                    {isSelected && (
-                      <View
-                        style={[
-                          styles.activeDot,
-                          { backgroundColor: theme.ACTIVE },
-                        ]}
-                      />
-                    )}
-                  </TouchableOpacity>
+            <SelectField
+              title="Province · Revenue Authority"
+              value={province}
+              options={PROVINCES.map(p => ({ value: p.id, label: p.label }))}
+              onChange={id => {
+                const previous = province;
+                setProvince(id);
+                saveToProfile(
+                  { province: PROVINCE_TO_PROFILE[id] },
+                  () => setProvince(previous),
+                  `Province updated to ${PROVINCES.find(p => p.id === id)?.label ?? id}`,
                 );
-              })}
-            </View>
+              }}
+            />
           </View>
         </View>
 
@@ -387,157 +351,59 @@ export const SettingsScreen = () => {
               Annual Salary Bracket
             </Text>
 
-            <View style={styles.listWrap}>
-              {BRACKETS.map((b, i) => {
-                const isSelected = bracket === i;
-                return (
-                  <TouchableOpacity
-                    key={i}
-                    activeOpacity={0.8}
-                    onPress={() => setBracket(i)}
-                    style={[
-                      styles.bracketRowBtn,
-                      {
-                        backgroundColor: isSelected
-                          ? `${theme.ACTIVE}18`
-                          : 'transparent',
-                      },
-                    ]}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[
-                          styles.bracketLabel,
-                          { color: isSelected ? theme.ACTIVE : theme.TEXT },
-                        ]}
-                      >
-                        {b.label}
-                      </Text>
-                      <Text style={[styles.bracketRange, { color: theme.MUTED }]}>
-                        {b.range}
-                      </Text>
-                    </View>
-                    <Text
-                      style={[
-                        styles.bracketRate,
-                        { color: isSelected ? theme.ACTIVE : theme.MUTED },
-                      ]}
-                    >
-                      {b.rate}
+            {bracket < 0 ? (
+              <View style={[styles.slabSummaryBox, { backgroundColor: theme.MODAL }]}>
+                <Text style={[styles.slabSummaryText, { color: theme.MUTED }]}>
+                  Add your salary in Personal CA → Memory (or log your income) to see your tax bracket.
+                </Text>
+              </View>
+            ) : (
+              <>
+                <View style={[styles.bracketField, { backgroundColor: theme.MODAL }]}>
+                  <View style={styles.flex1}>
+                    <Text style={[styles.bracketLabel, { color: theme.TEXT }]}>{BRACKETS[bracket].label}</Text>
+                    <Text style={[styles.bracketRange, { color: theme.MUTED }]}>{BRACKETS[bracket].range}</Text>
+                  </View>
+                  <Text style={[styles.bracketRate, { color: theme.ACTIVE }]}>{BRACKETS[bracket].rate}</Text>
+                </View>
+                <View style={[styles.slabSummaryBox, { backgroundColor: theme.MODAL }]}>
+                  <Text style={[styles.slabSummaryText, { color: theme.MUTED }]}>
+                    Based on your salary of{' '}
+                    <Text style={[styles.strong, { color: theme.TEXT }]}>PKR {fullAmt(monthlySalary)} / month</Text> (PKR{' '}
+                    {fullAmt(annualSalary)} a year). Estimated tax:{' '}
+                    <Text style={[styles.strong, { color: theme.ACTIVE }]}>
+                      PKR {fullAmt(annualTax)} a year · PKR {fullAmt(Math.round(annualTax / 12))} / month
                     </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <View style={[styles.slabSummaryBox, { backgroundColor: theme.MODAL }]}>
-              <Text style={[styles.slabSummaryText, { color: theme.MUTED }]}>
-                Selected slab:{' '}
-                <Text style={{ color: theme.ACTIVE, fontWeight: '700' }}>
-                  {BRACKETS[bracket].label} — {BRACKETS[bracket].rate} WHT
-                </Text>
-                . All tax projections in-app use this bracket.
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* ── SMS & Privacy ── */}
-        <View style={styles.sectionMargin}>
-          <View style={[styles.card, { backgroundColor: theme.CARD }]}>
-            <View style={styles.iconTitleRow}>
-              <Feather name="shield" size={13} color={theme.MUTED} />
-              <Text style={[styles.sectionTitle, { color: theme.MUTED }]}>
-                Privacy & SMS Engine
-              </Text>
-            </View>
-
-            <View style={styles.toggleRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.toggleTitle, { color: theme.TEXT }]}>
-                  Bank SMS Parsing
-                </Text>
-                <Text style={[styles.toggleSub, { color: theme.MUTED }]}>
-                  Auto-detect HBL, Meezan, Alfalah transactions
-                </Text>
-              </View>
-              <Toggle
-                on={smsEnabled}
-                onToggle={() => setSmsEnabled(v => !v)}
-              />
-            </View>
-
-            <View style={styles.toggleRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.toggleTitle, { color: theme.TEXT }]}>
-                  Isolated Wealth Mode
-                </Text>
-                <Text style={[styles.toggleSub, { color: theme.MUTED }]}>
-                  Hides private cash flows from AI analysis
-                </Text>
-              </View>
-              <Toggle
-                on={isolatedMode}
-                onToggle={() => setIsolatedMode(v => !v)}
-              />
-            </View>
-
-            {isolatedMode && (
-              <View
-                style={[
-                  styles.warningBox,
-                  { backgroundColor: `${theme.RED}18` },
-                ]}
-              >
-                <Text style={[styles.warningText, { color: theme.RED }]}>
-                  Isolated Wealth Mode active — cash transactions excluded from
-                  all AI projections.
-                </Text>
-              </View>
+                    . To change it, update your salary in Personal CA → Memory.
+                  </Text>
+                </View>
+              </>
             )}
           </View>
         </View>
 
-        {/* ── App Info Card ── */}
+        {/* ── About ── */}
         <View style={styles.sectionMargin}>
-          <View
-            style={[
-              styles.cardNoPadding,
-              { backgroundColor: theme.CARD },
-            ]}
-          >
+          <View style={[styles.cardNoPadding, { backgroundColor: theme.CARD }]}>
             {[
-              { label: 'App Version', value: '2.4.1' },
-              { label: 'FBR Data Updated', value: 'Finance Act 2024' },
-              { label: 'SECP Rules', value: 'Compliant – 2024' },
-            ].map((row, i) => (
-              <TouchableOpacity
+              { label: 'App version', value: APP_VERSION },
+              { label: 'Tax rules', value: 'FBR Finance Act 2024–25' },
+            ].map((row, i, rows) => (
+              <View
                 key={row.label}
-                activeOpacity={0.7}
                 style={[
                   styles.infoRow,
-                  {
-                    borderBottomWidth: i < 2 ? 1 : 0,
-                    borderBottomColor: theme.BORDER,
-                  },
+                  { borderBottomWidth: i < rows.length - 1 ? 1 : 0, borderBottomColor: theme.BORDER },
                 ]}
               >
-                <Text style={[styles.infoLabel, { color: theme.MUTED }]}>
-                  {row.label}
-                </Text>
-                <View style={styles.infoValueWrap}>
-                  <Text style={[styles.infoValue, { color: theme.TEXT }]}>
-                    {row.value}
-                  </Text>
-                  <Feather
-                    name="chevron-right"
-                    size={13}
-                    color={theme.MUTED}
-                  />
-                </View>
-              </TouchableOpacity>
+                <Text style={[styles.infoLabel, { color: theme.MUTED }]}>{row.label}</Text>
+                <Text style={[styles.infoValue, { color: theme.TEXT }]}>{row.value}</Text>
+              </View>
             ))}
           </View>
+          <Text style={[styles.aboutNote, { color: theme.MUTED }]}>
+            Tax figures are estimates to help you plan. For filing, confirm with FBR or a tax advisor.
+          </Text>
         </View>
       </ScrollView>
     </View>
@@ -637,45 +503,19 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 6,
   },
-  listWrap: {
-    gap: 2,
-  },
-  provRowBtn: {
+  flex1: { flex: 1 },
+  strong: { fontWeight: '700' },
+  bracketField: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 13,
-    paddingHorizontal: 14,
+    gap: 10,
     borderRadius: 14,
-  },
-  provLabel: {
-    fontSize: 13,
-  },
-  activeDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  bracketRowBtn: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    paddingHorizontal: 14,
     paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
   },
-  bracketLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 1,
-  },
-  bracketRange: {
-    fontSize: 10,
-  },
-  bracketRate: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
+  bracketLabel: { fontSize: 14, fontWeight: '600' },
+  bracketRange: { fontSize: 11, marginTop: 2 },
+  bracketRate: { fontSize: 15, fontWeight: '800' },
   slabSummaryBox: {
     marginTop: 12,
     padding: 12,
@@ -685,43 +525,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
   },
-  toggleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  toggleTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 3,
-  },
-  toggleSub: {
-    fontSize: 11,
-  },
-  toggleTrack: {
-    width: 46,
-    height: 26,
-    borderRadius: 13,
-    justifyContent: 'center',
-    paddingHorizontal: 2,
-  },
-  toggleThumb: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#FFFFFF',
-  },
-  warningBox: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 14,
-  },
-  warningText: {
-    fontSize: 11,
-    fontWeight: '600',
-    lineHeight: 16,
-  },
+  aboutNote: { fontSize: 11, lineHeight: 16, marginTop: 10, paddingHorizontal: 6 },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -731,11 +535,6 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 13,
-  },
-  infoValueWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
   },
   infoValue: {
     fontSize: 13,

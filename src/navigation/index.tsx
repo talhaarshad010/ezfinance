@@ -2,11 +2,7 @@ import React from 'react';
 import { AuthStack } from './AuthStack';
 export type { AuthStackParamList } from './AuthStack';
 import { MainDrawerNavigator } from './MainDrawerNavigator';
-import {
-  createStackNavigator,
-  CardStyleInterpolators,
-  TransitionPresets,
-} from '@react-navigation/stack';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import ChangePasswordScreen from '../features/main/screens/ChangePasswordScreen';
 import StockDetailScreen from '../features/main/screens/StockDetailScreen';
 import AddExpenseScreen from '../features/main/screens/AddExpenseScreen';
@@ -30,34 +26,32 @@ import AgeOfMoneyScreen from '../features/main/screens/AgeOfMoneyScreen';
 import MoveMoneyScreen from '../features/main/screens/MoveMoneyScreen';
 import ImportStatementScreen from '../features/main/screens/ImportStatementScreen';
 import {
-  TouchableOpacity,
   View,
   StatusBar,
   DeviceEventEmitter,
-  ActivityIndicator,
 } from 'react-native';
-import Feather from 'react-native-vector-icons/Feather';
-import { Typography, Logo } from '../components';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { clearProfile, setProfile } from '../store/slices/userSlice';
 import { FEATURES } from '../constants/features';
 import { isSignedIn, markTourCompleted, refreshProfile, restoreSession } from '../services/authService';
-import { HeaderProfile } from '../components/HeaderProfile';
 import { resetSettings } from '../store/slices/settingsSlice';
 import { useTheme } from '../context/ThemeContext';
-import { useUserMode } from '../context/UserModeContext';
+import { useUserMode, useUserUi } from '../context/UserModeContext';
 import { useNetwork } from '../context/NetworkContext';
 import { OfflineBanner } from '../components/Feedback';
 import { FirstActionSheetHost, TransactionSheetHost } from '../features/main/newUser/sheets';
 
-const Stack = createStackNavigator();
+// Native stack: the slide in/out runs on the platform's own animation (not the JS thread), so a
+// screen starts moving the moment it's tapped, and swipe-back feels like any other iOS app.
+const Stack = createNativeStackNavigator();
 
 export const AppNavigator = () => {
   const dispatch = useAppDispatch();
   const { theme } = useTheme();
   const profile = useAppSelector(state => state.user.profile);
   const isAuthenticated = !!profile;
-  const { beginNewUser, beginReturningUser, tourOpen } = useUserMode();
+  const { beginNewUser, beginReturningUser } = useUserMode();
+  const { tourOpen } = useUserUi();
   const net = useNetwork();
 
   const [restoring, setRestoring] = React.useState(true);
@@ -161,36 +155,14 @@ export const AppNavigator = () => {
             translucent={false}
           />
           <Stack.Navigator
-            screenOptions={({ navigation }) => ({
-              cardStyle: { backgroundColor: theme.BG },
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: theme.BG },
+              animation: 'slide_from_right',
               gestureEnabled: true,
-              ...TransitionPresets.SlideFromRightIOS,
-              headerStyle: {
-                elevation: 0,
-                shadowOpacity: 0,
-                borderBottomWidth: 0,
-                backgroundColor: theme.BG,
-              },
-              headerLeft: () => (
-                <TouchableOpacity style={{ marginLeft: 20 }} onPress={() => navigation.goBack()}>
-                  <Feather name="arrow-left" size={24} color={theme.TEXT} />
-                </TouchableOpacity>
-              ),
-              headerTitleStyle: {
-                fontFamily: 'Inter-Bold',
-                fontSize: 18,
-                color: theme.TEXT,
-              },
-              headerTitleAlign: 'center',
-              headerRight: () => (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 20 }}>
-                  <TouchableOpacity style={{ marginRight: 16 }} onPress={() => navigation.navigate('Search')}>
-                    <Feather name="search" size={22} color={theme.TEXT} />
-                  </TouchableOpacity>
-                  <HeaderProfile />
-                </View>
-              ),
-            })}
+              // Screens covered by another one stop redrawing until they're shown again.
+              freezeOnBlur: true,
+            }}
           >
             <Stack.Screen name="Drawer" component={MainDrawerNavigator} options={{ headerShown: false }} />
             <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} options={{ headerShown: false }} />

@@ -428,23 +428,30 @@ export function InvestmentsSkeleton() {
 }
 
 export function AISkeleton() {
-  const { theme } = useTheme();
   return (
     <Screen title={24}>
-      <View style={sk.screenBody}>
-        <View style={[sk.bubble, { backgroundColor: theme.CARD }]}>
-          <Sk w="95%" h={11} />
-          <Sk w="88%" h={11} />
-          <Sk w="60%" h={11} />
-        </View>
-        <Sk w="62%" h={44} r={20} style={sk.alignEnd} />
-        <View style={[sk.bubble, { backgroundColor: theme.CARD }]}>
-          {(['90%', '75%', '82%', '50%'] as DimensionValue[]).map((w, i) => (
-            <Sk key={i} w={w} h={11} />
-          ))}
-        </View>
-      </View>
+      <AIChatSkeleton />
     </Screen>
+  );
+}
+
+/** Just the chat bubbles, for when the Personal CA's header is already on screen. */
+export function AIChatSkeleton() {
+  const { theme } = useTheme();
+  return (
+    <Busy style={sk.screenBody}>
+      <View style={[sk.bubble, { backgroundColor: theme.CARD }]}>
+        <Sk w="95%" h={11} />
+        <Sk w="88%" h={11} />
+        <Sk w="60%" h={11} />
+      </View>
+      <Sk w="62%" h={44} r={20} style={sk.alignEnd} />
+      <View style={[sk.bubble, { backgroundColor: theme.CARD }]}>
+        {(['90%', '75%', '82%', '50%'] as DimensionValue[]).map((w, i) => (
+          <Sk key={i} w={w} h={11} />
+        ))}
+      </View>
+    </Busy>
   );
 }
 

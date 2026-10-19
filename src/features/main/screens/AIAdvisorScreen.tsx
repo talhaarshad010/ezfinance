@@ -21,7 +21,7 @@ import { AIOfflineNote } from '../newUser/NewUserScreens';
 import { useToast } from '../../../context/ToastContext';
 import { AnimatedModal } from '../../../components/AnimatedModal';
 import { DrawerMenuButton } from '../../../components';
-import { useUserMode } from '../../../context/UserModeContext';
+import { useUserMode, useUserUi } from '../../../context/UserModeContext';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
 import {
   addTransaction as addTransactionAction,
@@ -49,6 +49,7 @@ import {
 } from './ca/memoryStore';
 import { CaWelcome, type SetupFacts } from './ca/CaWelcome';
 import { caApi } from '../../../api/caApi';
+import { AIChatSkeleton } from '../../../components/Skeletons';
 import { ApiError } from '../../../api/client';
 import { useNavigation } from '@react-navigation/native';
 import type { CaExecutableAction } from './ca/caActions';
@@ -520,6 +521,66 @@ function TypingDots() {
   );
 }
 
+/**
+ * The message box. It keeps the typed text itself, so typing redraws only the box (not the whole
+ * conversation). `onSubmit` returns whether the text was sent; if not, the text stays.
+ */
+const Composer = React.memo(function Composer({
+  online,
+  busy,
+  hasFile,
+  onAttach,
+  onSubmit,
+}: {
+  online: boolean;
+  busy: boolean;
+  hasFile: boolean;
+  onAttach: () => void;
+  onSubmit: (text: string) => boolean;
+}) {
+  const { theme } = useTheme();
+  const [text, setText] = useState('');
+  // The parent's handlers change every render; the latest one is read at send time.
+  const submitRef = useRef(onSubmit);
+  submitRef.current = onSubmit;
+  const submit = () => {
+    if (submitRef.current(text)) setText('');
+  };
+  const active = !!text.trim() || hasFile;
+  return (
+    <View style={[styles.inputInnerRow, { borderBottomColor: theme.TEXT }]}>
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={onAttach}
+        disabled={!online || busy}
+        accessibilityLabel="Attach a bank statement (PDF, CSV or Excel)"
+        hitSlop={8}
+        style={styles.attachBtn}
+      >
+        <Feather name="paperclip" size={18} color={theme.MUTED} />
+      </TouchableOpacity>
+      <TextInput
+        editable={online}
+        value={text}
+        onChangeText={setText}
+        onSubmitEditing={submit}
+        placeholder={hasFile ? 'e.g. Add all these to my expenses' : 'Ask your CA…'}
+        placeholderTextColor={theme.MUTED}
+        style={[styles.textInput, { color: theme.TEXT }]}
+      />
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={submit}
+        disabled={!online}
+        accessibilityLabel="Send"
+        style={[styles.sendBtn, { backgroundColor: active ? theme.TEXT : theme.MODAL }]}
+      >
+        <Feather name="send" size={15} color={active ? theme.BG : theme.MUTED} />
+      </TouchableOpacity>
+    </View>
+  );
+});
+
 export const AIAdvisorScreen = () => {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -530,6 +591,7 @@ export const AIAdvisorScreen = () => {
 
   // A signed-in user's CA uses their own profile and data; Explore shows the design's sample.
   const userMode = useUserMode();
+  const userUi = useUserUi();
   const isUser = userMode.isNewUser;
   const profile = useAppSelector(state => state.user.profile);
   const reduxBankAccounts = useAppSelector(
@@ -754,7 +816,7 @@ export const AIAdvisorScreen = () => {
   }, [isUser, chatReady, intro, seed, msgs, uid]);
 
   // The app tour passes through this tab; the welcome waits until the tour is over.
-  const showIntro = intro === 'show' && !userMode.tourOpen;
+  const showIntro = intro === 'show' && !userUi.tourOpen;
 
   function finishIntro(facts: SetupFacts) {
     const entries = Object.entries(facts);
@@ -765,7 +827,6 @@ export const AIAdvisorScreen = () => {
       note: entries.length > 0 ? "Thanks! I've saved that to your Memory Bank (tap Memory to change it)." : undefined,
     });
   }
-  const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
   const [showMem, setShowMem] = useState(false);
   const [selectedQuick, setSelectedQuick] = useState<string | null>(null);
@@ -1071,7 +1132,6 @@ export const AIAdvisorScreen = () => {
     const aiId = newMsgId();
     attachedFiles.current[aiId] = file;
     setPendingFile(null);
-    setInput('');
     setMsgs(m => [
       ...m,
       { id: userId, role: 'user', text: instruction, attachment: file.name },
@@ -1106,19 +1166,29 @@ export const AIAdvisorScreen = () => {
     }
   }
 
-  async function send(text?: string) {
-    const q = (text ?? input).trim();
-    if (typing || !online) return; // the assistant needs internet; typed text is kept
-    if (pendingFile && text === undefined) {
-      sendStatement(pendingFile, q);
-      return;
+  /**
+   * What the message box sends. Returns false when nothing was sent (offline, busy, empty), so the
+   * box keeps the typed text.
+   */
+  function submitTyped(text: string): boolean {
+    if (typing || !online) return false; // the assistant needs internet; typed text is kept
+    if (pendingFile) {
+      sendStatement(pendingFile, text.trim());
+      return true;
     }
-    if (!q) return;
-    if (text) setSelectedQuick(text);
+    if (!text.trim()) return false;
+    send(text, false);
+    return true;
+  }
+
+  /** Asks the CA. `fromChip`: a suggested question was tapped (it gets highlighted). */
+  async function send(text: string, fromChip = true) {
+    const q = text.trim();
+    if (!q || typing || !online) return;
+    if (fromChip) setSelectedQuick(text);
 
     const userMsg: Msg = { id: newMsgId(), role: 'user', text: q };
     setMsgs(m => [...m, userMsg]);
-    setInput('');
     setTyping(true);
 
     try {
@@ -1227,8 +1297,8 @@ export const AIAdvisorScreen = () => {
           </View>
         </View>
 
-        {intro === 'loading' || !chatReady || seed || (intro === 'show' && userMode.tourOpen) ? (
-          <View style={styles.container} />
+        {intro === 'loading' || !chatReady || seed || (intro === 'show' && userUi.tourOpen) ? (
+          <AIChatSkeleton />
         ) : showIntro ? (
           <CaWelcome
             name={snapshot.userName}
@@ -1485,50 +1555,13 @@ export const AIAdvisorScreen = () => {
                   </TouchableOpacity>
                 </View>
               )}
-              <View
-                style={[
-                  styles.inputInnerRow,
-                  { borderBottomColor: theme.TEXT },
-                ]}
-              >
-                <TouchableOpacity
-                  activeOpacity={0.7}
-                  onPress={attachStatement}
-                  disabled={!online || typing}
-                  accessibilityLabel="Attach a bank statement (PDF, CSV or Excel)"
-                  hitSlop={8}
-                  style={styles.attachBtn}
-                >
-                  <Feather name="paperclip" size={18} color={theme.MUTED} />
-                </TouchableOpacity>
-                <TextInput
-                  editable={online}
-                  value={input}
-                  onChangeText={setInput}
-                  onSubmitEditing={() => send()}
-                  placeholder={pendingFile ? 'e.g. Add all these to my expenses' : 'Ask your CA…'}
-                  placeholderTextColor={theme.MUTED}
-                  style={[styles.textInput, { color: theme.TEXT }]}
-                />
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => send()}
-                  disabled={!online}
-                  accessibilityLabel="Send"
-                  style={[
-                    styles.sendBtn,
-                    {
-                      backgroundColor: input.trim() || pendingFile ? theme.TEXT : theme.MODAL,
-                    },
-                  ]}
-                >
-                  <Feather
-                    name="send"
-                    size={15}
-                    color={input.trim() || pendingFile ? theme.BG : theme.MUTED}
-                  />
-                </TouchableOpacity>
-              </View>
+              <Composer
+                online={online}
+                busy={typing}
+                hasFile={!!pendingFile}
+                onAttach={attachStatement}
+                onSubmit={submitTyped}
+              />
             </View>
           </>
         )}

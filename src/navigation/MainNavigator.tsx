@@ -13,7 +13,7 @@ import GoalsScreen from '../features/main/screens/GoalsScreen';
 import { useFocusEffect } from '@react-navigation/native';
 import { CustomBottomNav } from './CustomBottomNav';
 import { useTheme } from '../context/ThemeContext';
-import { useUserMode } from '../context/UserModeContext';
+import { useUserMode, useUserUi } from '../context/UserModeContext';
 import { LoadGate } from '../components/LoadGate';
 import { AISkeleton, GoalsSkeleton, NewUserSkeleton } from '../components/Skeletons';
 import { NewInvestments } from '../features/main/newUser/NewUserScreens';
@@ -26,7 +26,7 @@ const Tab = createBottomTabNavigator();
 const tabTransition: BottomTabNavigationOptions = {
   transitionSpec: {
     animation: 'timing',
-    config: { duration: 280, easing: Easing.bezier(0.22, 1, 0.36, 1) },
+    config: { duration: 180, easing: Easing.bezier(0.22, 1, 0.36, 1) },
   },
   sceneStyleInterpolator: ({ current }) => ({
     sceneStyle: {
@@ -38,7 +38,7 @@ const tabTransition: BottomTabNavigationOptions = {
         {
           translateX: current.progress.interpolate({
             inputRange: [-1, 0, 1],
-            outputRange: [-28, 0, 28],
+            outputRange: [-16, 0, 16],
           }),
         },
       ],
@@ -97,7 +97,8 @@ const GoalsTab = () => (
 
 export const MainNavigator = () => {
   const { theme } = useTheme();
-  const { isNewUser, tourOpen } = useUserMode();
+  const { isNewUser } = useUserMode();
+  const { tourOpen } = useUserUi();
 
   return (
     <View style={{ flex: 1 }}>
@@ -106,6 +107,8 @@ export const MainNavigator = () => {
         screenOptions={{
           headerShown: false,
           ...tabTransition,
+          // Tabs you're not looking at stop redrawing until you switch back to them.
+          freezeOnBlur: true,
           sceneStyle: { backgroundColor: theme.BG },
         }}
       >

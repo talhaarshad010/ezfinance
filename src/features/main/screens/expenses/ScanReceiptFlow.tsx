@@ -18,7 +18,7 @@ import { BottomSheet } from '../../../../components';
 import { useTheme } from '../../../../context/ThemeContext';
 import { useToast } from '../../../../context/ToastContext';
 import { useTransactionActions } from '../../../../hooks/useTransactionActions';
-import { useUserMode } from '../../../../context/UserModeContext';
+import { useUserMode, useUserUi } from '../../../../context/UserModeContext';
 
 import ReceiptCameraScreen from './ReceiptCameraScreen';
 import { scanReceipt, ReceiptScanResult } from '../../../../api/receiptApi';
@@ -524,6 +524,7 @@ export default function ScanReceiptFlow({
   const { showToast } = useToast();
   const txActions = useTransactionActions();
   const userMode = useUserMode();
+  const userUi = useUserUi();
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [scanResult, setScanResult] = useState<ReceiptScanResult | null>(null);
@@ -589,7 +590,7 @@ export default function ScanReceiptFlow({
       if (!accountId) {
         // Hand off to the transaction sheet so the user can link an account
         onClose();
-        userMode.openTxSheet({
+        userUi.openTxSheet({
           source: 'scan',
           type: 'expense',
           category: data.category ?? 'Other',
@@ -625,7 +626,7 @@ export default function ScanReceiptFlow({
         );
       }
     },
-    [txActions, userMode, showToast, onClose],
+    [txActions, userMode, userUi, showToast, onClose],
   );
 
   // ── Correction handler ──
